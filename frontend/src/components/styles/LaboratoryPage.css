@@ -1,0 +1,63 @@
+/* Основной контейнер */
+.laboratory-page-container {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  padding: 20px;
+  position: relative;
+}
+
+/* Карточка подразделения */
+.department-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 24px;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+  position: relative;
+  margin: 0;
+  background: white;
+}
+
+.department-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* Кнопки управления */
+.card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.department-card:hover .card-actions {
+  opacity: 1;
+}
+
+.edit-button,
+.delete-button {
+  color: #1976d2 !important;
+  background-color: transparent !important;
+  transition: all 0.2s ease-in-out !important;
+  border: 1px solid transparent !important;
+}
+
+.edit-button:hover,
+.delete-button:hover {
+  background-color: rgba(25, 118, 210, 0.1) !important;
+  transform: scale(1.1);
+  border: 1px solid #1976d2 !important;
+}
+
+/* Адаптивные стили */
+@media (max-width: 600px) {
+  .laboratory-page-container {
+    padding: 10px;
+  }
+}
