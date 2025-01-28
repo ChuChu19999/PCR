@@ -14,6 +14,7 @@ import AddDepartmentModal from './AddDepartmentModal';
 import EditDepartmentModal from './EditDepartmentModal';
 import DeleteConfirmationModal from './common/DeleteConfirmationModal';
 import './styles/LaboratoryPage.css';
+import { API_ROUTES } from '../constants/apiRoutes';
 
 function LaboratoryPage() {
   const navigate = useNavigate();
@@ -28,7 +29,7 @@ function LaboratoryPage() {
 
   const fetchLaboratory = async () => {
     try {
-      const response = await api.get(`/api/laboratories/${id}/`);
+      const response = await api.get(API_ROUTES.LABORATORIES.GET_BY_ID(id));
       setLaboratory(response.data);
       setDepartments(response.data.departments || []);
     } catch (error) {
@@ -54,7 +55,7 @@ function LaboratoryPage() {
 
   const handleDelete = async () => {
     try {
-      await api.delete(`/api/departments/${selectedDepartment.id}/`);
+      await api.delete(API_ROUTES.DEPARTMENTS.DELETE(selectedDepartment.id));
       await fetchLaboratory();
       setIsDeleteModalOpen(false);
       setSelectedDepartment(null);

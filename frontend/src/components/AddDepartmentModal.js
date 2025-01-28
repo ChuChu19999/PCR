@@ -3,6 +3,7 @@ import { DialogContent, DialogActions, TextField, Button, Box } from '@mui/mater
 import api from '../api/config';
 import BaseModal from './common/BaseModal';
 import useForm from '../hooks/useForm';
+import { API_ROUTES } from '../constants/apiRoutes';
 
 function AddDepartmentModal({ open, onClose, onSuccess, laboratoryId }) {
   const validate = values => {
@@ -23,7 +24,7 @@ function AddDepartmentModal({ open, onClose, onSuccess, laboratoryId }) {
     if (!validateForm()) return;
 
     try {
-      await api.post('/api/departments/', values);
+      await api.post(API_ROUTES.DEPARTMENTS.BASE, values);
       resetForm();
       onSuccess();
       onClose();
