@@ -4,10 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import DescriptionIcon from '@mui/icons-material/Description';
 import api from '../api/config';
 import AddLaboratoryModal from './AddLaboratoryModal';
 import EditLaboratoryModal from './EditLaboratoryModal';
 import DeleteConfirmationModal from './common/DeleteConfirmationModal';
+import EditTemplateModal from './EditTemplateModal';
+import { API_ROUTES } from '../constants/apiRoutes';
 import './styles/MainPage.css';
 
 function MainPage() {
@@ -16,11 +19,12 @@ function MainPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [selectedLaboratory, setSelectedLaboratory] = useState(null);
 
   const fetchLaboratories = async () => {
     try {
-      const response = await api.get('/api/laboratories/');
+      const response = await api.get(API_ROUTES.LABORATORIES.BASE);
       setLaboratories(response.data || []);
     } catch (error) {
       console.error('Ошибка при загрузке лабораторий:', error);
@@ -50,7 +54,7 @@ function MainPage() {
 
   const handleDelete = async () => {
     try {
-      await api.delete(`/api/laboratories/${selectedLaboratory.id}/`);
+      await api.delete(API_ROUTES.LABORATORIES.DELETE(selectedLaboratory.id));
       await fetchLaboratories();
       setIsDeleteModalOpen(false);
       setSelectedLaboratory(null);
@@ -173,32 +177,59 @@ function MainPage() {
         </Grid>
       </Grid>
 
-      {/* Кнопка добавления */}
-      <Fab
-        color="primary"
-        aria-label="add"
-        onClick={() => setIsAddModalOpen(true)}
+      {/* Кнопки действий */}
+      <Box
         sx={{
           position: 'fixed',
           bottom: 18,
           right: 18,
-          background: 'linear-gradient(45deg, #1976d2 30%, #2196f3 90%)',
-          '&:hover': {
-            background: 'linear-gradient(45deg, #1976d2 50%, #2196f3 100%)',
-          },
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+          alignItems: 'center',
         }}
       >
-        <AddIcon />
-      </Fab>
+        <Fab
+          color="primary"
+          aria-label="edit template"
+          onClick={() => setIsTemplateModalOpen(true)}
+          sx={{
+            background: 'linear-gradient(45deg, #1976d2 30%, #2196f3 90%)',
+            '&:hover': {
+              background: 'linear-gradient(45deg, #1976d2 50%, #2196f3 100%)',
+              transform: 'scale(1.05)',
+            },
+            transition: 'transform 0.2s ease-in-out',
+            boxShadow: '0 4px 20px rgba(25, 118, 210, 0.3)',
+          }}
+        >
+          <DescriptionIcon />
+        </Fab>
+        <Fab
+          color="primary"
+          aria-label="add"
+          onClick={() => setIsAddModalOpen(true)}
+          sx={{
+            background: 'linear-gradient(45deg, #1976d2 30%, #2196f3 90%)',
+            '&:hover': {
+              background: 'linear-gradient(45deg, #1976d2 50%, #2196f3 100%)',
+              transform: 'scale(1.05)',
+            },
+            transition: 'transform 0.2s ease-in-out',
+            boxShadow: '0 4px 20px rgba(25, 118, 210, 0.3)',
+          }}
+        >
+          <AddIcon />
+        </Fab>
+      </Box>
 
-      {/* Модальное окно добавления лаборатории */}
+      {/* Модальные окна */}
       <AddLaboratoryModal
         open={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSuccess={fetchLaboratories}
       />
 
-      {/* Модальное окно редактирования лаборатории */}
       {selectedLaboratory && (
         <EditLaboratoryModal
           open={isEditModalOpen}
@@ -211,7 +242,6 @@ function MainPage() {
         />
       )}
 
-      {/* Модальное окно подтверждения удаления */}
       <DeleteConfirmationModal
         open={isDeleteModalOpen}
         onClose={() => {
@@ -222,6 +252,8 @@ function MainPage() {
         title="Удаление лаборатории"
         message={`Вы действительно хотите удалить лабораторию "${selectedLaboratory?.name}"?`}
       />
+
+      <EditTemplateModal open={isTemplateModalOpen} onClose={() => setIsTemplateModalOpen(false)} />
     </div>
   );
 }
