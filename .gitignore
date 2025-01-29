@@ -8,6 +8,8 @@ venv/
 .blackd
 *.bak
 *.toml
+*/migrations/*
+!*/migrations/__init__.py
 
 # Frontend (React)
 node_modules/
