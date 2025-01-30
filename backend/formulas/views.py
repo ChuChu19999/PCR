@@ -10,6 +10,8 @@ from django.conf import settings
 from openpyxl import load_workbook
 from openpyxl.styles import Font
 import logging
+import requests
+from requests.exceptions import RequestException
 
 logger = logging.getLogger(__name__)
 
@@ -160,3 +162,14 @@ def get_excel_styles(request):
     except Exception as e:
         logger.error(f"Ошибка при получении стилей Excel: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+def check_gazprom_api(request):
+    try:
+        response = requests.get("https://itc-fhi-dev.gd-urengoy.gazprom.ru/api/", timeout=5)
+        if response.status_code == 200:
+            return Response(status=status.HTTP_200_OK)
+    except RequestException:
+        pass
+    return None
