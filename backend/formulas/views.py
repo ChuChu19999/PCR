@@ -167,7 +167,9 @@ def get_excel_styles(request):
 @api_view(["GET"])
 def check_gazprom_api(request):
     try:
-        response = requests.get("https://itc-fhi-dev.gd-urengoy.gazprom.ru/api/", timeout=5)
+        response = requests.get(
+            "https://itc-fhi-dev.gd-urengoy.gazprom.ru/api/", timeout=5
+        )
         if response.status_code == 200:
             return Response(status=status.HTTP_200_OK)
     except RequestException:
