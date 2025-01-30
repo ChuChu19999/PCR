@@ -59,6 +59,22 @@ function Header() {
             Обработка экспериментальных данных
           </Typography>
         </Box>
+        <Typography
+          variant={isMobile ? 'subtitle1' : 'h6'}
+          component="div"
+          className="username"
+          sx={{
+            marginLeft: 'auto',
+            color: '#2c3e50',
+            fontWeight: 700,
+            letterSpacing: '0.3px',
+            background: 'linear-gradient(45deg, #1976d2 30%, #2c3e50 90%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}
+        >
+          Хрипушин Данила Павлович
+        </Typography>
       </Toolbar>
     </AppBar>
   );
