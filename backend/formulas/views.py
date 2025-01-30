@@ -75,14 +75,14 @@ def save_excel(request):
         worksheet = workbook.active
 
         for row_idx, row_data in enumerate(data):
-            if row_idx < 8:  # Обновляем только первые 8 строк
+            if row_idx < 8: 
                 cell = worksheet.cell(row=row_idx + 1, column=1, value=row_data[0])
                 logger.info(
                     f"Обновлена ячейка [{row_idx + 1}, 1] значением: {row_data[0]}"
                 )
 
                 # Применяем стили, если они есть для данной ячейки
-                cell_key = f"{row_idx}-0"  # Формат ключа как в ExcelEditor
+                cell_key = f"{row_idx}-0" 
                 if cell_key in styles:
                     style = styles[cell_key]
                     logger.info(f"Применение стилей для ячейки {cell_key}: {style}")
@@ -95,7 +95,7 @@ def save_excel(request):
                         try:
                             font_size = int(float(font_size))
                         except (ValueError, TypeError):
-                            font_size = 14  # Значение по умолчанию
+                            font_size = 14 
 
                     font = Font(
                         name="Times New Roman",
