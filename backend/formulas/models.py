@@ -1,6 +1,34 @@
-from django.db import models
+from django.db import models, connection
 from django.core.exceptions import ValidationError
-from django.utils import timezone
+from django.contrib.auth.models import AbstractUser
+from django.utils import timezone, formats
+
+
+class CustomUser(AbstractUser):
+    fullName = models.CharField(
+        verbose_name="ФИО", max_length=120, null=True, blank=True
+    )
+    hashSnils = models.CharField(
+        verbose_name="HSNILS", max_length=32, null=True, blank=True
+    )
+    preferred_username = models.CharField(
+        verbose_name="AdLogin", max_length=120, null=True, blank=True
+    )
+    departmentNumber = models.IntegerField(
+        verbose_name="Организационная единица", null=True, blank=True
+    )
+
+    groups = models.ManyToManyField(
+        "auth.Group",
+        related_name="customuser_set",  # Уникальное имя для обратного доступа
+        blank=True,
+        help_text="Группы, к которым принадлежит этот пользователь. Пользователь получит все разрешения, "
+        "предоставленные каждой из их групп.",
+        verbose_name="Группы",
+    )
+
+    def __str__(self):
+        return self.username
 
 
 class Laboratory(models.Model):

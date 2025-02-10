@@ -4,7 +4,7 @@ import FunctionsIcon from '@mui/icons-material/Functions';
 import { useNavigate } from 'react-router-dom';
 import './styles/Header.css';
 
-function Header() {
+const Header = ({ username }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const navigate = useNavigate();
@@ -59,25 +59,28 @@ function Header() {
             Обработка экспериментальных данных
           </Typography>
         </Box>
-        <Typography
-          variant={isMobile ? 'subtitle1' : 'h6'}
-          component="div"
-          className="username"
-          sx={{
-            marginLeft: 'auto',
-            color: '#2c3e50',
-            fontWeight: 700,
-            letterSpacing: '0.3px',
-            background: 'linear-gradient(45deg, #1976d2 30%, #2c3e50 90%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}
-        >
-          Хрипушин Данила Павлович
-        </Typography>
+        {/* Вывод имени пользователя */}
+        {username && (
+          <Typography
+            variant={isMobile ? 'subtitle1' : 'h6'}
+            component="div"
+            className="username"
+            sx={{
+              marginLeft: 'auto',
+              color: '#2c3e50',
+              fontWeight: 700,
+              letterSpacing: '0.3px',
+              background: 'linear-gradient(45deg, #1976d2 30%, #2c3e50 90%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            {username}
+          </Typography>
+        )}
       </Toolbar>
     </AppBar>
   );
-}
+};
 
 export default Header;

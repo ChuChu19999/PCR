@@ -1,5 +1,21 @@
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from .models import Laboratory, Department
+
+
+User = get_user_model()
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = (
+            "fullName",
+            "hashSnils",
+            "is_staff",
+            "preferred_username",
+            "departmentNumber",
+        )
 
 
 class DepartmentSerializer(serializers.ModelSerializer):
