@@ -1,16 +1,14 @@
 import "ag-grid-enterprise";
-
 import "../shared/assets/fonts/fonts.css";
 import "./App.css";
-
 import { LicenseManager } from "ag-grid-enterprise";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-
-import Content from "./Content/Content";
-import { routersData } from "./data";
-import Page404 from "../pages/errorPages/Page404/Page404";
-import LoadingPage from "../pages/LoadingPage/LoadingPage";
 import { useEffect, useMemo, useState } from "react";
+import { routersData } from './data'
+import Content from './Content/Content';
+import LoadingPage from '../pages/LoadingPage/LoadingPage';
+import Page404 from '../pages/errorPages/Page404/Page404';
+import KeycloakService from '../KeycloakService';
 
 LicenseManager.setLicenseKey(
   "BOARD4ALL_NDEwMjM1MTIwMDAwMA==8f4481b5cc626ad79fe91bc5f4e52e3d",
@@ -19,6 +17,7 @@ LicenseManager.setLicenseKey(
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [showLoadingScreen, setShowLoadingScreen] = useState(true);
+  // const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     // Симуляция загрузки данных
@@ -26,7 +25,20 @@ export default function App() {
       setIsLoading(false);
     }, 1500); // Замените на реальный запрос данных
 
-    return () => clearTimeout(timer);
+    const initKeycloak = async () => {
+      try {
+        await KeycloakService.init();
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.error('Ошибка инициализации Keycloak:', error);
+      }
+    };
+
+    initKeycloak();
+
+    return () => {
+      clearTimeout(timer);
+    };
   }, []);
 
   const handleFadeOutComplete = () => {

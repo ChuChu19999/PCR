@@ -218,3 +218,25 @@ def get_excel_styles(request):
     except Exception as e:
         logger.error(f"Ошибка при получении стилей Excel: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def check_status_api(request):
+    try:
+        laboratories = LaboratoryViewSet()
+        laboratories.request = request
+        laboratories.format_kwarg = None
+
+        response = laboratories.list(request)
+
+        return Response(
+            {"status": "online"},
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        return Response(
+            {"status": "offline"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
