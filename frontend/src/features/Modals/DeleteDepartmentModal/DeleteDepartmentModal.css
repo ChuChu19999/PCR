@@ -1,0 +1,19 @@
+.delete-department-confirmation {
+  padding: 18px;
+  padding-bottom: 0px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.confirmation-content {
+  max-width: 400px;
+  text-align: center;
+}
+
+.confirmation-text {
+  margin-bottom: 5px;
+  font-size: 1.1rem;
+  color: #333;
+  line-height: 1.5;
+}

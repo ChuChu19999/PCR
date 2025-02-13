@@ -1,0 +1,45 @@
+.add-department-form {
+  padding: 18px;
+  padding-bottom: 0px;
+}
+
+.form-group {
+  margin-bottom: 0px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #333;
+  font-weight: 500;
+}
+
+.form-group input {
+  width: 100%;
+  border-radius: 8px;
+}
+
+/* Стили для обязательных полей */
+.form-group input[required] {
+  border-color: #d9d9d9;
+}
+
+.form-group input[required]:focus {
+  border-color: #0066cc;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+}
+
+/* Стили для сообщений об ошибках */
+.error-message {
+  color: #ff4d4f;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.general-error {
+  margin: 8px 0;
+  padding: 8px;
+  background-color: #fff1f0;
+  border: 1px solid #ffccc7;
+  border-radius: 4px;
+}

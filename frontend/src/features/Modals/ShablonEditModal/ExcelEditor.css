@@ -1,0 +1,117 @@
+.excel-editor {
+  padding: 12px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin: 8px auto;
+  overflow: hidden;
+  width: 95%;
+  max-width: 875px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.toolbar {
+  width: 100%;
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e0e0e0;
+}
+
+.toolbar .ant-btn {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toolbar .ant-btn.active {
+  background: #e6f4ff;
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.toolbar .font-size-select {
+  min-width: 80px;
+}
+
+.table-container {
+  width: 100%;
+  height: 325px;
+  overflow: auto;
+  margin-bottom: 12px;
+}
+
+.table-container .handsontable {
+  margin: 0 auto;
+}
+
+.table-container .handsontable col.rowHeader {
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+}
+
+.table-container .handsontable td {
+  white-space: normal;
+  padding: 6px 10px;
+  text-align: center !important;
+  min-width: 180px;
+}
+
+.table-container .handsontable .htDimmed {
+  text-align: center !important;
+}
+
+.table-container .handsontable .htCore td {
+  text-align: center !important;
+  border-right: none;
+}
+
+.table-container::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 5px;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 5px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.error-message {
+  color: #ff4d4f;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 4px;
+  background-color: #fff2f0;
+  border: 1px solid #ffccc7;
+}
+
+.loading-overlay {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  font-size: 16px;
+  color: #666;
+}

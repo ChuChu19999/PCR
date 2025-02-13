@@ -1,0 +1,39 @@
+.add-laboratory-form {
+  padding: 18px;
+  padding-bottom: 0px;
+}
+
+.form-group {
+  margin-bottom: 0px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #333;
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  border-radius: 8px;
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 50px;
+  max-height: 300px;
+}
+
+/* Стили для обязательных полей */
+.form-group input[required],
+.form-group textarea[required] {
+  border-color: #d9d9d9;
+}
+
+.form-group input[required]:focus,
+.form-group textarea[required]:focus {
+  border-color: #0066cc;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+}

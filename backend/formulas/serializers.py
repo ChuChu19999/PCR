@@ -86,14 +86,6 @@ class LaboratorySerializer(serializers.ModelSerializer):
             value = value.strip()
             if not value:
                 raise serializers.ValidationError("Название не может быть пустым")
-            if (
-                Laboratory.objects.filter(name=value)
-                .exclude(id=self.instance.id if self.instance else None)
-                .exists()
-            ):
-                raise serializers.ValidationError(
-                    "Лаборатория с таким названием уже существует"
-                )
         return value
 
     def validate_full_name(self, value):

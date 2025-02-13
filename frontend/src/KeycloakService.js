@@ -1,9 +1,9 @@
 import Keycloak from 'keycloak-js';
 
 const keycloak = new Keycloak({
-  realm: 'GDU',
-  url: 'https://kc.gd-urengoy.gazprom.ru',
-  clientId: 'web-client',
+  realm: import.meta.env.VITE_KEYCLOAK_REALM || 'GDU',
+  url: import.meta.env.VITE_KEYCLOAK_URL || 'https://kc.gd-urengoy.gazprom.ru',
+  clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'web-client',
 });
 
 let keycloakInitialized = false;
@@ -22,7 +22,6 @@ const KeycloakService = {
       const parsedToken = keycloak.tokenParsed;
       console.log('Содержимое токена:', parsedToken);
 
-      // обработчик события истечения токена
       keycloak.onTokenExpired = async () => {
         console.log('Токен истёк, попытка обновления...');
         try {
