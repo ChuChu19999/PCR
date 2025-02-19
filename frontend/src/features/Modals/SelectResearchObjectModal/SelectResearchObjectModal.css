@@ -1,0 +1,109 @@
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  width: 90%;
+  max-width: 500px;
+  position: relative;
+  animation: modalFadeIn 0.3s ease-in-out;
+}
+
+.modal-header {
+  margin-bottom: 1.5rem;
+}
+
+.modal-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.modal-body {
+  margin-bottom: 1.5rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.select-container {
+  margin-bottom: 1.5rem;
+}
+
+.select-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.select-research-object-form {
+  padding: 18px;
+  padding-bottom: 0px;
+}
+
+.form-group {
+  margin-bottom: 0px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #333;
+  font-weight: 500;
+}
+
+.select-field {
+  width: 100% !important;
+}
+
+/* Стили для Select из Ant Design */
+.select-field .ant-select-selector {
+  border-radius: 8px !important;
+  padding: 4px 11px !important;
+  height: 40px !important;
+  display: flex;
+  align-items: center;
+}
+
+.select-field .ant-select-selection-placeholder {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.select-field:not(.ant-select-disabled):hover .ant-select-selector {
+  border-color: #0066cc !important;
+}
+
+.select-field.ant-select-focused .ant-select-selector,
+.select-field.ant-select-open .ant-select-selector {
+  border-color: #0066cc !important;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2) !important;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

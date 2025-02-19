@@ -6,6 +6,7 @@ import { Button } from '../../shared/ui/Button/Button';
 import AddDepartmentModal from '../../features/Modals/AddDepartmentModal/AddDepartmentModal';
 import EditDepartmentModal from '../../features/Modals/EditDepartmentModal/EditDepartmentModal';
 import DeleteDepartmentModal from '../../features/Modals/DeleteDepartmentModal/DeleteDepartmentModal';
+import SelectResearchObjectModal from '../../features/Modals/SelectResearchObjectModal/SelectResearchObjectModal';
 import LoadingCard from '../../features/Cards/ui/LoadingCard/LoadingCard';
 import axios from 'axios';
 import './LaboratoryPage.css';
@@ -18,6 +19,7 @@ function LaboratoryPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isResearchObjectModalOpen, setIsResearchObjectModalOpen] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -54,6 +56,7 @@ function LaboratoryPage() {
     setIsDeleteModalOpen(false);
     setIsEditModalOpen(false);
     setIsAddModalOpen(false);
+    setIsResearchObjectModalOpen(false);
     setSelectedDepartment(null);
   };
 
@@ -133,7 +136,7 @@ function LaboratoryPage() {
                   />
                   <Button
                     title="Добавить расчеты"
-                    onClick={() => console.log('Добавление расчетов')} // Заглушка для будущей функциональности
+                    onClick={() => setIsResearchObjectModalOpen(true)}
                     type="primary"
                     buttonColor="#0066cc"
                   />
@@ -161,6 +164,11 @@ function LaboratoryPage() {
             onClose={handleModalClose}
             onSuccess={handleSuccess}
             department={selectedDepartment}
+          />
+
+          <SelectResearchObjectModal
+            isOpen={isResearchObjectModalOpen}
+            onClose={() => setIsResearchObjectModalOpen(false)}
           />
         </div>
       </Layout>
