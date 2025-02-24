@@ -2,65 +2,49 @@
 # BUILDER #
 ###########
 
-# pull official base image
+# Базовый образ Python
 FROM harbor.gd-urengoy.gazprom.ru/docker_hub/python:3.11-slim as builder
 
-# set work directory
+# Установка рабочей директории
 WORKDIR /usr/src/app
 
-# set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+# Настройка переменных окружения Python
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# install dependencies
+# Установка сертификатов и настройка репозитория в одном слое
 COPY ./docker/django/root.crt /usr/local/share/ca-certificates/
-RUN update-ca-certificates
-RUN rm -rf /etc/apt/sources.list && rm -rf /etc/apt/sources.list.d/*
-RUN echo "deb [trusted=yes] https://repo.gd-urengoy.gazprom.ru/repository/debian-bookworm/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list
+RUN update-ca-certificates && \
+    rm -rf /etc/apt/sources.list /etc/apt/sources.list.d/* && \
+    echo "deb [trusted=yes] https://repo.gd-urengoy.gazprom.ru/repository/debian-bookworm/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list
 
-#RUN apt-get update && apt-get upgrade -y && apt-get install --no-install-recommends -y \
-#    gcc \
-#    libldap2-dev \
-#    libsasl2-dev \
-#    libpq5 \
-#  && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
-#  && apt-get clean -y && rm -rf /var/lib/apt/lists/*
-
-# install dependencies
+# Установка зависимостей backend
 COPY ../../../backend/requirements.txt .
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requirements.txt
-
-# lint
-#RUN pip install --upgrade pip
-#COPY ../../../backend .
-#RUN flake8 --ignore=E501,F401 .
 
 #########
 # FINAL #
 #########
-#
+
 # pull official base image
 FROM harbor.gd-urengoy.gazprom.ru/docker_hub/python:3.11-slim
 
-# install dependencies
+# Копирование сертификатов и настройка в одном слое
 COPY ./docker/django/root.crt /usr/local/share/ca-certificates/
-RUN update-ca-certificates
-RUN rm -rf /etc/apt/sources.list && rm -rf /etc/apt/sources.list.d/*
-RUN echo "deb [trusted=yes] https://repo.gd-urengoy.gazprom.ru/repository/debian-bookworm/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list
+RUN update-ca-certificates && \
+    rm -rf /etc/apt/sources.list /etc/apt/sources.list.d/* && \
+    echo "deb [trusted=yes] https://repo.gd-urengoy.gazprom.ru/repository/debian-bookworm/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
+    addgroup --system app && \
+    useradd -g app app && \
+    mkdir -p /home/app/web/backend_static /home/app/web/media
 
-#RUN apt-get update && apt-get install --no-install-recommends -y \
-#    libldap2-dev \
-#  && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
-#  && apt-get clean -y && rm -rf /var/lib/apt/lists/*
-
-
-# create directory for the app user
+# Создание директории приложения
 RUN mkdir -p /home/app
 
-# create the app user
+# Создание app user
 RUN addgroup --system app && useradd -g app app
 
-# create the appropriate directories
+# Создание необходимых директорий и настройка окружения
 ENV HOME=/home/app
 ENV APP_HOME=/home/app/web
 RUN mkdir $APP_HOME
@@ -68,34 +52,24 @@ RUN mkdir $APP_HOME/backend_static
 RUN mkdir $APP_HOME/media
 WORKDIR $APP_HOME
 
-#RUN apt-get update && apt-get upgrade -y \
-#  && apt-get install --no-install-recommends -y \
-#    gcc \
-#    libldap2-dev \
-#    libsasl2-dev \
-#    bash  \
-#    libpq-dev \
-#  && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
-#  && apt-get clean -y && rm -rf /var/lib/apt/lists/*
-
+# Копирование и установка зависимостей
 COPY --from=builder /usr/src/app/wheels /wheels
+RUN pip install --no-cache /wheels/* -i https://repo.gd-urengoy.gazprom.ru/repository/pypi-org-proxy/simple --trusted-host repo.gd-urengoy.gazprom.ru && \
+    pip install gunicorn==21.2.0 -i https://repo.gd-urengoy.gazprom.ru/repository/pypi-org-proxy/simple --trusted-host repo.gd-urengoy.gazprom.ru
 
-RUN pip install --no-cache /wheels/* -i https://repo.gd-urengoy.gazprom.ru/repository/pypi-org-proxy/simple --trusted-host repo.gd-urengoy.gazprom.ru
-RUN pip install gunicorn==21.2.0 -i https://repo.gd-urengoy.gazprom.ru/repository/pypi-org-proxy/simple --trusted-host repo.gd-urengoy.gazprom.ru
-
-# copy entrypoint.prod.sh
+# Копирование entrypoint.prod.sh
 COPY ./docker/django/prod/entrypoint.prod.sh .
-RUN sed -i 's/\r$//g'  $APP_HOME/entrypoint.prod.sh
-RUN chmod +x  $APP_HOME/entrypoint.prod.sh
+RUN sed -i 's/\r$//g' $APP_HOME/entrypoint.prod.sh && \
+    chmod +x $APP_HOME/entrypoint.prod.sh
 
-# copy project
+# Копирование проекта Django
 COPY ../../../backend $APP_HOME
 
-# chown all the files to the app user
+# Установка прав на файлы
 RUN chown -R app:app $APP_HOME
 
-# change to the app user
+# Переключение на пользователя приложения
 USER app
 
-# run entrypoint.prod.sh
+# Запуск приложения через entrypoint
 ENTRYPOINT ["/home/app/web/entrypoint.prod.sh"]

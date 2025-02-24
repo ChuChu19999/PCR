@@ -1,0 +1,36 @@
+.input-field-container {
+  margin-bottom: 16px;
+}
+
+.input-field-container .ant-form-item-label {
+  display: flex;
+  align-items: center;
+}
+
+.calculation-results {
+  margin-top: 24px;
+  padding: 16px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+}
+
+.calculation-results > div {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.input-fields {
+  margin-bottom: 24px;
+}
+
+/* Стили для иконки подсказки */
+.MuiIconButton-root.MuiIconButton-sizeSmall {
+  padding: 4px;
+  margin-left: 4px;
+  color: rgba(0, 0, 0, 0.54);
+}
+
+.MuiIconButton-root.MuiIconButton-sizeSmall:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.87);
+}

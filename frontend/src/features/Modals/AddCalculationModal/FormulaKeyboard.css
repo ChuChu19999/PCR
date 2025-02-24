@@ -1,0 +1,81 @@
+.formula-keyboard {
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.keyboard-section {
+  margin-bottom: 12px;
+}
+
+.keyboard-section:last-child {
+  margin-bottom: 0;
+}
+
+.section-title {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.operators {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 8px;
+}
+
+.variables-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 8px;
+}
+
+.keyboard-button {
+  padding: 14px;
+  border: none;
+  border-radius: 4px;
+  background-color: #1890ff;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 16px;
+  min-width: 40px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.keyboard-button:hover {
+  background-color: #40a9ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.keyboard-button:active {
+  transform: translateY(0);
+  background-color: #096dd9;
+  box-shadow: none;
+}
+
+.keyboard-button.operator {
+  background-color: #1890ff;
+  font-weight: bold;
+}
+
+.keyboard-button.variable {
+  background-color: #1890ff;
+}
+
+.keyboard-button.operator:hover,
+.keyboard-button.variable:hover {
+  background-color: #40a9ff;
+}
+
+.keyboard-button.operator:active,
+.keyboard-button.variable:active {
+  background-color: #096dd9;
+}

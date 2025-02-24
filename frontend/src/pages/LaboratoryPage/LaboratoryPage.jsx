@@ -64,6 +64,38 @@ function LaboratoryPage() {
     fetchLaboratory();
   };
 
+  const handleOpenResearchObjectModal = (department, event) => {
+    event.stopPropagation();
+    setSelectedDepartment(department);
+    setIsResearchObjectModalOpen(true);
+  };
+
+  const handleDepartmentClick = async department => {
+    try {
+      // Проверяем наличие страницы расчетов для этого подразделения
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/research-pages/`, {
+        params: {
+          department_id: department.id,
+          type: 'oil_products',
+        },
+      });
+
+      if (response.data.length > 0) {
+        // Если страница существует, переходим на нее
+        navigate(`/departments/${department.id}/oil-products`);
+      } else {
+        // Если страницы нет, открываем модальное окно добавления страницы
+        setSelectedDepartment(department);
+        setIsResearchObjectModalOpen(true);
+      }
+    } catch (error) {
+      console.error('Ошибка при проверке страницы расчетов:', error);
+      // В случае ошибки также открываем модальное окно добавления страницы
+      setSelectedDepartment(department);
+      setIsResearchObjectModalOpen(true);
+    }
+  };
+
   if (isLoading) {
     return (
       <EmptyPageWrapper>
@@ -104,24 +136,32 @@ function LaboratoryPage() {
 
           <div className="departments-grid">
             {departments.map(department => (
-              <div key={department.id} className="department-card">
+              <div
+                key={department.id}
+                className="department-card"
+                onClick={() => handleDepartmentClick(department)}
+              >
                 <div className="department-card-content">
                   <h3>{department.name}</h3>
                 </div>
-                <div className="department-card-actions">
-                  <Button
-                    title="Редактировать"
-                    onClick={e => handleEdit(department, e)}
-                    type="default"
-                    className="edit-btn"
-                  />
-                  <Button
-                    title="Удалить"
-                    onClick={e => handleDeleteClick(department, e)}
-                    type="default"
-                    danger
-                    className="delete-btn"
-                  />
+                <div className="department-card-actions" onClick={e => e.stopPropagation()}>
+                  <div className="button-wrapper">
+                    <Button
+                      title="Редактировать"
+                      onClick={e => handleEdit(department, e)}
+                      type="default"
+                      className="edit-btn"
+                    />
+                  </div>
+                  <div className="button-wrapper">
+                    <Button
+                      title="Удалить"
+                      onClick={e => handleDeleteClick(department, e)}
+                      type="default"
+                      danger
+                      className="delete-btn"
+                    />
+                  </div>
                 </div>
               </div>
             ))}
@@ -168,7 +208,9 @@ function LaboratoryPage() {
 
           <SelectResearchObjectModal
             isOpen={isResearchObjectModalOpen}
-            onClose={() => setIsResearchObjectModalOpen(false)}
+            onClose={handleModalClose}
+            department={selectedDepartment}
+            laboratoryId={id}
           />
         </div>
       </Layout>

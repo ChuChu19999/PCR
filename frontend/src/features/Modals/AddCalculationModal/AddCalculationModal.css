@@ -1,0 +1,160 @@
+.add-calculation-form {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.form-group {
+  margin-bottom: 16px;
+  width: calc(100% - 30px);
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #333;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.form-group input {
+  width: calc(100% - 10px);
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  color: rgba(0, 0, 0, 0.85);
+  background-color: #fff;
+}
+
+.form-group select {
+  width: calc(100% + 15px);
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  color: rgba(0, 0, 0, 0.85);
+  background-color: #fff;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.form-section {
+  margin-bottom: 24px;
+  border-radius: 4px;
+}
+
+.form-section h3 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.field-group {
+  position: relative;
+  padding: 16px;
+  padding-right: 0;
+  margin-right: 15px;
+  margin-bottom: 16px;
+  background-color: white;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.delete-field-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #ff4d4f;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 18px;
+  line-height: 1;
+  transition: all 0.3s ease;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-field-btn:hover {
+  background-color: rgba(255, 77, 79, 0.1);
+}
+
+.add-field-btn {
+  background: none;
+  border: 1px dashed #1890ff;
+  color: #1890ff;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  width: calc(100% - 15px);
+  margin-top: 8px;
+}
+
+.add-field-btn:hover {
+  background-color: rgba(24, 144, 255, 0.1);
+}
+
+.error-message {
+  color: #ff4d4f;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* Стилизация скроллбара */
+.add-calculation-form::-webkit-scrollbar {
+  width: 6px;
+}
+
+.add-calculation-form::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.add-calculation-form::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+.add-calculation-form::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.general-error {
+  margin: 8px 0;
+  padding: 8px;
+  background-color: #fff1f0;
+  border: 1px solid #ffccc7;
+  border-radius: 4px;
+}
+
+.formula-input-container {
+  position: relative;
+  width: 100%;
+}
+
+.formula-input-container input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+}
+
+.formula-input-container input:focus {
+  border-color: #2196f3;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}

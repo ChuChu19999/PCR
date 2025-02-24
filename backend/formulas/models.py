@@ -70,11 +70,6 @@ class Laboratory(models.Model):
         if self.full_name:
             self.full_name = self.full_name.strip()
 
-        if Laboratory.objects.filter(name=self.name).exclude(id=self.id).exists():
-            raise ValidationError(
-                {"name": "Лаборатория с таким названием уже существует"}
-            )
-
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
@@ -112,7 +107,6 @@ class Department(models.Model):
         verbose_name = "Подразделение"
         verbose_name_plural = "Подразделения"
         ordering = ("laboratory", "name")
-        unique_together = (("laboratory", "name"),)
         indexes = [
             models.Index(fields=["laboratory", "name", "is_deleted"]),
             models.Index(fields=["created_at"]),
@@ -126,17 +120,395 @@ class Department(models.Model):
         if self.name:
             self.name = self.name.strip()
 
-        if (
-            Department.objects.filter(laboratory=self.laboratory, name=self.name)
-            .exclude(id=self.id)
-            .exists()
-        ):
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+
+class ResearchObject(models.Model):
+    class ObjectType(models.TextChoices):
+        OIL_PRODUCTS = "oil_products", "Нефтепродукты"
+        CONDENSATE = "condensate", "Конденсат"
+
+    type = models.CharField(
+        max_length=20,
+        choices=ObjectType.choices,
+        verbose_name="Тип объекта исследования",
+        help_text="Выберите тип объекта исследования",
+        db_index=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
+    laboratory = models.ForeignKey(
+        Laboratory,
+        on_delete=models.CASCADE,
+        related_name="research_objects",
+        verbose_name="Лаборатория",
+        help_text="Лаборатория, проводящая исследование",
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        related_name="research_objects",
+        verbose_name="Подразделение",
+        help_text="Подразделение, проводящее исследование",
+        null=True,
+        blank=True,
+    )
+    research_methods = models.ManyToManyField(
+        "ResearchMethod",
+        related_name="research_objects",
+        verbose_name="Методы исследования",
+        help_text="Методы исследования, привязанные к объекту",
+    )
+    is_deleted = models.BooleanField(default=False, verbose_name="Удалено")
+    deleted_at = models.DateTimeField(
+        null=True, blank=True, verbose_name="Дата удаления"
+    )
+
+    class Meta:
+        verbose_name = "Объект исследования"
+        verbose_name_plural = "Объекты исследования"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["type"]),
+            models.Index(fields=["laboratory"]),
+            models.Index(fields=["department"]),
+            models.Index(fields=["is_deleted"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self):
+        department_name = f" - {self.department.name}" if self.department else ""
+        return f"{self.get_type_display()} - {self.laboratory.name}{department_name}"
+
+    def clean(self):
+        if self.department and self.department.laboratory != self.laboratory:
             raise ValidationError(
                 {
-                    "name": "Подразделение с таким названием уже существует в данной лаборатории"
+                    "department": "Подразделение должно принадлежать выбранной лаборатории"
                 }
             )
 
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
+
+    def mark_as_deleted(self):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save()
+
+
+def get_default_convergence_conditions():
+    return {"formulas": [{"formula": "", "convergence_value": "satisfactory"}]}
+
+
+class ResearchMethod(models.Model):
+    class RoundingType(models.TextChoices):
+        DECIMAL = "decimal", "До десятичного знака"
+        SIGNIFICANT = "significant", "До значащей цифры"
+
+    name = models.CharField(
+        max_length=255,
+        verbose_name="Наименование",
+        help_text="Наименование метода исследования",
+        db_index=True,
+    )
+    formula = models.CharField(
+        max_length=255,
+        verbose_name="Формула",
+        help_text="Формула для расчета",
+    )
+    measurement_error = models.CharField(
+        max_length=255,
+        verbose_name="Погрешность измерения",
+        help_text="Фиксированное значение или формула для расчета погрешности",
+    )
+    unit = models.CharField(
+        max_length=20,
+        verbose_name="Единица измерения",
+        help_text="Единица измерения результата",
+    )
+    measurement_method = models.CharField(
+        max_length=255,
+        verbose_name="Метод измерения",
+        help_text="Используемый метод измерения",
+    )
+    nd_code = models.CharField(
+        max_length=255,
+        verbose_name="Шифр НД",
+        help_text="Шифр нормативной документации",
+    )
+    nd_name = models.CharField(
+        max_length=255,
+        verbose_name="Наименование НД",
+        help_text="Наименование нормативной документации",
+    )
+    input_data = models.JSONField(
+        verbose_name="Входные данные",
+        help_text="Структура входных данных для расчета",
+        default=dict,
+    )
+    intermediate_data = models.JSONField(
+        verbose_name="Промежуточные данные",
+        help_text="Структура промежуточных данных для расчета",
+        default=dict,
+    )
+    convergence_conditions = models.JSONField(
+        verbose_name="Условия сходимости",
+        help_text="Формулы и значения для проверки условий сходимости",
+        default=get_default_convergence_conditions,
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Дата создания",
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Дата обновления",
+    )
+    is_deleted = models.BooleanField(
+        default=False,
+        verbose_name="Удалено",
+        db_index=True,
+    )
+    deleted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Дата удаления",
+    )
+    rounding_type = models.CharField(
+        max_length=20,
+        choices=RoundingType.choices,
+        verbose_name="Тип округления",
+        help_text="Способ округления результата",
+        db_index=True,
+    )
+    rounding_decimal = models.IntegerField(
+        verbose_name="Количество знаков округления",
+        help_text="Количество десятичных знаков или значащих цифр для округления",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Активен",
+        help_text="Указывает, активен ли метод исследования",
+        db_index=True,
+    )
+
+    class Meta:
+        verbose_name = "Метод исследования"
+        verbose_name_plural = "Методы исследования"
+        ordering = ("name",)
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["is_deleted"]),
+            models.Index(fields=["is_active"]),
+            models.Index(fields=["is_active", "is_deleted"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.nd_code})"
+
+    def mark_as_deleted(self):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save()
+
+
+class Calculation(models.Model):
+    class Convergence(models.TextChoices):
+        SATISFACTORY = "satisfactory", "Удовлетворительно"
+        UNSATISFACTORY = "unsatisfactory", "Неудовлетворительно"
+        ABSENCE = "absence", "Отсутствие"
+        TRACES = "traces", "Следы"
+
+    input_data = models.JSONField(
+        verbose_name="Входные данные",
+        help_text="Входные данные для расчета",
+        default=dict,
+    )
+    intermediate_calculations = models.JSONField(
+        verbose_name="Промежуточные расчеты",
+        help_text="Результаты промежуточных вычислений",
+        default=dict,
+    )
+    result = models.DecimalField(
+        max_digits=20,
+        decimal_places=10,
+        verbose_name="Результат",
+        help_text="Итоговый результат расчета",
+    )
+    convergence = models.CharField(
+        max_length=20,
+        choices=Convergence.choices,
+        verbose_name="Сходимость",
+        help_text="Оценка сходимости результата",
+    )
+    measurement_error = models.DecimalField(
+        max_digits=20,
+        decimal_places=10,
+        verbose_name="Погрешность измерения",
+        help_text="Погрешность измерения результата",
+    )
+    research_object_type = models.ForeignKey(
+        ResearchObject,
+        on_delete=models.PROTECT,
+        related_name="calculations",
+        verbose_name="Тип объекта исследования",
+        help_text="Тип объекта, для которого производится расчет",
+    )
+    laboratory = models.ForeignKey(
+        Laboratory,
+        on_delete=models.CASCADE,
+        related_name="calculations",
+        verbose_name="Лаборатория",
+        help_text="Лаборатория, проводящая расчет",
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        related_name="calculations",
+        verbose_name="Подразделение",
+        help_text="Подразделение, проводящее расчет",
+        null=True,
+        blank=True,
+    )
+    research_method = models.ForeignKey(
+        ResearchMethod,
+        on_delete=models.PROTECT,
+        related_name="calculations",
+        verbose_name="Метод исследования",
+        help_text="Метод исследования, используемый для расчета",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
+    is_deleted = models.BooleanField(
+        default=False,
+        verbose_name="Удалено",
+        db_index=True,
+    )
+    deleted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Дата удаления",
+    )
+
+    class Meta:
+        verbose_name = "Расчет"
+        verbose_name_plural = "Расчеты"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["convergence"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["laboratory"]),
+            models.Index(fields=["department"]),
+            models.Index(fields=["research_object_type"]),
+            models.Index(fields=["research_method"]),
+            models.Index(fields=["is_deleted"]),
+        ]
+
+    def __str__(self):
+        department_info = f" ({self.department.name})" if self.department else ""
+        return f"Расчет {self.id} - {self.research_object_type.get_type_display()} - {self.laboratory.name}{department_info}"
+
+    def clean(self):
+        if self.department and self.department.laboratory != self.laboratory:
+            raise ValidationError(
+                {
+                    "department": "Подразделение должно принадлежать выбранной лаборатории"
+                }
+            )
+
+    def _round_to_significant_figures(self, number, significant_figures):
+        if number == 0:
+            return 0
+
+        from decimal import Decimal
+
+        # Преобразуем в Decimal для точности
+        d = Decimal(str(float(number)))
+
+        # Получаем строковое представление числа в экспоненциальной форме
+        # и убираем незначащие нули
+        str_num = f"{d:E}"
+        mantissa, exp = str_num.split("E")
+        exp = int(exp)
+
+        # Убираем десятичную точку и незначащие нули
+        mantissa = mantissa.replace(".", "").rstrip("0")
+
+        # Округляем до нужного количества значащих цифр
+        if len(mantissa) > significant_figures:
+            mantissa = str(round(int(mantissa[: significant_figures + 1]) / 10))
+
+        # Добавляем нули, если не хватает значащих цифр
+        mantissa = mantissa.ljust(significant_figures, "0")
+
+        # Восстанавливаем десятичную точку
+        if exp >= 0:
+            if exp + 1 >= len(mantissa):
+                result = Decimal(mantissa + "0" * (exp + 1 - len(mantissa)))
+            else:
+                result = Decimal(mantissa[: exp + 1] + "." + mantissa[exp + 1 :])
+        else:
+            result = Decimal("0." + "0" * (-exp - 1) + mantissa)
+
+        return result
+
+    def _get_decimal_places(self, number):
+        """
+        Определяет количество знаков после запятой в числе.
+        Сохраняет незначащие нули в конце.
+
+        Например:
+        12.345 -> 3
+        12.100 -> 3
+        0.120 -> 3
+        12.0 -> 1
+        """
+        from decimal import Decimal
+
+        # Преобразуем в Decimal и получаем строковое представление
+        str_num = str(Decimal(str(float(number))))
+
+        # Если в числе нет десятичной точки, знаков после запятой нет
+        if "." not in str_num:
+            return 0
+
+        # Возвращаем количество знаков после точки, включая незначащие нули
+        return len(str_num.split(".")[1])
+
+    def round_result(self):
+        """
+        Округляет результат и погрешность измерения согласно настройкам метода исследования.
+        """
+        if not self.result:
+            return
+
+        # Используем настройки округления из метода исследования
+        if self.research_method.rounding_type == ResearchMethod.RoundingType.DECIMAL:
+            self.result = round(self.result, self.research_method.rounding_decimal)
+        else:
+            self.result = self._round_to_significant_figures(
+                self.result, self.research_method.rounding_decimal
+            )
+
+        # Определяем количество знаков после запятой в округленном результате
+        result_decimal_places = self._get_decimal_places(self.result)
+
+        # Округляем погрешность до того же количества знаков
+        if self.measurement_error is not None:
+            self.measurement_error = round(
+                self.measurement_error, result_decimal_places
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        self.round_result()
+        super().save(*args, **kwargs)
+
+    def mark_as_deleted(self):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save()
