@@ -638,7 +638,6 @@ def evaluate_formula(formula, variables, is_condition=False):
             for operator in ["<=", ">=", ">", "<", "="]:
                 if operator in formula:
                     left, right = formula.split(operator)
-
                     # Вычисляем левую и правую части
                     left_result = float(eval(left, {"__builtins__": {}}, safe_dict))
                     right_result = float(eval(right, {"__builtins__": {}}, safe_dict))
@@ -655,7 +654,9 @@ def evaluate_formula(formula, variables, is_condition=False):
                     elif operator == "<":
                         return left_result < (right_result - epsilon)
                     else:  # =
-                        return abs(left_result - right_result) < epsilon
+                        return (
+                            abs(left_result - right_result) < 1e-10
+                        )
 
             raise ValueError(
                 f"Неподдерживаемый оператор сравнения в формуле: {formula}"
