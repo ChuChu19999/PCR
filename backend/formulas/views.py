@@ -19,7 +19,7 @@ from .serializers import (
 )
 import logging
 from django.db.models import Q
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import math
 import numpy as np
 
@@ -544,7 +544,10 @@ def _get_decimal_places(number):
 
 def round_result(result, rounding_type, rounding_decimal):
     if rounding_type == "decimal":
-        return round(result, rounding_decimal)
+        # Преобразуем в Decimal для точного округления
+        d = Decimal(str(float(result)))
+        # Используем ROUND_HALF_UP для округления 0.5 вверх
+        return d.quantize(Decimal("0.1") ** rounding_decimal, rounding=ROUND_HALF_UP)
     else:
         return _round_to_significant_figures(result, rounding_decimal)
 
@@ -632,25 +635,27 @@ def evaluate_formula(formula, variables, is_condition=False):
 
         if is_condition:
             # Для условий разбиваем формулу на части
-            for operator in ["<=", ">=", ">", "<", "="]:  # Добавил оператор '='
+            for operator in ["<=", ">=", ">", "<", "="]:
                 if operator in formula:
                     left, right = formula.split(operator)
+
                     # Вычисляем левую и правую части
                     left_result = float(eval(left, {"__builtins__": {}}, safe_dict))
                     right_result = float(eval(right, {"__builtins__": {}}, safe_dict))
 
+                    # Добавляем небольшую погрешность для сравнения чисел с плавающей точкой
+                    epsilon = 1e-10
+
                     if operator == "<=":
-                        return left_result <= right_result
+                        return left_result <= (right_result + epsilon)
                     elif operator == ">=":
-                        return left_result >= right_result
+                        return left_result >= (right_result - epsilon)
                     elif operator == ">":
-                        return left_result > right_result
+                        return left_result > (right_result + epsilon)
                     elif operator == "<":
-                        return left_result < right_result
+                        return left_result < (right_result - epsilon)
                     else:  # =
-                        return (
-                            abs(left_result - right_result) < 1e-10
-                        )  # Сравнение с учетом погрешности вычислений
+                        return abs(left_result - right_result) < epsilon
 
             raise ValueError(
                 f"Неподдерживаемый оператор сравнения в формуле: {formula}"
@@ -720,40 +725,27 @@ def calculate_result(request):
         # Определяем итоговый результат сходимости
         logger.info(f"Все выполненные условия: {satisfied_conditions}")
 
-        # Проверяем, есть ли среди выполненных условий не satisfactory
-        non_satisfactory_conditions = [
-            cond for cond in satisfied_conditions if cond != "satisfactory"
-        ]
-
-        if non_satisfactory_conditions:
-            # Если есть не satisfactory условия, определяем результат по приоритету
-            if "absence" in non_satisfactory_conditions:
+        # Если есть хотя бы одно условие satisfactory, считаем результат удовлетворительным
+        if "satisfactory" in satisfied_conditions:
+            convergence_result = "satisfactory"
+            logger.info("Найдено удовлетворительное условие")
+        # Если нет satisfactory, но есть другие условия
+        elif satisfied_conditions:
+            if "absence" in satisfied_conditions:
                 convergence_result = "absence"
                 logger.info("Найдено условие отсутствия")
-            elif "traces" in non_satisfactory_conditions:
+            elif "traces" in satisfied_conditions:
                 convergence_result = "traces"
                 logger.info("Найдено условие следов")
             else:
                 convergence_result = "unsatisfactory"
                 logger.info("Условия сходимости не удовлетворены")
-
-            # Возвращаем результат без вычислений
-            return Response(
-                {
-                    "convergence": convergence_result,
-                    "intermediate_results": {},
-                    "result": None,
-                    "measurement_error": None,
-                    "unit": research_method["unit"],
-                },
-                status=status.HTTP_200_OK,
+        else:
+            # Если нет выполненных условий, считаем результат удовлетворительным
+            convergence_result = "satisfactory"
+            logger.info(
+                "Нет выполненных условий, результат считается удовлетворительным"
             )
-
-        # Если все условия satisfactory или нет выполненных условий
-        convergence_result = (
-            "satisfactory" if satisfied_conditions else "unsatisfactory"
-        )
-        logger.info(f"Итоговый результат сходимости: {convergence_result}")
 
         # Если сходимость удовлетворительная, вычисляем результат
         result = None

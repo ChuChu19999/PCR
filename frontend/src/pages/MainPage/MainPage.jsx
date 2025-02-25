@@ -103,7 +103,7 @@ function MainPage() {
           </div>
 
           <div className="laboratories-grid">
-            {laboratories.map(laboratory => (
+            {Array.isArray(laboratories) && laboratories.map(laboratory => (
               <div
                 key={laboratory.id}
                 className="laboratory-card"
@@ -133,7 +133,7 @@ function MainPage() {
                 </div>
               </div>
             ))}
-            {laboratories.length === 0 && (
+            {(!Array.isArray(laboratories) || laboratories.length === 0) && (
               <div className="no-laboratories">
                 <p>Лаборатории не найдены</p>
                 <Button
