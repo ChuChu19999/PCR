@@ -103,36 +103,37 @@ function MainPage() {
           </div>
 
           <div className="laboratories-grid">
-            {Array.isArray(laboratories) && laboratories.map(laboratory => (
-              <div
-                key={laboratory.id}
-                className="laboratory-card"
-                onClick={() => handleCardClick(laboratory)}
-              >
-                <div className="laboratory-card-content">
-                  <h3>{laboratory.name}</h3>
-                  <p>{laboratory.description}</p>
-                  <div className="laboratory-info">
-                    <span>{laboratory.full_name}</span>
+            {Array.isArray(laboratories) &&
+              laboratories.map(laboratory => (
+                <div
+                  key={laboratory.id}
+                  className="laboratory-card"
+                  onClick={() => handleCardClick(laboratory)}
+                >
+                  <div className="laboratory-card-content">
+                    <h3>{laboratory.name}</h3>
+                    <p>{laboratory.description}</p>
+                    <div className="laboratory-info">
+                      <span>{laboratory.full_name}</span>
+                    </div>
+                  </div>
+                  <div className="laboratory-card-actions">
+                    <Button
+                      title="Редактировать"
+                      onClick={e => handleEdit(laboratory, e)}
+                      type="default"
+                      className="edit-btn"
+                    />
+                    <Button
+                      title="Удалить"
+                      onClick={e => handleDeleteClick(laboratory, e)}
+                      type="default"
+                      danger
+                      className="delete-btn"
+                    />
                   </div>
                 </div>
-                <div className="laboratory-card-actions">
-                  <Button
-                    title="Редактировать"
-                    onClick={e => handleEdit(laboratory, e)}
-                    type="default"
-                    className="edit-btn"
-                  />
-                  <Button
-                    title="Удалить"
-                    onClick={e => handleDeleteClick(laboratory, e)}
-                    type="default"
-                    danger
-                    className="delete-btn"
-                  />
-                </div>
-              </div>
-            ))}
+              ))}
             {(!Array.isArray(laboratories) || laboratories.length === 0) && (
               <div className="no-laboratories">
                 <p>Лаборатории не найдены</p>

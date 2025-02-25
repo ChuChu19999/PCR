@@ -32,7 +32,7 @@
     "@mui/material": "^5.15.11",
     "ag-grid-enterprise": "32.3.3",
     "ag-grid-react": "32.3.3",
-    "antd": "^5.21.2",
+
     "axios": "^1.7.9",
     "color-convert": "^2.0.1",
     "dayjs": "^1.11.13",

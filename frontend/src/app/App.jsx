@@ -10,7 +10,7 @@ import LoadingPage from '../pages/LoadingPage/LoadingPage';
 import Page404 from '../pages/errorPages/Page404/Page404';
 import KeycloakService from '../KeycloakService';
 import LaboratoryPage from '../pages/LaboratoryPage/LaboratoryPage';
-import OilProductsPage from '../pages/OilProductsPage/OilProductsPage';
+import OilProductsPage from '../pages/OilProductsPage/OilProductsPage.jsx';
 import axios from 'axios';
 
 LicenseManager.setLicenseKey('BOARD4ALL_NDEwMjM1MTIwMDAwMA==8f4481b5cc626ad79fe91bc5f4e52e3d');
