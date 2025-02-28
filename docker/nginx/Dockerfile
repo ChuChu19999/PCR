@@ -6,10 +6,15 @@ WORKDIR /app
 COPY ../frontend/package*.json ./
 
 # Настройка npm и установка зависимостей
-RUN npm config set registry=https://repo.gd-urengoy.gazprom.ru/repository/npm-proxy/ && \
-    npm config set strict-ssl false && \
-    npm ci --only=production && \
+# RUN npm config set registry=https://repo.gd-urengoy.gazprom.ru/repository/npm-proxy/ && \
+#     npm config set strict-ssl false && \
+RUN npm ci && \
     npm cache clean --force
+
+# Установка antd
+# RUN npm config set registry=https://repo.gd-urengoy.gazprom.ru/repository/npm-gdu/ && \
+#     npm config set strict-ssl false
+RUN npm install antd@5.21.2 --verbose
 
 # Копирование и сборка приложения
 COPY ../frontend/ .

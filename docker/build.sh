@@ -8,7 +8,7 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 docker compose build \
   --parallel \
   --build-arg BUILDKIT_INLINE_CACHE=1 \
-  --progress=plain \
+  --progress=plain > build_log.txt 2>&1 \
   --no-cache
 docker compose push
 
