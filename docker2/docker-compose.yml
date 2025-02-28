@@ -1,0 +1,40 @@
+version: '3.8'
+
+networks:
+  laborant_itc_network:
+
+volumes:
+  laborant_itc_static:
+  laborant_itc_media:
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: ./docker/django/prod/Dockerfile
+    container_name: laborant_itc_django
+    image: harbor.gd-urengoy.gazprom.ru/laborant_itc/laborant_itc_django:latest
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:5000
+    restart: always
+    networks:
+      - laborant_itc_network
+    volumes:
+      - laborant_itc_static:/home/app/web/backend_static
+      - laborant_itc_media:/home/app/web/media
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: ./docker/nginx/Dockerfile
+    container_name: laborant_itc_nginx
+    image: harbor.gd-urengoy.gazprom.ru/laborant_itc/laborant_itc_nginx:latest
+    restart: always
+    networks:
+      - laborant_itc_network
+    volumes:
+      - laborant_itc_static:/backend_static
+      - laborant_itc_media:/media
+    ports:
+      - "8012:80"
+    depends_on:
+      - backend
