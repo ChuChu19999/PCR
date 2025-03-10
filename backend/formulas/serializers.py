@@ -114,20 +114,71 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
             "rounding_type",
             "rounding_decimal",
             "is_active",
+            "parallel_count",
         )
         read_only_fields = ("created_at", "updated_at", "deleted_at")
 
+    def validate_parallel_count(self, value):
+        if value < 0:
+            raise serializers.ValidationError(
+                "Количество параллелей не может быть отрицательным"
+            )
+        return value
+
     def validate_measurement_error(self, value):
-        if value:
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Погрешность должна быть объектом")
+
+        if "type" not in value:
+            raise serializers.ValidationError("Не указан тип погрешности")
+
+        if value["type"] not in ["fixed", "formula", "range"]:
+            raise serializers.ValidationError("Неверный тип погрешности")
+
+        if "value" not in value and value["type"] != "range":
+            raise serializers.ValidationError("Не указано значение погрешности")
+
+        if value["type"] == "fixed":
             try:
-                # Пробуем преобразовать в число, если это фиксированное значение
-                float(value)
-            except ValueError:
-                # Если не получилось, значит это должна быть формула
-                if not any(op in value for op in ["+", "-", "*", "/", "(", ")"]):
+                float(value["value"])
+            except (ValueError, TypeError):
+                raise serializers.ValidationError(
+                    "Фиксированное значение должно быть числом"
+                )
+
+        elif value["type"] == "formula":
+            if not any(op in value["value"] for op in ["+", "-", "*", "/", "(", ")"]):
+                raise serializers.ValidationError(
+                    "Формула погрешности должна быть корректной"
+                )
+
+        elif value["type"] == "range":
+            if "ranges" not in value or not isinstance(value["ranges"], list):
+                raise serializers.ValidationError(
+                    "Для диапазонного типа необходимо указать ranges"
+                )
+
+            if not value["ranges"]:
+                raise serializers.ValidationError("Ranges не может быть пустым")
+
+            for range_item in value["ranges"]:
+                if not isinstance(range_item, dict):
                     raise serializers.ValidationError(
-                        "Погрешность должна быть числом или корректной формулой"
+                        "Каждый диапазон должен быть объектом"
                     )
+
+                if "formula" not in range_item or "value" not in range_item:
+                    raise serializers.ValidationError(
+                        "Каждый диапазон должен содержать formula и value"
+                    )
+
+                try:
+                    float(range_item["value"])
+                except (ValueError, TypeError):
+                    raise serializers.ValidationError(
+                        "Значение в диапазоне должно быть числом"
+                    )
+
         return value
 
     def validate_input_data(self, value):

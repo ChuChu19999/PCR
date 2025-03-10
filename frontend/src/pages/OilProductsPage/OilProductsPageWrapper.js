@@ -21,7 +21,6 @@ const OilProductsPageWrapper = styled.div`
   .calculation-form {
     max-width: 600px;
     margin: 0 auto;
-    padding: 15px;
     display: flex;
     flex-direction: column;
     gap: 1rem;

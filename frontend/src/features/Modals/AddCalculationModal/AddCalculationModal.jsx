@@ -15,7 +15,11 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
   const [formData, setFormData] = useState({
     name: '',
     formula: '',
-    measurement_error: '',
+    measurement_error: {
+      type: 'fixed',
+      value: '',
+      ranges: [],
+    },
     unit: '',
     measurement_method: '',
     nd_code: '',
@@ -37,6 +41,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
     is_deleted: false,
     rounding_type: 'decimal',
     rounding_decimal: 0,
+    parallel_count: 0,
     is_active: true,
   });
 
@@ -332,6 +337,66 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
     </div>
   );
 
+  const handleMeasurementErrorTypeChange = type => {
+    let newMeasurementError = {
+      type,
+      value: '',
+      ranges: [],
+    };
+
+    if (type === 'range') {
+      newMeasurementError.ranges = [{ formula: '', value: '' }];
+      delete newMeasurementError.value;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      measurement_error: newMeasurementError,
+    }));
+  };
+
+  const handleMeasurementErrorValueChange = value => {
+    setFormData(prev => ({
+      ...prev,
+      measurement_error: {
+        ...prev.measurement_error,
+        value,
+      },
+    }));
+  };
+
+  const handleMeasurementErrorRangeChange = (index, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      measurement_error: {
+        ...prev.measurement_error,
+        ranges: prev.measurement_error.ranges.map((range, i) =>
+          i === index ? { ...range, [field]: value } : range
+        ),
+      },
+    }));
+  };
+
+  const addMeasurementErrorRange = () => {
+    setFormData(prev => ({
+      ...prev,
+      measurement_error: {
+        ...prev.measurement_error,
+        ranges: [...prev.measurement_error.ranges, { formula: '', value: '' }],
+      },
+    }));
+  };
+
+  const deleteMeasurementErrorRange = indexToDelete => {
+    setFormData(prev => ({
+      ...prev,
+      measurement_error: {
+        ...prev.measurement_error,
+        ranges: prev.measurement_error.ranges.filter((_, index) => index !== indexToDelete),
+      },
+    }));
+  };
+
   const handleSubmit = async () => {
     try {
       setIsSubmitting(true);
@@ -451,16 +516,88 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
         </div>
 
         <div className="form-group">
-          <label>Погрешность измерения</label>
-          {renderFormulaInput(
-            formData.measurement_error,
-            e =>
-              handleInputChange({ target: { name: 'measurement_error', value: e.target.value } }),
-            'error',
-            null,
-            'Введите число или формулу'
-          )}
+          <label>Тип погрешности</label>
+          <select
+            value={formData.measurement_error.type}
+            onChange={e => handleMeasurementErrorTypeChange(e.target.value)}
+            required
+          >
+            <option value="fixed">Фиксированное значение</option>
+            <option value="formula">Формула</option>
+            <option value="range">Диапазонное</option>
+          </select>
         </div>
+
+        {formData.measurement_error.type !== 'range' && (
+          <div className="form-group">
+            <label>
+              {formData.measurement_error.type === 'fixed'
+                ? 'Значение погрешности'
+                : 'Формула погрешности'}
+            </label>
+            {formData.measurement_error.type === 'formula' ? (
+              renderFormulaInput(
+                formData.measurement_error.value,
+                e => handleMeasurementErrorValueChange(e.target.value),
+                'error',
+                null,
+                'Введите формулу для расчета погрешности'
+              )
+            ) : (
+              <input
+                type="text"
+                value={formData.measurement_error.value}
+                onChange={e => handleMeasurementErrorValueChange(e.target.value)}
+                placeholder="Введите числовое значение"
+                required
+              />
+            )}
+          </div>
+        )}
+
+        {formData.measurement_error.type === 'range' && (
+          <div className="form-section">
+            <h3>Диапазоны погрешности</h3>
+            {formData.measurement_error.ranges.map((range, index) => (
+              <div key={index} className="field-group">
+                {formData.measurement_error.ranges.length > 1 && (
+                  <button
+                    type="button"
+                    className="delete-field-btn"
+                    onClick={() => deleteMeasurementErrorRange(index)}
+                  >
+                    ×
+                  </button>
+                )}
+                <div className="form-group">
+                  <label>Условие диапазона</label>
+                  {renderFormulaInput(
+                    range.formula,
+                    e => handleMeasurementErrorRangeChange(index, 'formula', e.target.value),
+                    'range-formula',
+                    index,
+                    'Например: result < 10'
+                  )}
+                </div>
+                <div className="form-group">
+                  <label>Значение погрешности</label>
+                  <input
+                    type="text"
+                    value={range.value}
+                    onChange={e =>
+                      handleMeasurementErrorRangeChange(index, 'value', e.target.value)
+                    }
+                    placeholder="Введите числовое значение"
+                    required
+                  />
+                </div>
+              </div>
+            ))}
+            <button type="button" onClick={addMeasurementErrorRange} className="add-field-btn">
+              + Добавить диапазон
+            </button>
+          </div>
+        )}
 
         <div className="form-group">
           <label>Единица измерения</label>
@@ -623,6 +760,24 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
             required
             min="0"
           />
+        </div>
+
+        <div className="form-group">
+          <label>Количество параллелей</label>
+          <input
+            type="number"
+            name="parallel_count"
+            value={formData.parallel_count}
+            onChange={handleInputChange}
+            min="0"
+            required
+          />
+          <small
+            className="help-text"
+            style={{ color: '#666', display: 'block', marginTop: '4px', fontSize: '12px' }}
+          >
+            0 - один расчет, 1 и более - дополнительные параллельные расчеты
+          </small>
         </div>
       </div>
     </Modal>

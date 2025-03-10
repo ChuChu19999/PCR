@@ -119,12 +119,183 @@ const OilProductsPage = () => {
     setSnackbar(prev => ({ ...prev, open: false }));
   };
 
+  const renderInputFields = (methodId, parallelIndex = 0) => {
+    if (!currentMethod) return null;
+
+    const result = calculationResults[currentMethod.id]?.[parallelIndex];
+
+    return (
+      <div
+        className="input-fields"
+        key={`parallel-${parallelIndex}`}
+        style={{
+          flex: '1',
+          minWidth: '300px',
+          maxWidth: '400px',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <div
+          style={{
+            padding: '20px',
+            backgroundColor: '#ffffff',
+            borderRadius: '8px',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+            marginBottom: result ? '20px' : '0',
+          }}
+        >
+          <Typography
+            variant="h6"
+            style={{
+              marginBottom: '15px',
+              color: '#2c5282',
+              fontSize: '16px',
+              fontWeight: 600,
+              textAlign: 'center',
+            }}
+          >
+            {parallelIndex === 0 ? 'Основной расчет' : `Параллель ${parallelIndex}`}
+          </Typography>
+          {currentMethod.input_data.fields.map((field, fieldIndex) => (
+            <div key={fieldIndex} className="input-field-container">
+              <FormItem
+                title={
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span>{field.name}</span>
+                    <Tooltip title={field.description} placement="right">
+                      <IconButton size="small">
+                        <HelpOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </div>
+                }
+                name={`${currentMethod.id}_${field.name}_${parallelIndex}`}
+              >
+                <Input
+                  placeholder={`Введите значение ${field.name}`}
+                  maxLength={10}
+                  onChange={e =>
+                    handleInputChange(e, `${currentMethod.id}_${field.name}_${parallelIndex}`)
+                  }
+                  onKeyPress={e => {
+                    const pattern = /^[0-9.,\-]$/;
+                    if (!pattern.test(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
+                  onPaste={e => {
+                    e.preventDefault();
+                    const pastedText = e.clipboardData.getData('text');
+                    const processedText = pastedText.replace(/\./g, ',');
+                    const pattern = /^-?\d*,?\d*$/;
+                    if (pattern.test(processedText)) {
+                      form.setFieldValue(
+                        `${currentMethod.id}_${field.name}_${parallelIndex}`,
+                        processedText
+                      );
+                    }
+                  }}
+                />
+              </FormItem>
+            </div>
+          ))}
+        </div>
+
+        {result && (
+          <div
+            className="calculation-results"
+            style={{
+              border: '1px solid rgba(64, 150, 255, 0.3)',
+              padding: '15px 20px',
+              borderRadius: '12px',
+              background: 'linear-gradient(to right, #f8f9ff, #f0f7ff)',
+              boxShadow: '0 4px 12px rgba(64, 150, 255, 0.08)',
+            }}
+          >
+            <Typography
+              variant="h6"
+              style={{
+                color: '#2c5282',
+                fontSize: '18px',
+                fontWeight: 600,
+                marginBottom: '8px',
+              }}
+            >
+              Результат:
+              {result.convergence === 'satisfactory'
+                ? ` ${result.result} ± ${result.measurement_error} ${result.unit}`
+                : result.convergence === 'absence'
+                  ? ' Отсутствие'
+                  : result.convergence === 'traces'
+                    ? ' Следы'
+                    : ' Неудовлетворительно'}
+            </Typography>
+
+            {result.convergence === 'satisfactory' &&
+              Object.keys(result.intermediate_results).length > 0 && (
+                <>
+                  <Typography
+                    variant="h6"
+                    style={{
+                      color: '#2c5282',
+                      fontSize: '16px',
+                      fontWeight: 600,
+                      marginBottom: '8px',
+                      marginTop: '12px',
+                      paddingTop: '12px',
+                      borderTop: '1px solid rgba(64, 150, 255, 0.15)',
+                    }}
+                  >
+                    Промежуточные результаты:
+                  </Typography>
+                  {Object.entries(result.intermediate_results).map(([name, value]) => (
+                    <div
+                      key={name}
+                      style={{
+                        color: '#4a5568',
+                        margin: '4px 0',
+                        fontSize: '14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {name}
+                        {currentMethod.intermediate_data.fields.map(
+                          field =>
+                            field.name === name && (
+                              <Tooltip
+                                key={field.name}
+                                title={field.description || 'Описание отсутствует'}
+                                placement="right"
+                              >
+                                <IconButton size="small" style={{ padding: '0px' }}>
+                                  <HelpOutlineIcon style={{ fontSize: '16px', color: '#718096' }} />
+                                </IconButton>
+                              </Tooltip>
+                            )
+                        )}
+                        :
+                      </div>
+                      <span style={{ color: '#2d3748', fontWeight: 500, marginLeft: '4px' }}>
+                        {value}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const handleCalculate = async methodId => {
     try {
       setIsCalculating(true);
       const method = researchMethods.find(m => m.id === methodId);
-
-      console.log('Базовые данные метода:', method);
 
       if (!method) {
         throw new Error('Метод не найден');
@@ -135,116 +306,67 @@ const OilProductsPage = () => {
       );
 
       const methodDetails = methodDetailsResponse.data;
-      console.log('Полные данные метода:', methodDetails);
+      const parallelCount = methodDetails.parallel_count || 0;
+      const parallelResults = [];
 
-      if (!methodDetails.input_data || !methodDetails.input_data.fields) {
-        console.error('Структура метода некорректна:', methodDetails);
-        throw new Error('Некорректная структура метода исследования');
-      }
+      // Вычисляем для каждой параллели
+      for (let i = 0; i <= parallelCount; i++) {
+        const formValues = form.getFieldsValue();
+        const inputData = {};
+        let hasEmptyFields = false;
+        let hasInvalidValues = false;
 
-      const formValues = form.getFieldsValue();
-      console.log('Значения формы:', formValues);
+        methodDetails.input_data.fields.forEach(field => {
+          let value = formValues[`${methodId}_${field.name}_${i}`];
 
-      const inputData = {};
-      let hasEmptyFields = false;
-      let hasInvalidValues = false;
-
-      methodDetails.input_data.fields.forEach(field => {
-        let value = formValues[`${methodId}_${field.name}`];
-        console.log(`Поле ${field.name}:`, value);
-
-        if (typeof value === 'string') {
-          value = value.trim();
-          // Заменяем запятые на точки перед отправкой на сервер
-          value = value.replace(',', '.');
-        }
-
-        if (!value && value !== 0) {
-          hasEmptyFields = true;
-          console.log(`Пустое поле: ${field.name}`);
-        } else {
-          const numValue = parseFloat(value);
-          if (isNaN(numValue)) {
-            hasInvalidValues = true;
-            console.log(`Некорректное значение в поле ${field.name}: ${value}`);
+          if (typeof value === 'string') {
+            value = value.trim().replace(',', '.');
           }
-          inputData[field.name] = numValue;
+
+          if (!value && value !== 0) {
+            hasEmptyFields = true;
+          } else {
+            const numValue = parseFloat(value);
+            if (isNaN(numValue)) {
+              hasInvalidValues = true;
+            }
+            inputData[field.name] = numValue;
+          }
+        });
+
+        if (hasEmptyFields || hasInvalidValues) {
+          throw new Error(`Некорректные данные`);
         }
-      });
 
-      if (hasEmptyFields) {
-        setSnackbar({
-          open: true,
-          message: 'Пожалуйста, заполните все поля',
-          severity: 'warning',
+        const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/calculate/`, {
+          input_data: inputData,
+          research_method: methodDetails,
         });
-        setIsCalculating(false);
-        return;
-      }
 
-      if (hasInvalidValues) {
-        setSnackbar({
-          open: true,
-          message: 'Пожалуйста, введите корректные числовые значения',
-          severity: 'warning',
+        parallelResults.push({
+          ...response.data,
+          result: response.data.result ? response.data.result.replace('.', ',') : null,
+          measurement_error: response.data.measurement_error
+            ? response.data.measurement_error.replace('.', ',')
+            : null,
+          intermediate_results: Object.fromEntries(
+            Object.entries(response.data.intermediate_results).map(([key, value]) => [
+              key,
+              value.replace('.', ','),
+            ])
+          ),
         });
-        setIsCalculating(false);
-        return;
       }
-
-      const requestData = {
-        input_data: inputData,
-        research_method: methodDetails,
-      };
-
-      console.log('Отправляемые данные:', requestData);
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/calculate/`,
-        requestData
-      );
-
-      console.log('Ответ сервера:', response.data);
-
-      // Преобразуем точки в запятые в результатах
-      const formattedResults = {
-        ...response.data,
-        result: response.data.result ? response.data.result.replace('.', ',') : null,
-        measurement_error: response.data.measurement_error
-          ? response.data.measurement_error.replace('.', ',')
-          : null,
-        intermediate_results: Object.fromEntries(
-          Object.entries(response.data.intermediate_results).map(([key, value]) => [
-            key,
-            value.replace('.', ','),
-          ])
-        ),
-      };
 
       setCalculationResults(prev => ({
         ...prev,
-        [methodId]: formattedResults,
+        [methodId]: parallelResults,
       }));
     } catch (error) {
-      console.error('Подробная информация об ошибке:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        stack: error.stack,
-      });
-
-      let errorMessage = 'Ошибка при расчете';
-      if (error.message === 'Метод не найден') {
-        errorMessage = 'Метод исследования не найден';
-      } else if (error.message === 'Некорректная структура метода исследования') {
-        errorMessage = 'Некорректная структура метода исследования';
-      } else if (error.response?.data?.error) {
-        errorMessage = error.response.data.error;
-      }
-
+      console.error('Ошибка при расчете:', error);
       setSnackbar({
         open: true,
-        message: errorMessage,
+        message: error.message || 'Ошибка при расчете',
         severity: 'error',
       });
     } finally {
@@ -332,93 +454,43 @@ const OilProductsPage = () => {
             <TabPanel key={method.id} value={selectedTab} index={index}>
               {currentMethod && currentMethod.id === method.id && (
                 <div className="calculation-form">
-                  <Typography variant="h6" gutterBottom>
+                  <Typography
+                    variant="h6"
+                    gutterBottom
+                    style={{
+                      color: '#2c5282',
+                      fontSize: '18px',
+                      fontWeight: 600,
+                      textAlign: 'center',
+                      marginBottom: '20px',
+                    }}
+                  >
                     {currentMethod.name}
                   </Typography>
 
-                  <div className="input-fields">
-                    {currentMethod.input_data.fields.map((field, fieldIndex) => (
-                      <div key={fieldIndex} className="input-field-container">
-                        <FormItem
-                          title={
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                              <span>{field.name}</span>
-                              <Tooltip title={field.description} placement="right">
-                                <IconButton size="small">
-                                  <HelpOutlineIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            </div>
-                          }
-                          name={`${currentMethod.id}_${field.name}`}
-                        >
-                          <Input
-                            placeholder={`Введите значение ${field.name}`}
-                            maxLength={10}
-                            onChange={e =>
-                              handleInputChange(e, `${currentMethod.id}_${field.name}`)
-                            }
-                            onKeyPress={e => {
-                              const pattern = /^[0-9.,\-]$/;
-                              if (!pattern.test(e.key)) {
-                                e.preventDefault();
-                              }
-                            }}
-                            onPaste={e => {
-                              e.preventDefault();
-                              const pastedText = e.clipboardData.getData('text');
-                              const processedText = pastedText.replace(/,/g, '.');
-                              const pattern = /^-?\d*\.?\d*$/;
-                              if (pattern.test(processedText)) {
-                                form.setFieldValue(
-                                  `${currentMethod.id}_${field.name}`,
-                                  processedText
-                                );
-                              }
-                            }}
-                          />
-                        </FormItem>
-                      </div>
-                    ))}
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'row',
+                      gap: '20px',
+                      marginBottom: '20px',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {Array.from({ length: (currentMethod.parallel_count || 0) + 1 }).map((_, i) =>
+                      renderInputFields(currentMethod.id, i)
+                    )}
                   </div>
 
-                  <Button
-                    type="primary"
-                    buttonColor="#0066cc"
-                    title="Рассчитать"
-                    onClick={() => handleCalculate(currentMethod.id)}
-                    loading={isCalculating}
-                    style={{ marginTop: '16px' }}
-                  />
-
-                  {calculationResults[currentMethod.id] && (
-                    <div className="calculation-results">
-                      {calculationResults[currentMethod.id].convergence === 'satisfactory' && (
-                        <>
-                          <Typography variant="subtitle1" gutterBottom>
-                            Промежуточные результаты:
-                          </Typography>
-                          {Object.entries(
-                            calculationResults[currentMethod.id].intermediate_results
-                          ).map(([name, value]) => (
-                            <div key={name}>
-                              {name}: {value}
-                            </div>
-                          ))}
-                        </>
-                      )}
-                      <Typography variant="h6" style={{ marginTop: '16px' }}>
-                        Результат:{' '}
-                        {calculationResults[currentMethod.id].convergence === 'satisfactory'
-                          ? `${calculationResults[currentMethod.id].result} ± ${calculationResults[currentMethod.id].measurement_error} ${calculationResults[currentMethod.id].unit}`
-                          : calculationResults[currentMethod.id].convergence === 'absence'
-                            ? 'Отсутствие'
-                            : calculationResults[currentMethod.id].convergence === 'traces'
-                              ? 'Следы'
-                              : 'Неудовлетворительно'}
-                      </Typography>
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                    <Button
+                      type="primary"
+                      buttonColor="#0066cc"
+                      title="Рассчитать"
+                      onClick={() => handleCalculate(currentMethod.id)}
+                      loading={isCalculating}
+                    />
+                  </div>
                 </div>
               )}
             </TabPanel>

@@ -20,8 +20,6 @@ from .serializers import (
 import logging
 from django.db.models import Q
 from decimal import Decimal, ROUND_HALF_UP
-import math
-import numpy as np
 
 
 logger = logging.getLogger(__name__)
@@ -148,14 +146,14 @@ def save_excel(request):
         worksheet = workbook.active
 
         for row_idx, row_data in enumerate(data):
-            if row_idx < 8:  # Обновляем только первые 8 строк
+            if row_idx < 8:
                 cell = worksheet.cell(row=row_idx + 1, column=1, value=row_data[0])
                 logger.info(
                     f"Обновлена ячейка [{row_idx + 1}, 1] значением: {row_data[0]}"
                 )
 
                 # Применяем стили, если они есть для данной ячейки
-                cell_key = f"{row_idx}-0"  # Формат ключа как в ExcelEditor
+                cell_key = f"{row_idx}-0"
                 if cell_key in styles:
                     style = styles[cell_key]
                     logger.info(f"Применение стилей для ячейки {cell_key}: {style}")
@@ -168,7 +166,7 @@ def save_excel(request):
                         try:
                             font_size = int(float(font_size))
                         except (ValueError, TypeError):
-                            font_size = 14  # Значение по умолчанию
+                            font_size = 14
 
                     font = Font(
                         name="Times New Roman",
@@ -327,9 +325,6 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def mark_deleted(self, request, pk=None):
-        """
-        Помечает метод исследования как удаленный.
-        """
         research_method = self.get_object()
         research_method.is_deleted = True
         research_method.deleted_at = timezone.now()
@@ -341,18 +336,12 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def active(self, request):
-        """
-        Возвращает только активные методы исследования.
-        """
         queryset = self.get_queryset().filter(is_active=True, is_deleted=False)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=["get"])
     def deleted(self, request):
-        """
-        Возвращает удаленные методы исследования.
-        """
         queryset = self.get_queryset().filter(is_deleted=True)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
@@ -366,9 +355,6 @@ class ResearchPageViewSet(viewsets.ModelViewSet):
         return ResearchObject.objects.filter(is_deleted=False)
 
     def retrieve(self, request, *args, **kwargs):
-        """
-        Получает информацию о странице исследований.
-        """
         instance = self.get_object()
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
@@ -381,7 +367,6 @@ class ResearchPageViewSet(viewsets.ModelViewSet):
         try:
             instance = self.get_object()
 
-            # Получаем ID текущего метода из query параметров
             current_method_id = request.query_params.get("current_method_id")
             if not current_method_id:
                 return Response(
@@ -398,11 +383,9 @@ class ResearchPageViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Получаем полную информацию о текущем методе
             current_method = ResearchMethod.objects.get(id=current_method_id)
             serializer = ResearchMethodSerializer(current_method)
 
-            # Оборачиваем данные в объект с ключом current_method
             return Response({"current_method": serializer.data})
 
         except ResearchMethod.DoesNotExist:
@@ -453,7 +436,6 @@ class ResearchPageViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Создаем объект через сериализатор
             research_object = serializer.save()
 
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -464,15 +446,11 @@ class ResearchPageViewSet(viewsets.ModelViewSet):
             )
 
     def update(self, request, *args, **kwargs):
-        """
-        Обновляет страницу расчетов.
-        """
         instance = self.get_object()
 
         # Если в запросе есть research_methods, обрабатываем их отдельно
         if "research_methods" in request.data:
             method_ids = request.data.pop("research_methods")
-            # Преобразуем данные для сериализатора
             request.data["research_method_ids"] = method_ids
 
         serializer = self.get_serializer(instance, data=request.data, partial=True)
@@ -499,9 +477,6 @@ class ResearchPageViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
-        """
-        Помечает страницу расчетов как удаленную.
-        """
         instance = self.get_object()
         instance.is_deleted = True
         instance.deleted_at = timezone.now()
@@ -544,7 +519,6 @@ def _get_decimal_places(number):
 
 def round_result(result, rounding_type, rounding_decimal):
     if rounding_type == "decimal":
-        # Преобразуем в Decimal для точного округления
         d = Decimal(str(float(result)))
         # Используем ROUND_HALF_UP для округления 0.5 вверх
         return d.quantize(Decimal("0.1") ** rounding_decimal, rounding=ROUND_HALF_UP)
@@ -553,9 +527,6 @@ def round_result(result, rounding_type, rounding_decimal):
 
 
 def _replace_subscript_digits(text):
-    """
-    Заменяет все нижние индексы на обычные символы.
-    """
     subscript_map = {
         "₀": "0",
         "₁": "1",
@@ -614,9 +585,7 @@ def evaluate_formula(formula, variables, is_condition=False):
     for name, value in variables.items():
         try:
             if isinstance(value, str):
-                # Удаляем пробелы и заменяем запятую на точку
                 value = value.strip().replace(",", ".")
-            # Заменяем все нижние индексы в именах переменных
             new_name = _replace_subscript_digits(name)
             decimal_vars[new_name] = float(value)
         except Exception as e:
@@ -625,7 +594,6 @@ def evaluate_formula(formula, variables, is_condition=False):
             )
 
     try:
-        # Заменяем все нижние индексы в формуле и математические символы
         formula = _replace_subscript_digits(formula)
         formula = formula.replace("×", "*").replace("÷", "/")
 
@@ -654,9 +622,7 @@ def evaluate_formula(formula, variables, is_condition=False):
                     elif operator == "<":
                         return left_result < (right_result - epsilon)
                     else:  # =
-                        return (
-                            abs(left_result - right_result) < 1e-10
-                        )
+                        return abs(left_result - right_result) < 1e-10
 
             raise ValueError(
                 f"Неподдерживаемый оператор сравнения в формуле: {formula}"
@@ -676,7 +642,6 @@ def calculate_result(request):
     try:
         logger.info("Начало расчета")
 
-        # Получаем данные из запроса
         input_data = request.data.get("input_data", {})
         research_method = request.data.get("research_method", {})
 
@@ -696,11 +661,9 @@ def calculate_result(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Проверяем условия сходимости
         logger.info("Начало проверки условий сходимости")
         satisfied_conditions = []
 
-        # Проверяем все условия
         for condition in research_method["convergence_conditions"]["formulas"]:
             try:
                 logger.info(f"Проверка условия: {condition['formula']}")
@@ -752,7 +715,7 @@ def calculate_result(request):
         result = None
         measurement_error = None
         intermediate_results = {}
-        variables = dict(input_data)  # Создаем копию входных данных
+        variables = dict(input_data)
 
         if convergence_result == "satisfactory":
             logger.info("Начало вычисления промежуточных результатов")
@@ -820,22 +783,33 @@ def calculate_result(request):
 
             # Вычисляем погрешность
             try:
-                error_value = research_method["measurement_error"]
-                logger.info(f"Вычисление погрешности: {error_value}")
+                error_config = research_method["measurement_error"]
+                logger.info(f"Вычисление погрешности: {error_config}")
 
-                try:
-                    # Пробуем преобразовать в число
-                    measurement_error = float(error_value)
-                except ValueError:
-                    # Если не получилось, значит это формула
-                    variables["result"] = result  # Добавляем результат в переменные
-                    measurement_error = float(evaluate_formula(error_value, variables))
+                if error_config["type"] == "fixed":
+                    measurement_error = float(error_config["value"])
+                elif error_config["type"] == "formula":
+                    variables["result"] = result
+                    measurement_error = float(
+                        evaluate_formula(error_config["value"], variables)
+                    )
+                elif error_config["type"] == "range":
+                    for range_item in error_config["ranges"]:
+                        if evaluate_formula(
+                            range_item["formula"], variables, is_condition=True
+                        ):
+                            measurement_error = float(range_item["value"])
+                            break
+                    if measurement_error is None:
+                        logger.warning("Не найден подходящий диапазон для погрешности")
+                        measurement_error = 0
 
                 # Округляем погрешность до того же количества знаков после запятой, что и результат
-                measurement_error = round(
-                    Decimal(str(measurement_error)), result_decimal_places
-                )
-                logger.info(f"Погрешность после округления: {measurement_error}")
+                if measurement_error is not None:
+                    measurement_error = round(
+                        Decimal(str(measurement_error)), result_decimal_places
+                    )
+                    logger.info(f"Погрешность после округления: {measurement_error}")
 
             except Exception as e:
                 logger.error(f"Ошибка при вычислении погрешности: {str(e)}")
@@ -844,7 +818,6 @@ def calculate_result(request):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        # Формируем ответ
         response_data = {
             "convergence": convergence_result,
             "intermediate_results": intermediate_results,

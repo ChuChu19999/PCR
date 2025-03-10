@@ -17,8 +17,8 @@
 
 .laboratories-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(26vw, 1fr));
+  gap: 5px;
 }
 
 .laboratory-card {

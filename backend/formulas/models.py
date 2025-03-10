@@ -20,7 +20,7 @@ class CustomUser(AbstractUser):
 
     groups = models.ManyToManyField(
         "auth.Group",
-        related_name="customuser_set",  # Уникальное имя для обратного доступа
+        related_name="customuser_set",
         blank=True,
         help_text="Группы, к которым принадлежит этот пользователь. Пользователь получит все разрешения, "
         "предоставленные каждой из их групп.",
@@ -56,7 +56,6 @@ class Laboratory(models.Model):
         ordering = ("name",)
         indexes = [
             models.Index(fields=["name"]),
-            models.Index(fields=["is_deleted"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["updated_at"]),
         ]
@@ -108,7 +107,7 @@ class Department(models.Model):
         verbose_name_plural = "Подразделения"
         ordering = ("laboratory", "name")
         indexes = [
-            models.Index(fields=["laboratory", "name", "is_deleted"]),
+            models.Index(fields=["laboratory", "name"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["updated_at"]),
         ]
@@ -174,7 +173,6 @@ class ResearchObject(models.Model):
             models.Index(fields=["type"]),
             models.Index(fields=["laboratory"]),
             models.Index(fields=["department"]),
-            models.Index(fields=["is_deleted"]),
             models.Index(fields=["created_at"]),
         ]
 
@@ -208,6 +206,7 @@ class ResearchMethod(models.Model):
     class RoundingType(models.TextChoices):
         DECIMAL = "decimal", "До десятичного знака"
         SIGNIFICANT = "significant", "До значащей цифры"
+        RANGE = "range", "Диапазонная"
 
     name = models.CharField(
         max_length=255,
@@ -220,10 +219,10 @@ class ResearchMethod(models.Model):
         verbose_name="Формула",
         help_text="Формула для расчета",
     )
-    measurement_error = models.CharField(
-        max_length=255,
+    measurement_error = models.JSONField(
         verbose_name="Погрешность измерения",
-        help_text="Фиксированное значение или формула для расчета погрешности",
+        help_text="Фиксированное значение, формула или условия для расчета погрешности",
+        default=dict,
     )
     unit = models.CharField(
         max_length=20,
@@ -289,6 +288,11 @@ class ResearchMethod(models.Model):
         verbose_name="Количество знаков округления",
         help_text="Количество десятичных знаков или значащих цифр для округления",
     )
+    parallel_count = models.IntegerField(
+        verbose_name="Количество параллелей",
+        help_text="Количество параллельных расчетов (0 - один расчет)",
+        default=0,
+    )
     is_active = models.BooleanField(
         default=True,
         verbose_name="Активен",
@@ -302,9 +306,6 @@ class ResearchMethod(models.Model):
         ordering = ("name",)
         indexes = [
             models.Index(fields=["name"]),
-            models.Index(fields=["is_deleted"]),
-            models.Index(fields=["is_active"]),
-            models.Index(fields=["is_active", "is_deleted"]),
         ]
 
     def __str__(self):
@@ -405,7 +406,6 @@ class Calculation(models.Model):
             models.Index(fields=["department"]),
             models.Index(fields=["research_object_type"]),
             models.Index(fields=["research_method"]),
-            models.Index(fields=["is_deleted"]),
         ]
 
     def __str__(self):
@@ -426,19 +426,15 @@ class Calculation(models.Model):
 
         from decimal import Decimal
 
-        # Преобразуем в Decimal для точности
         d = Decimal(str(float(number)))
 
-        # Получаем строковое представление числа в экспоненциальной форме
-        # и убираем незначащие нули
+        # Получаем строковое представление числа в экспоненциальной форм и убираем незначащие нули
         str_num = f"{d:E}"
         mantissa, exp = str_num.split("E")
         exp = int(exp)
 
-        # Убираем десятичную точку и незначащие нули
         mantissa = mantissa.replace(".", "").rstrip("0")
 
-        # Округляем до нужного количества значащих цифр
         if len(mantissa) > significant_figures:
             mantissa = str(round(int(mantissa[: significant_figures + 1]) / 10))
 
@@ -469,7 +465,6 @@ class Calculation(models.Model):
         """
         from decimal import Decimal
 
-        # Преобразуем в Decimal и получаем строковое представление
         str_num = str(Decimal(str(float(number))))
 
         # Если в числе нет десятичной точки, знаков после запятой нет
@@ -486,7 +481,6 @@ class Calculation(models.Model):
         if not self.result:
             return
 
-        # Используем настройки округления из метода исследования
         if self.research_method.rounding_type == ResearchMethod.RoundingType.DECIMAL:
             self.result = round(self.result, self.research_method.rounding_decimal)
         else:
@@ -494,10 +488,8 @@ class Calculation(models.Model):
                 self.result, self.research_method.rounding_decimal
             )
 
-        # Определяем количество знаков после запятой в округленном результате
         result_decimal_places = self._get_decimal_places(self.result)
 
-        # Округляем погрешность до того же количества знаков
         if self.measurement_error is not None:
             self.measurement_error = round(
                 self.measurement_error, result_decimal_places

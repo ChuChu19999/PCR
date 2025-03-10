@@ -40,8 +40,26 @@ function MainPage() {
   }, []);
 
   const handleCardClick = async laboratory => {
-    setIsNavigating(true);
-    navigate(`/laboratory/${laboratory.id}`);
+    try {
+      setIsNavigating(true);
+      // Проверяем наличие страницы расчетов для лаборатории
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/research-pages/`, {
+        params: {
+          laboratory_id: laboratory.id,
+          type: 'oil_products',
+        },
+      });
+
+      // Если есть страница расчетов и department = null
+      if (response.data.length > 0 && response.data[0].department === null) {
+        navigate(`/laboratories/${laboratory.id}/oil-products`);
+      } else {
+        navigate(`/laboratory/${laboratory.id}`);
+      }
+    } catch (error) {
+      console.error('Ошибка при проверке страницы расчетов:', error);
+      navigate(`/laboratory/${laboratory.id}`);
+    }
   };
 
   const handleEdit = (laboratory, event) => {
