@@ -58,6 +58,11 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 
         user_role = get_user_role(hash_snils)
 
+        is_staff = user_role == "editor"
+
+        if not user_role:
+            return Response({"error": "Access denied"}, status=403)
+
         response_data = {
             "personnelNumber": decoded_token.get("personnelNumber"),
             "departmentNumber": decoded_token.get("departmentNumber"),
@@ -65,7 +70,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
             "preferred_username": decoded_token.get("preferred_username"),
             "email": decoded_token.get("email"),
             "hashSnils": decoded_token.get("hashSnils"),
-            "is_staff": user_role == "editor",
+            "is_staff": is_staff,
         }
         serializer = self.get_serializer(data=response_data)
         serializer.is_valid(raise_exception=True)
@@ -689,27 +694,32 @@ def calculate_result(request):
         # Определяем итоговый результат сходимости
         logger.info(f"Все выполненные условия: {satisfied_conditions}")
 
-        # Если есть хотя бы одно условие satisfactory, считаем результат удовлетворительным
-        if "satisfactory" in satisfied_conditions:
-            convergence_result = "satisfactory"
-            logger.info("Найдено удовлетворительное условие")
-        # Если нет satisfactory, но есть другие условия
-        elif satisfied_conditions:
-            if "absence" in satisfied_conditions:
-                convergence_result = "absence"
-                logger.info("Найдено условие отсутствия")
-            elif "traces" in satisfied_conditions:
-                convergence_result = "traces"
-                logger.info("Найдено условие следов")
-            else:
-                convergence_result = "unsatisfactory"
-                logger.info("Условия сходимости не удовлетворены")
-        else:
-            # Если нет выполненных условий, считаем результат удовлетворительным
-            convergence_result = "satisfactory"
-            logger.info(
-                "Нет выполненных условий, результат считается удовлетворительным"
+        # Проверяем наличие особых условий
+        special_conditions = [
+            cond
+            for cond in satisfied_conditions
+            if cond in ["traces", "unsatisfactory", "absence"]
+        ]
+
+        if special_conditions:
+            # Если есть особые условия, возвращаем их через запятую
+            convergence_result = ", ".join(special_conditions)
+            logger.info(f"Найдены особые условия: {convergence_result}")
+
+            return Response(
+                {
+                    "convergence": convergence_result,
+                    "intermediate_results": {},
+                    "result": None,
+                    "measurement_error": None,
+                    "unit": research_method["unit"],
+                },
+                status=status.HTTP_200_OK,
             )
+
+        # Если особых условий нет, считаем результат удовлетворительным
+        convergence_result = "satisfactory"
+        logger.info("Условия сходимости удовлетворительны, продолжаем расчет")
 
         # Если сходимость удовлетворительная, вычисляем результат
         result = None
