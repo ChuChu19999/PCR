@@ -36,7 +36,6 @@ const LayoutWrapper = styled.div`
     justify-content: space-between;
 
     border-bottom: ${() => colors['light'].color_main_grey_50} 1px solid;
-    margin-bottom: 10px;
 
     &-text {
       font-family: 'HeliosCondC';

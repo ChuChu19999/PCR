@@ -725,165 +725,382 @@ const OilProductsPage = () => {
     <OilProductsPageWrapper>
       <Layout title="Нефтепродукты">
         <Form form={form} onFinish={onFinish} layout="vertical">
-          <div style={{ display: 'flex', alignItems: 'center', width: 'fit-content' }}>
-            <Tabs
-              value={selectedTab}
-              onChange={handleTabChange}
-              variant="scrollable"
-              scrollButtons="auto"
-              className="custom-tabs"
-              TabIndicatorProps={{ className: 'tab-indicator' }}
+          <div style={{ display: 'flex', height: 'calc(100vh - 120px)' }}>
+            {/* Левая панель с методами */}
+            <div
+              style={{
+                width: '250px',
+                borderRight: '1px solid #e2e8f0',
+                overflowY: 'auto',
+                padding: '16px',
+                paddingTop: '12px',
+                backgroundColor: '#f8fafc',
+                height: '100%',
+                position: 'sticky',
+                top: 0,
+                borderBottomLeftRadius: '15px',
+              }}
             >
-              {researchMethods.map((method, index) => {
-                // Убираем фильтр is_active для групп
-                // Если метод является группой
-                if (method.is_group) {
-                  return (
-                    <Tab
-                      key={method.uniqueId}
-                      className="custom-tab"
-                      label={
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>{method.name}</span>
-                          <IconButton
-                            size="small"
-                            onClick={e => {
-                              e.stopPropagation();
-                              handleOpenHideModal(method);
-                            }}
-                            sx={{
-                              padding: '2px',
-                              '&:hover': {
-                                backgroundColor: 'rgba(0, 0, 0, 0.1)',
-                              },
-                            }}
-                          >
-                            <CloseIcon fontSize="small" />
-                          </IconButton>
-                        </div>
-                      }
-                    />
-                  );
-                }
-                // Если метод не является группой, проверяем его активность
-                return method.is_active ? (
-                  <Tab
-                    key={method.uniqueId}
-                    className="custom-tab"
-                    label={
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>{method.name}</span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '16px',
+                  position: 'sticky',
+                  top: 0,
+                  backgroundColor: '#f8fafc',
+                  zIndex: 1,
+                  paddingBottom: '12px',
+                  borderBottom: '1px solid #e2e8f0',
+                }}
+              >
+                <Typography
+                  variant="h6"
+                  style={{
+                    fontSize: '16px',
+                    color: '#2c5282',
+                    margin: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    lineHeight: 1,
+                    fontWeight: 600,
+                  }}
+                >
+                  Методы исследования
+                </Typography>
+                <IconButton
+                  color="primary"
+                  aria-label="добавить метод"
+                  size="small"
+                  onClick={handleOpenAddModal}
+                  sx={{
+                    backgroundColor: '#f5f5f5',
+                    '&:hover': {
+                      backgroundColor: '#e0e0e0',
+                    },
+                    padding: '4px',
+                  }}
+                >
+                  <AddIcon fontSize="small" />
+                </IconButton>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '5px',
+                  height: 'calc(100% - 60px)', // Вычитаем высоту заголовка
+                  overflowY: 'auto',
+                  paddingRight: '4px', // Добавляем отступ справа для скроллбара
+                }}
+              >
+                {researchMethods.map((method, index) => {
+                  if (method.is_group) {
+                    return (
+                      <div
+                        key={method.uniqueId}
+                        onClick={() => handleTabChange(null, index)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          backgroundColor: selectedTab === index ? '#e2e8f0' : 'transparent',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          transition: 'all 0.2s ease-in-out',
+                          boxShadow: selectedTab === index ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+                          border:
+                            selectedTab === index ? '1px solid #cbd5e0' : '1px solid transparent',
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.backgroundColor = '#edf2f7';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                          e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                          e.currentTarget.style.border = '1px solid #e2e8f0';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.backgroundColor =
+                            selectedTab === index ? '#e2e8f0' : 'transparent';
+                          e.currentTarget.style.transform = 'none';
+                          e.currentTarget.style.boxShadow =
+                            selectedTab === index ? '0 2px 4px rgba(0,0,0,0.05)' : 'none';
+                          e.currentTarget.style.border =
+                            selectedTab === index ? '1px solid #cbd5e0' : '1px solid transparent';
+                        }}
+                      >
+                        <span style={{ fontSize: '14px' }}>{method.name}</span>
                         <IconButton
                           size="small"
                           onClick={e => {
                             e.stopPropagation();
                             handleOpenHideModal(method);
                           }}
-                          sx={{
-                            padding: '2px',
-                            '&:hover': {
-                              backgroundColor: 'rgba(0, 0, 0, 0.1)',
-                            },
-                          }}
+                          sx={{ padding: '2px' }}
                         >
                           <CloseIcon fontSize="small" />
                         </IconButton>
                       </div>
-                    }
-                  />
-                ) : null;
-              })}
-            </Tabs>
-            <IconButton
-              color="primary"
-              aria-label="добавить вкладку"
-              size="small"
-              onClick={handleOpenAddModal}
-              sx={{
-                marginLeft: 0.5,
-                backgroundColor: '#f5f5f5',
-                '&:hover': {
-                  backgroundColor: '#e0e0e0',
-                },
-                padding: '4px',
-                minWidth: '30px',
-                height: '30px',
-              }}
-            >
-              <AddIcon fontSize="small" />
-            </IconButton>
-          </div>
-
-          {researchMethods
-            .filter(method => method.is_active)
-            .map((method, index) => (
-              <TabPanel key={`panel-${method.uniqueId}`} value={selectedTab} index={index}>
-                {currentMethod && (
-                  <div className="calculation-form">
-                    <Typography
-                      variant="h5"
+                    );
+                  }
+                  return method.is_active ? (
+                    <div
+                      key={method.uniqueId}
+                      onClick={() => handleTabChange(null, index)}
                       style={{
-                        color: '#2c5282',
-                        fontSize: '20px',
-                        fontWeight: 600,
-                        textAlign: 'center',
-                        marginBottom: '10px',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        backgroundColor: selectedTab === index ? '#e2e8f0' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        transition: 'all 0.2s ease-in-out',
+                        boxShadow: selectedTab === index ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+                        border:
+                          selectedTab === index ? '1px solid #cbd5e0' : '1px solid transparent',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.backgroundColor = '#edf2f7';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                        e.currentTarget.style.border = '1px solid #e2e8f0';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.backgroundColor =
+                          selectedTab === index ? '#e2e8f0' : 'transparent';
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow =
+                          selectedTab === index ? '0 2px 4px rgba(0,0,0,0.05)' : 'none';
+                        e.currentTarget.style.border =
+                          selectedTab === index ? '1px solid #cbd5e0' : '1px solid transparent';
                       }}
                     >
-                      {method.is_group ? method.name : currentMethod.name}
-                    </Typography>
-
-                    {method.is_group && method.methods && (
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginBottom: '12px',
-                          gap: '8px',
+                      <span style={{ fontSize: '14px' }}>{method.name}</span>
+                      <IconButton
+                        size="small"
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleOpenHideModal(method);
                         }}
+                        sx={{ padding: '2px' }}
                       >
-                        <select
-                          value={currentMethod.id}
-                          onChange={e => {
-                            const newMethodId = parseInt(e.target.value);
-                            fetchMethodDetails(researchPageId, newMethodId);
-                          }}
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    </div>
+                  ) : null;
+                })}
+              </div>
+            </div>
+
+            {/* Основной контент */}
+            <div style={{ flex: 1, padding: '16px', overflowY: 'auto' }}>
+              {researchMethods
+                .filter(method => method.is_active)
+                .map((method, index) => (
+                  <TabPanel key={`panel-${method.uniqueId}`} value={selectedTab} index={index}>
+                    {currentMethod && (
+                      <div className="calculation-form">
+                        <Typography
+                          variant="h5"
                           style={{
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            border: '1px solid #ddd',
-                            fontSize: '14px',
-                            color: '#333',
-                            backgroundColor: 'white',
-                            cursor: 'pointer',
-                            minWidth: '200px',
+                            color: '#2c5282',
+                            fontSize: '20px',
+                            fontWeight: 600,
+                            textAlign: 'center',
+                            marginBottom: '10px',
                           }}
                         >
-                          {method.methods.map(m => (
-                            <option key={`method-${m.id}`} value={m.id}>
-                              {m.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
+                          {method.is_group ? method.name : currentMethod.name}
+                        </Typography>
 
-                    {/* Блок параллелей */}
-                    {currentMethod.parallel_count > -1 && (
-                      <>
-                        {currentMethod.parallel_count > 0 && (
-                          <Typography
-                            variant="h6"
+                        {method.is_group && method.methods && (
+                          <div
                             style={{
-                              color: '#2c5282',
-                              fontSize: '15px',
-                              fontWeight: 600,
-                              marginBottom: '0',
-                              textAlign: 'center',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              marginBottom: '12px',
+                              gap: '8px',
                             }}
-                          ></Typography>
+                          >
+                            <select
+                              value={currentMethod.id}
+                              onChange={e => {
+                                const newMethodId = parseInt(e.target.value);
+                                fetchMethodDetails(researchPageId, newMethodId);
+                              }}
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                border: '1px solid #ddd',
+                                fontSize: '14px',
+                                color: '#333',
+                                backgroundColor: 'white',
+                                cursor: 'pointer',
+                                minWidth: '200px',
+                              }}
+                            >
+                              {method.methods.map(m => (
+                                <option key={`method-${m.id}`} value={m.id}>
+                                  {m.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         )}
+
+                        {/* Блок параллелей */}
+                        {currentMethod.parallel_count > -1 && (
+                          <>
+                            {currentMethod.parallel_count > 0 && (
+                              <Typography
+                                variant="h6"
+                                style={{
+                                  color: '#2c5282',
+                                  fontSize: '15px',
+                                  fontWeight: 600,
+                                  marginBottom: '0',
+                                  textAlign: 'center',
+                                }}
+                              ></Typography>
+                            )}
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexDirection: 'row',
+                                gap: '16px',
+                                marginBottom: '0',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              {Array.from({ length: (currentMethod.parallel_count || 0) + 1 }).map(
+                                (_, i) => renderInputFields(currentMethod.id, i)
+                              )}
+                            </div>
+                          </>
+                        )}
+
+                        {/* Блок общих переменных */}
+                        {currentMethod.input_data.fields.some(field => field.is_general) && (
+                          <div
+                            style={{
+                              backgroundColor: '#f8fafc',
+                              padding: '12px',
+                              borderRadius: '8px',
+                              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+                              border: '1px solid #e2e8f0',
+                              maxWidth: '400px',
+                              margin: '0 auto',
+                              marginBottom: '5px',
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                gap: '0',
+                                alignItems: 'start',
+                                marginBottom: '0',
+                                padding: '0',
+                              }}
+                            >
+                              {currentMethod.input_data.fields
+                                .filter(field => field.is_general)
+                                .map((field, fieldIndex) => (
+                                  <div
+                                    key={fieldIndex}
+                                    className="input-field-container"
+                                    style={{ margin: '-5px 0' }}
+                                  >
+                                    <FormItem
+                                      title={
+                                        <div
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            fontSize: '14px',
+                                            color: '#4a5568',
+                                            marginBottom: '0',
+                                          }}
+                                        >
+                                          <span style={{ fontSize: '14px' }}>{field.name}</span>
+                                          <Tooltip title={field.description} placement="right">
+                                            <IconButton size="small">
+                                              <HelpOutlineIcon fontSize="small" />
+                                            </IconButton>
+                                          </Tooltip>
+                                        </div>
+                                      }
+                                      name={`${currentMethod.id}_${field.name}_general`}
+                                    >
+                                      <div
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '8px',
+                                        }}
+                                      >
+                                        <Input
+                                          placeholder={`Введите ${field.name}`}
+                                          maxLength={10}
+                                          style={{ fontSize: '14px' }}
+                                          onChange={e =>
+                                            handleInputChange(
+                                              e,
+                                              `${currentMethod.id}_${field.name}_general`
+                                            )
+                                          }
+                                          onKeyPress={e => {
+                                            // Разрешаем только цифры, запятую и минус
+                                            const pattern = /^[0-9,\-]$/;
+                                            if (!pattern.test(e.key)) {
+                                              e.preventDefault();
+                                            }
+                                            // Если пытаемся ввести точку, заменяем на запятую
+                                            if (e.key === '.') {
+                                              e.preventDefault();
+                                              const input = e.target;
+                                              const value = input.value;
+                                              const position = input.selectionStart;
+                                              const newValue =
+                                                value.slice(0, position) +
+                                                ',' +
+                                                value.slice(position);
+                                              form.setFieldValue(
+                                                `${currentMethod.id}_${field.name}_general`,
+                                                newValue
+                                              );
+                                              setTimeout(() => {
+                                                input.setSelectionRange(position + 1, position + 1);
+                                              }, 0);
+                                            }
+                                          }}
+                                          onPaste={e => {
+                                            // Разрешаем стандартную вставку текста
+                                          }}
+                                        />
+                                        {field.unit && (
+                                          <span
+                                            style={{
+                                              color: '#666',
+                                              fontSize: '14px',
+                                              fontFamily: 'HeliosCondC',
+                                            }}
+                                          >
+                                            {field.unit}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </FormItem>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Блок результатов */}
                         <div
                           style={{
                             display: 'flex',
@@ -893,386 +1110,267 @@ const OilProductsPage = () => {
                             justifyContent: 'center',
                           }}
                         >
-                          {Array.from({ length: (currentMethod.parallel_count || 0) + 1 }).map(
-                            (_, i) => renderInputFields(currentMethod.id, i)
-                          )}
-                        </div>
-                      </>
-                    )}
-
-                    {/* Блок общих переменных */}
-                    {currentMethod.input_data.fields.some(field => field.is_general) && (
-                      <div
-                        style={{
-                          backgroundColor: '#f8fafc',
-                          padding: '12px',
-                          borderRadius: '8px',
-                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
-                          border: '1px solid #e2e8f0',
-                          maxWidth: '400px',
-                          margin: '0 auto',
-                          marginBottom: '5px',
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                            gap: '0',
-                            alignItems: 'start',
-                            marginBottom: '0',
-                            padding: '0',
-                          }}
-                        >
-                          {currentMethod.input_data.fields
-                            .filter(field => field.is_general)
-                            .map((field, fieldIndex) => (
-                              <div
-                                key={fieldIndex}
-                                className="input-field-container"
-                                style={{ margin: '-5px 0' }}
+                          {calculationResults[currentMethod?.id]?.map((result, index) => (
+                            <div
+                              key={`result-${index}`}
+                              className="calculation-results"
+                              style={{
+                                border: '1px solid rgba(64, 150, 255, 0.3)',
+                                padding: '12px 16px',
+                                borderRadius: '12px',
+                                background: 'linear-gradient(to right, #f8f9ff, #f0f7ff)',
+                                boxShadow: '0 4px 12px rgba(64, 150, 255, 0.08)',
+                                marginTop: '8px',
+                                marginBottom: '12px',
+                                minWidth: '300px',
+                                maxWidth: '400px',
+                                flex: '1',
+                              }}
+                            >
+                              <Typography
+                                variant="h6"
+                                style={{
+                                  color: '#2c5282',
+                                  fontSize: '16px',
+                                  fontWeight: 600,
+                                  marginBottom: '6px',
+                                }}
                               >
-                                <FormItem
-                                  title={
-                                    <div
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        fontSize: '14px',
-                                        color: '#4a5568',
-                                        marginBottom: '0',
-                                      }}
-                                    >
-                                      <span style={{ fontSize: '14px' }}>{field.name}</span>
-                                      <Tooltip title={field.description} placement="right">
-                                        <IconButton size="small">
-                                          <HelpOutlineIcon fontSize="small" />
-                                        </IconButton>
-                                      </Tooltip>
-                                    </div>
-                                  }
-                                  name={`${currentMethod.id}_${field.name}_general`}
-                                >
-                                  <div
-                                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                                  >
-                                    <Input
-                                      placeholder={`Введите ${field.name}`}
-                                      maxLength={10}
-                                      style={{ fontSize: '14px' }}
-                                      onChange={e =>
-                                        handleInputChange(
-                                          e,
-                                          `${currentMethod.id}_${field.name}_general`
-                                        )
-                                      }
-                                      onKeyPress={e => {
-                                        // Разрешаем только цифры, запятую и минус
-                                        const pattern = /^[0-9,\-]$/;
-                                        if (!pattern.test(e.key)) {
-                                          e.preventDefault();
-                                        }
-                                        // Если пытаемся ввести точку, заменяем на запятую
-                                        if (e.key === '.') {
-                                          e.preventDefault();
-                                          const input = e.target;
-                                          const value = input.value;
-                                          const position = input.selectionStart;
-                                          const newValue =
-                                            value.slice(0, position) + ',' + value.slice(position);
-                                          form.setFieldValue(
-                                            `${currentMethod.id}_${field.name}_general`,
-                                            newValue
-                                          );
-                                          setTimeout(() => {
-                                            input.setSelectionRange(position + 1, position + 1);
-                                          }, 0);
-                                        }
-                                      }}
-                                      onPaste={e => {
-                                        // Разрешаем стандартную вставку текста
-                                      }}
-                                    />
-                                    {field.unit && (
-                                      <span
+                                {currentMethod.parallel_count > 0 && `Параллель ${index + 1}: `}
+                                Результат:
+                                {result.convergence === 'satisfactory'
+                                  ? ` ${result.result} ± ${result.measurement_error} ${result.unit}`
+                                  : result.convergence === 'absence'
+                                    ? ' Отсутствие'
+                                    : result.convergence === 'traces'
+                                      ? ' Следы'
+                                      : ' Неудовлетворительно'}
+                              </Typography>
+
+                              {/* Отображение информации о сходимости */}
+                              <Typography
+                                variant="h6"
+                                style={{
+                                  color: '#2c5282',
+                                  fontSize: '15px',
+                                  fontWeight: 600,
+                                  marginBottom: '6px',
+                                  marginTop: '8px',
+                                  paddingTop: '8px',
+                                  borderTop: '1px solid rgba(64, 150, 255, 0.15)',
+                                }}
+                              >
+                                Проверка сходимости:
+                              </Typography>
+                              {result.conditions_info &&
+                                result.conditions_info.map(
+                                  (condition, condIndex) =>
+                                    condition.satisfied && (
+                                      <div
+                                        key={condIndex}
                                         style={{
-                                          color: '#666',
+                                          margin: '8px 0',
+                                          color: '#2c5282',
                                           fontSize: '14px',
-                                          fontFamily: 'HeliosCondC',
+                                          background: 'rgba(255, 255, 255, 0.5)',
+                                          padding: '8px',
+                                          borderRadius: '8px',
+                                          borderBottom:
+                                            condIndex < result.conditions_info.length - 1
+                                              ? '1px dashed rgba(64, 150, 255, 0.3)'
+                                              : 'none',
+                                          paddingBottom:
+                                            condIndex < result.conditions_info.length - 1
+                                              ? '16px'
+                                              : '8px',
+                                          marginBottom:
+                                            condIndex < result.conditions_info.length - 1
+                                              ? '16px'
+                                              : '8px',
                                         }}
                                       >
-                                        {field.unit}
-                                      </span>
+                                        {/* Исходная формула */}
+                                        <div
+                                          style={{
+                                            fontFamily: 'monospace',
+                                            marginBottom: '12px',
+                                            fontSize: '14px',
+                                            color: '#1a365d',
+                                            paddingBottom: '12px',
+                                            borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
+                                          }}
+                                        >
+                                          {processAbs(condition.formula)
+                                            .replace(/\*/g, '×')
+                                            .replace(/<=/g, '≤')
+                                            .replace(/>=/g, '≥')}
+                                        </div>
+
+                                        {/* Шаги расчета */}
+                                        {condition.calculation_steps && (
+                                          <>
+                                            <div
+                                              style={{
+                                                fontFamily: 'monospace',
+                                                marginBottom: '12px',
+                                                color: '#4a5568',
+                                                paddingBottom: '12px',
+                                                borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
+                                              }}
+                                            >
+                                              {processAbs(condition.calculation_steps.step1)
+                                                .replace(/\*/g, '×')
+                                                .replace(/<=/g, '≤')
+                                                .replace(/>=/g, '≥')
+                                                .replace(/\./g, ',')}
+                                            </div>
+                                            <div
+                                              style={{
+                                                fontFamily: 'monospace',
+                                                marginBottom: '12px',
+                                                color: '#4a5568',
+                                                paddingBottom: '12px',
+                                                borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
+                                              }}
+                                            >
+                                              {processAbs(condition.calculation_steps.step2)
+                                                .replace(/\*/g, '×')
+                                                .replace(/<=/g, '≤')
+                                                .replace(/>=/g, '≥')
+                                                .replace(/\./g, ',')}
+                                            </div>
+                                          </>
+                                        )}
+
+                                        {/* Результат */}
+                                        <div
+                                          style={{
+                                            color: '#0066cc',
+                                            marginTop: '6px',
+                                            fontWeight: 500,
+                                          }}
+                                        >
+                                          {CONVERGENCE_LABELS[condition.convergence_value]}
+                                        </div>
+                                      </div>
+                                    )
+                                )}
+
+                              {result.convergence === 'satisfactory' &&
+                                Object.keys(result.intermediate_results).length > 0 && (
+                                  <>
+                                    <Typography
+                                      variant="h6"
+                                      style={{
+                                        color: '#2c5282',
+                                        fontSize: '15px',
+                                        fontWeight: 600,
+                                        marginBottom: '6px',
+                                        marginTop: '8px',
+                                        paddingTop: '8px',
+                                        borderTop: '1px solid rgba(64, 150, 255, 0.15)',
+                                      }}
+                                    >
+                                      Промежуточные результаты:
+                                    </Typography>
+                                    {Object.entries(result.intermediate_results).map(
+                                      ([name, value]) => (
+                                        <div
+                                          key={name}
+                                          style={{
+                                            color: '#4a5568',
+                                            margin: '3px 0',
+                                            fontSize: '14px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                          }}
+                                        >
+                                          <div
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                            }}
+                                          >
+                                            {name}
+                                            {currentMethod.intermediate_data.fields.map(
+                                              field =>
+                                                field.name === name && (
+                                                  <Tooltip
+                                                    key={field.name}
+                                                    title={
+                                                      field.description || 'Описание отсутствует'
+                                                    }
+                                                    placement="right"
+                                                  >
+                                                    <IconButton
+                                                      size="small"
+                                                      style={{ padding: '0px' }}
+                                                    >
+                                                      <HelpOutlineIcon
+                                                        style={{
+                                                          fontSize: '16px',
+                                                          color: '#718096',
+                                                        }}
+                                                      />
+                                                    </IconButton>
+                                                  </Tooltip>
+                                                )
+                                            )}
+                                          </div>
+                                          <span
+                                            style={{
+                                              color: '#2d3748',
+                                              fontWeight: 500,
+                                              marginLeft: '4px',
+                                            }}
+                                          >
+                                            {value}
+                                            {currentMethod.intermediate_data.fields.find(
+                                              f => f.name === name
+                                            )?.unit && (
+                                              <span
+                                                style={{
+                                                  marginLeft: '4px',
+                                                  color: '#666',
+                                                  fontWeight: 'normal',
+                                                }}
+                                              >
+                                                {
+                                                  currentMethod.intermediate_data.fields.find(
+                                                    f => f.name === name
+                                                  ).unit
+                                                }
+                                              </span>
+                                            )}
+                                          </span>
+                                        </div>
+                                      )
                                     )}
-                                  </div>
-                                </FormItem>
-                              </div>
-                            ))}
+                                  </>
+                                )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                          <Button
+                            type="primary"
+                            buttonColor="#0066cc"
+                            onClick={() => handleCalculate(currentMethod.id)}
+                            loading={isCalculating}
+                            style={{ fontFamily: 'HeliosCondC' }}
+                          >
+                            Рассчитать
+                          </Button>
                         </div>
                       </div>
                     )}
-
-                    {/* Блок результатов */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'row',
-                        gap: '16px',
-                        marginBottom: '0',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      {calculationResults[currentMethod?.id]?.map((result, index) => (
-                        <div
-                          key={`result-${index}`}
-                          className="calculation-results"
-                          style={{
-                            border: '1px solid rgba(64, 150, 255, 0.3)',
-                            padding: '12px 16px',
-                            borderRadius: '12px',
-                            background: 'linear-gradient(to right, #f8f9ff, #f0f7ff)',
-                            boxShadow: '0 4px 12px rgba(64, 150, 255, 0.08)',
-                            marginTop: '8px',
-                            marginBottom: '12px',
-                            minWidth: '300px',
-                            maxWidth: '400px',
-                            flex: '1',
-                          }}
-                        >
-                          <Typography
-                            variant="h6"
-                            style={{
-                              color: '#2c5282',
-                              fontSize: '16px',
-                              fontWeight: 600,
-                              marginBottom: '6px',
-                            }}
-                          >
-                            {currentMethod.parallel_count > 0 && `Параллель ${index + 1}: `}
-                            Результат:
-                            {result.convergence === 'satisfactory'
-                              ? ` ${result.result} ± ${result.measurement_error} ${result.unit}`
-                              : result.convergence === 'absence'
-                                ? ' Отсутствие'
-                                : result.convergence === 'traces'
-                                  ? ' Следы'
-                                  : ' Неудовлетворительно'}
-                          </Typography>
-
-                          {/* Отображение информации о сходимости */}
-                          <Typography
-                            variant="h6"
-                            style={{
-                              color: '#2c5282',
-                              fontSize: '15px',
-                              fontWeight: 600,
-                              marginBottom: '6px',
-                              marginTop: '8px',
-                              paddingTop: '8px',
-                              borderTop: '1px solid rgba(64, 150, 255, 0.15)',
-                            }}
-                          >
-                            Проверка сходимости:
-                          </Typography>
-                          {result.conditions_info &&
-                            result.conditions_info.map(
-                              (condition, condIndex) =>
-                                condition.satisfied && (
-                                  <div
-                                    key={condIndex}
-                                    style={{
-                                      margin: '8px 0',
-                                      color: '#2c5282',
-                                      fontSize: '14px',
-                                      background: 'rgba(255, 255, 255, 0.5)',
-                                      padding: '8px',
-                                      borderRadius: '8px',
-                                      borderBottom:
-                                        condIndex < result.conditions_info.length - 1
-                                          ? '1px dashed rgba(64, 150, 255, 0.3)'
-                                          : 'none',
-                                      paddingBottom:
-                                        condIndex < result.conditions_info.length - 1
-                                          ? '16px'
-                                          : '8px',
-                                      marginBottom:
-                                        condIndex < result.conditions_info.length - 1
-                                          ? '16px'
-                                          : '8px',
-                                    }}
-                                  >
-                                    {/* Исходная формула */}
-                                    <div
-                                      style={{
-                                        fontFamily: 'monospace',
-                                        marginBottom: '12px',
-                                        fontSize: '14px',
-                                        color: '#1a365d',
-                                        paddingBottom: '12px',
-                                        borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
-                                      }}
-                                    >
-                                      {processAbs(condition.formula)
-                                        .replace(/\*/g, '×')
-                                        .replace(/<=/g, '≤')
-                                        .replace(/>=/g, '≥')}
-                                    </div>
-
-                                    {/* Шаги расчета */}
-                                    {condition.calculation_steps && (
-                                      <>
-                                        <div
-                                          style={{
-                                            fontFamily: 'monospace',
-                                            marginBottom: '12px',
-                                            color: '#4a5568',
-                                            paddingBottom: '12px',
-                                            borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
-                                          }}
-                                        >
-                                          {processAbs(condition.calculation_steps.step1)
-                                            .replace(/\*/g, '×')
-                                            .replace(/<=/g, '≤')
-                                            .replace(/>=/g, '≥')
-                                            .replace(/\./g, ',')}
-                                        </div>
-                                        <div
-                                          style={{
-                                            fontFamily: 'monospace',
-                                            marginBottom: '12px',
-                                            color: '#4a5568',
-                                            paddingBottom: '12px',
-                                            borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
-                                          }}
-                                        >
-                                          {processAbs(condition.calculation_steps.step2)
-                                            .replace(/\*/g, '×')
-                                            .replace(/<=/g, '≤')
-                                            .replace(/>=/g, '≥')
-                                            .replace(/\./g, ',')}
-                                        </div>
-                                      </>
-                                    )}
-
-                                    {/* Результат */}
-                                    <div
-                                      style={{
-                                        color: '#0066cc',
-                                        marginTop: '6px',
-                                        fontWeight: 500,
-                                      }}
-                                    >
-                                      {CONVERGENCE_LABELS[condition.convergence_value]}
-                                    </div>
-                                  </div>
-                                )
-                            )}
-
-                          {result.convergence === 'satisfactory' &&
-                            Object.keys(result.intermediate_results).length > 0 && (
-                              <>
-                                <Typography
-                                  variant="h6"
-                                  style={{
-                                    color: '#2c5282',
-                                    fontSize: '15px',
-                                    fontWeight: 600,
-                                    marginBottom: '6px',
-                                    marginTop: '8px',
-                                    paddingTop: '8px',
-                                    borderTop: '1px solid rgba(64, 150, 255, 0.15)',
-                                  }}
-                                >
-                                  Промежуточные результаты:
-                                </Typography>
-                                {Object.entries(result.intermediate_results).map(
-                                  ([name, value]) => (
-                                    <div
-                                      key={name}
-                                      style={{
-                                        color: '#4a5568',
-                                        margin: '3px 0',
-                                        fontSize: '14px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '4px',
-                                      }}
-                                    >
-                                      <div
-                                        style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '4px',
-                                        }}
-                                      >
-                                        {name}
-                                        {currentMethod.intermediate_data.fields.map(
-                                          field =>
-                                            field.name === name && (
-                                              <Tooltip
-                                                key={field.name}
-                                                title={field.description || 'Описание отсутствует'}
-                                                placement="right"
-                                              >
-                                                <IconButton size="small" style={{ padding: '0px' }}>
-                                                  <HelpOutlineIcon
-                                                    style={{ fontSize: '16px', color: '#718096' }}
-                                                  />
-                                                </IconButton>
-                                              </Tooltip>
-                                            )
-                                        )}
-                                      </div>
-                                      <span
-                                        style={{
-                                          color: '#2d3748',
-                                          fontWeight: 500,
-                                          marginLeft: '4px',
-                                        }}
-                                      >
-                                        {value}
-                                        {currentMethod.intermediate_data.fields.find(
-                                          f => f.name === name
-                                        )?.unit && (
-                                          <span
-                                            style={{
-                                              marginLeft: '4px',
-                                              color: '#666',
-                                              fontWeight: 'normal',
-                                            }}
-                                          >
-                                            {
-                                              currentMethod.intermediate_data.fields.find(
-                                                f => f.name === name
-                                              ).unit
-                                            }
-                                          </span>
-                                        )}
-                                      </span>
-                                    </div>
-                                  )
-                                )}
-                              </>
-                            )}
-                        </div>
-                      ))}
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-                      <Button
-                        type="primary"
-                        buttonColor="#0066cc"
-                        onClick={() => handleCalculate(currentMethod.id)}
-                        loading={isCalculating}
-                        style={{ fontFamily: 'HeliosCondC' }}
-                      >
-                        Рассчитать
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </TabPanel>
-            ))}
+                  </TabPanel>
+                ))}
+            </div>
+          </div>
 
           <HideMethodModal
             isOpen={isHideModalOpen}

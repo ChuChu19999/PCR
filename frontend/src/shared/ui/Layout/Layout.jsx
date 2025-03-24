@@ -1,7 +1,6 @@
 import React from 'react';
 import { Helmet } from 'react-helmet';
 import { BiCog } from 'react-icons/bi';
-
 import { colors } from '../../assets/colors';
 import LayoutWrapper from './LayoutWrapper';
 
