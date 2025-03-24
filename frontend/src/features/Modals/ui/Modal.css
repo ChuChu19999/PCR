@@ -1,0 +1,10 @@
+/* Общие стили для всех модальных окон */
+.modal input:not([type='checkbox']):not([type='radio']) {
+  height: 28px;
+  font-size: 14px;
+}
+
+.modal select {
+  height: 38px;
+  font-size: 14px;
+}

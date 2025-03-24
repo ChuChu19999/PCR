@@ -1,31 +1,42 @@
 import os
 from django.conf import settings
 from django.db import connections
-from django.utils import timezone
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from openpyxl import load_workbook
 from openpyxl.styles import Font
-from .models import Laboratory, Department, ResearchMethod, ResearchObject
-from .serializers import (
-    UserSerializer,
-    LaboratorySerializer,
-    DepartmentSerializer,
-    ResearchMethodSerializer,
-    ResearchObjectSerializer,
+from .models import (
+    Department,
+    Laboratory,
+    ResearchMethod,
+    ResearchMethodGroup,
+    ResearchObject,
+    ResearchObjectMethod,
 )
-import logging
-from django.db.models import Q
+from .serializers import (
+    DepartmentSerializer,
+    LaboratorySerializer,
+    ResearchMethodSerializer,
+    ResearchMethodGroupSerializer,
+    ResearchObjectSerializer,
+    UserSerializer,
+)
 from decimal import Decimal, ROUND_HALF_UP
+import logging
 
 
 logger = logging.getLogger(__name__)
 
 
 def get_user_role(hach_snils):
+    """
+    Получение роли пользователя по его hsnils
+    """
     with connections["access_control"].cursor() as cursor:
         cursor.execute(
             """
@@ -99,7 +110,6 @@ class LaboratoryViewSet(viewsets.ModelViewSet):
 
 @permission_classes([AllowAny])
 class DepartmentViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
     serializer_class = DepartmentSerializer
 
     def get_queryset(self):
@@ -125,6 +135,9 @@ class DepartmentViewSet(viewsets.ModelViewSet):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def save_excel(request):
+    """
+    Сохранение изменений шапки шаблона протокола
+    """
     try:
         data = request.data.get("data")
         styles = request.data.get("styles", {})
@@ -244,6 +257,9 @@ def get_excel_styles(request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def check_status_api(request):
+    """
+    Проверка работоспособности сервиса
+    """
     try:
         laboratories = LaboratoryViewSet()
         laboratories.request = request
@@ -263,15 +279,17 @@ def check_status_api(request):
         )
 
 
+@permission_classes([AllowAny])
 class ResearchMethodViewSet(viewsets.ModelViewSet):
     serializer_class = ResearchMethodSerializer
-    permission_classes = [AllowAny]
 
     def get_queryset(self):
         queryset = ResearchMethod.objects.all()
 
         if self.action == "list":
-            queryset = queryset.filter(is_active=True, is_deleted=False)
+            queryset = queryset.filter(is_active=True, is_deleted=False).order_by(
+                "name"
+            )
 
         search = self.request.query_params.get("search", None)
         if search:
@@ -291,15 +309,6 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def update(self, request, *args, **kwargs):
-        """
-        Обновляет метод исследования.
-        Для convergence_conditions ожидает формат:
-        {
-            "convergence_conditions": {
-                "formulas": ["формула1", "формула2"]
-            }
-        }
-        """
         instance = self.get_object()
 
         # Проверяем, есть ли convergence_conditions в запросе
@@ -352,9 +361,9 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+@permission_classes([AllowAny])
 class ResearchPageViewSet(viewsets.ModelViewSet):
     serializer_class = ResearchObjectSerializer
-    permission_classes = [AllowAny]
 
     def get_queryset(self):
         return ResearchObject.objects.filter(is_deleted=False)
@@ -441,6 +450,21 @@ class ResearchPageViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
+            # Проверяем, что добавляемые методы не являются частью группы
+            if "research_method_ids" in serializer.validated_data:
+                group_methods = ResearchMethod.objects.filter(
+                    id__in=serializer.validated_data["research_method_ids"],
+                    is_group_member=True,
+                )
+                if group_methods.exists():
+                    method_names = ", ".join([m.name for m in group_methods])
+                    return Response(
+                        {
+                            "message": f"Следующие методы являются частью группы и не могут быть добавлены напрямую: {method_names}"
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
             research_object = serializer.save()
 
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -455,7 +479,45 @@ class ResearchPageViewSet(viewsets.ModelViewSet):
 
         # Если в запросе есть research_methods, обрабатываем их отдельно
         if "research_methods" in request.data:
-            method_ids = request.data.pop("research_methods")
+            method_ids = []
+            for item in request.data.pop("research_methods"):
+                if isinstance(item, (int, str)):
+                    # Если это строка и начинается с "group_", это идентификатор группы
+                    if isinstance(item, str) and item.startswith("group_"):
+                        try:
+                            group_id = int(item.replace("group_", ""))
+                            group = ResearchMethodGroup.objects.get(id=group_id)
+                            # Добавляем все методы из группы
+                            method_ids.extend(
+                                group.methods.values_list("id", flat=True)
+                            )
+                        except (ValueError, ResearchMethodGroup.DoesNotExist):
+                            return Response(
+                                {
+                                    "error": f"Группа методов с идентификатором {item} не найдена"
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                    else:
+                        # Если это обычный метод, добавляем его ID
+                        method_ids.append(int(item) if isinstance(item, str) else item)
+
+            # Проверяем, что добавляемые методы не являются частью группы
+            group_methods = ResearchMethod.objects.filter(
+                id__in=method_ids, is_group_member=True
+            ).exclude(
+                id__in=ResearchMethod.objects.filter(groups__methods__id__in=method_ids)
+            )
+
+            if group_methods.exists():
+                method_names = ", ".join([m.name for m in group_methods])
+                return Response(
+                    {
+                        "message": f"Следующие методы являются частью группы и не могут быть добавлены напрямую: {method_names}"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             request.data["research_method_ids"] = method_ids
 
         serializer = self.get_serializer(instance, data=request.data, partial=True)
@@ -575,15 +637,12 @@ def _replace_subscript_digits(text):
 
 def evaluate_formula(formula, variables, is_condition=False):
     """
-    Вычисляет результат формулы с использованием безопасного eval.
+    Вычисляет результат формулы.
 
     Args:
         formula (str): Формула для вычисления
         variables (dict): Словарь переменных и их значений
         is_condition (bool): Флаг, указывающий что это вычисление условия
-
-    Returns:
-        Decimal: Результат вычисления или bool для условий
     """
     # Создаем копию переменных с замененными индексами
     decimal_vars = {}
@@ -615,7 +674,7 @@ def evaluate_formula(formula, variables, is_condition=False):
                     left_result = float(eval(left, {"__builtins__": {}}, safe_dict))
                     right_result = float(eval(right, {"__builtins__": {}}, safe_dict))
 
-                    # Добавляем небольшую погрешность для сравнения чисел с плавающей точкой
+                    # Добавляем эпсилон для сравнения чисел с плавающей точкой
                     epsilon = 1e-10
 
                     if operator == "<=":
@@ -691,7 +750,6 @@ def calculate_result(request):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        # Определяем итоговый результат сходимости
         logger.info(f"Все выполненные условия: {satisfied_conditions}")
 
         # Проверяем наличие особых условий
@@ -700,6 +758,30 @@ def calculate_result(request):
             for cond in satisfied_conditions
             if cond in ["traces", "unsatisfactory", "absence"]
         ]
+
+        # Сохраняем информацию о выполненных условиях
+        conditions_info = []
+        for condition in research_method["convergence_conditions"]["formulas"]:
+            try:
+                condition_result = evaluate_formula(
+                    condition["formula"], input_data, is_condition=True
+                )
+                conditions_info.append(
+                    {
+                        "formula": condition["formula"],
+                        "satisfied": condition_result,
+                        "convergence_value": condition["convergence_value"],
+                        "calculation_steps": calculate_convergence_steps(
+                            condition["formula"], input_data
+                        ),
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Ошибка при проверке условия сходимости: {str(e)}")
+                return Response(
+                    {"error": f"Ошибка при проверке условия сходимости: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         if special_conditions:
             # Если есть особые условия, возвращаем их через запятую
@@ -713,6 +795,7 @@ def calculate_result(request):
                     "result": None,
                     "measurement_error": None,
                     "unit": research_method["unit"],
+                    "conditions_info": conditions_info,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -772,7 +855,7 @@ def calculate_result(request):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Округляем результат согласно настройкам
+            # Округляем результат
             logger.info(
                 f"Округление результата: тип={research_method['rounding_type']}, знаков={research_method['rounding_decimal']}"
             )
@@ -836,6 +919,7 @@ def calculate_result(request):
                 str(measurement_error) if measurement_error is not None else None
             ),
             "unit": research_method["unit"],
+            "conditions_info": conditions_info,
         }
         logger.info(f"Подготовлен ответ: {response_data}")
 
@@ -844,3 +928,113 @@ def calculate_result(request):
     except Exception as e:
         logger.error(f"Необработанная ошибка при расчете: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PATCH"])
+@permission_classes([AllowAny])
+def update_research_method_status(request, page_id, method_id):
+    try:
+        research_object = ResearchObject.objects.get(id=page_id)
+        research_method = ResearchMethod.objects.get(id=method_id)
+
+        research_object_method = ResearchObjectMethod.objects.get(
+            research_object=research_object, research_method=research_method
+        )
+
+        research_object_method.is_active = request.data.get("is_active", True)
+        research_object_method.save()
+
+        return Response({"status": "success"})
+    except (
+        ResearchObject.DoesNotExist,
+        ResearchMethod.DoesNotExist,
+        ResearchObjectMethod.DoesNotExist,
+    ):
+        return Response(
+            {"error": "Объект или метод исследования не найден"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+def calculate_convergence_steps(formula, variables):
+    """Вычисляет шаги расчета сходимости."""
+    try:
+        # Заменяем переменные на их значения
+        step1 = formula
+        for name, value in variables.items():
+            if isinstance(value, str):
+                value = value.strip().replace(",", ".")
+            step1 = step1.replace(name, str(value))
+
+        # Разбиваем формулу на левую и правую части
+        for operator in ["<=", ">=", ">", "<", "="]:
+            if operator in formula:
+                left, right = step1.split(operator)
+
+                # Вычисляем левую часть
+                safe_dict = {
+                    "abs": abs,
+                    "pow": pow,
+                    "round": round,
+                    "max": max,
+                    "min": min,
+                }
+                left_result = float(eval(left, {"__builtins__": {}}, safe_dict))
+                right_result = float(eval(right, {"__builtins__": {}}, safe_dict))
+
+                # Форматируем числа для красивого отображения
+                left_str = f"{left_result:g}".replace(".", ",")
+                right_str = f"{right_result:g}".replace(".", ",")
+
+                return {
+                    "step1": step1.replace("*", "×").replace(
+                        "/", "÷"
+                    ),  # Заменяем символы на математические
+                    "step2": f"{left_str}{operator}{right_str}",
+                }
+
+        return None
+    except Exception as e:
+        logger.error(f"Ошибка при вычислении шагов сходимости: {str(e)}")
+        return None
+
+
+@permission_classes([AllowAny])
+class ResearchMethodGroupViewSet(viewsets.ModelViewSet):
+    serializer_class = ResearchMethodGroupSerializer
+
+    def get_queryset(self):
+        queryset = ResearchMethodGroup.objects.all()
+
+        if self.action == "list":
+            queryset = queryset.filter(is_active=True, is_deleted=False).order_by(
+                "name"
+            )
+
+        search = self.request.query_params.get("search", None)
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+
+        return queryset.order_by("name")
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    @action(detail=True, methods=["post"])
+    def toggle_active(self, request, pk=None):
+        group = self.get_object()
+        group.is_active = not group.is_active
+        group.save()
+        return Response({"status": "success", "is_active": group.is_active})
+
+    @action(detail=True, methods=["post"])
+    def mark_deleted(self, request, pk=None):
+        group = self.get_object()
+        group.is_deleted = True
+        group.deleted_at = timezone.now()
+        group.save()
+        return Response(
+            {"status": "success", "message": "Группа помечена как удаленная"}
+        )

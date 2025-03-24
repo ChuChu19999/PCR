@@ -1,5 +1,6 @@
 .delete-department-confirmation {
   padding: 18px;
+  padding-top: 0px;
   padding-bottom: 0px;
   display: flex;
   justify-content: center;
@@ -12,7 +13,6 @@
 }
 
 .confirmation-text {
-  margin-bottom: 5px;
   font-size: 1.1rem;
   color: #333;
   line-height: 1.5;

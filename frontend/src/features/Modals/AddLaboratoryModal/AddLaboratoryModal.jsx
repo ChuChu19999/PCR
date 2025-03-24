@@ -61,11 +61,10 @@ const AddLaboratoryModal = ({ isOpen, onClose, onSuccess }) => {
         </div>
         <div className="form-group">
           <label>Полное название</label>
-          <Input.TextArea
+          <Input
             value={formData.full_name}
             onChange={handleInputChange('full_name')}
             placeholder="Введите полное название"
-            rows={3}
             required
           />
         </div>

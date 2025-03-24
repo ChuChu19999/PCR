@@ -1,3 +1,5 @@
+import React from 'react';
+import './Modal.css';
 import { useState } from 'react';
 import { BiX } from 'react-icons/bi';
 import ModalWrapper from './ModalWrapper';
@@ -14,6 +16,8 @@ const Modal = ({
   onDelete,
   onEdit,
   style,
+  saveButtonText = 'Сохранить',
+  saveButtonColor,
 }) => {
   const [isLoading, setLoading] = useState({
     loading: false,
@@ -56,7 +60,7 @@ const Modal = ({
 
   return (
     <ModalWrapper style={style}>
-      <div className="modal-header">
+      <div className="modal-header" style={{ marginBottom: '0' }}>
         <p>{header}</p>
         <BiX size={25} className="modal-close" onClick={() => handleClick('close')} />
       </div>
@@ -64,7 +68,7 @@ const Modal = ({
       <div className="body">
         {children}
 
-        <div className="body-buttons">
+        <div className="body-buttons" style={{ marginTop: '0' }}>
           {onDelete && (
             <Button
               danger
@@ -88,11 +92,12 @@ const Modal = ({
           {onSave && (
             <Button
               loading={isLoading.loading && isLoading.type === 'save'}
-              title="Сохранить"
+              title={saveButtonText}
               type="primary"
+              buttonColor={saveButtonColor}
               onClick={() => handleClick('save')}
             >
-              Сохранить
+              {saveButtonText}
             </Button>
           )}
         </div>

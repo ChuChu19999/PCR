@@ -3,18 +3,24 @@ import styled from 'styled-components';
 const OilProductsPageWrapper = styled.div`
   flex: 1;
   font-family: 'HeliosCondC';
+  max-width: 100%;
+  overflow-x: hidden;
 
   .form {
-    padding: 15px;
+    padding: 12px;
+    max-width: 100%;
 
     .ant-col,
     .ant-select-selector,
     .ant-input {
       font-family: 'HeliosCondC';
+      max-width: 100%;
+      font-size: 13px;
     }
 
     .ant-form-item {
-      margin-bottom: 12px;
+      margin-bottom: 8px;
+      max-width: 100%;
     }
   }
 
@@ -23,16 +29,22 @@ const OilProductsPageWrapper = styled.div`
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.25rem;
+    padding: 0 12px;
 
     .ant-form-item-label {
       padding: 0;
+      max-width: 100%;
 
       label {
         font-family: 'HeliosCondC';
         color: #666;
-        font-size: 16px;
-        height: 32px;
+        font-size: 13px;
+        height: auto;
+        white-space: normal;
+        text-align: left;
+        line-height: 1.2;
+        padding-bottom: 2px;
       }
     }
 
@@ -40,6 +52,8 @@ const OilProductsPageWrapper = styled.div`
       font-family: 'HeliosCondC';
       border-radius: 4px;
       height: 32px;
+      max-width: 100%;
+      font-size: 13px;
 
       &:hover {
         border-color: #0066cc;
@@ -56,6 +70,8 @@ const OilProductsPageWrapper = styled.div`
     border-radius: 8px !important;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
     font-family: 'HeliosCondC';
+    max-width: 100%;
+    font-size: 13px;
 
     &:before {
       display: none;
@@ -66,27 +82,37 @@ const OilProductsPageWrapper = styled.div`
     background-color: #f8f9fa !important;
     border-radius: 8px !important;
     font-family: 'HeliosCondC';
+    max-width: 100%;
+    font-size: 13px;
   }
 
   .settings-content {
-    padding: 1rem 0;
+    padding: 0.75rem 0;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
     font-family: 'HeliosCondC';
+    max-width: 100%;
+    font-size: 13px;
 
     .ant-form-item {
       margin-bottom: 0;
+      max-width: 100%;
     }
   }
 
   .calculation-result {
-    margin-top: 1rem;
+    margin-top: 0.75rem;
     text-align: center;
-    padding: 1rem;
+    padding: 0.75rem;
     border-radius: 8px;
     background-color: #f8f9fa;
     font-family: 'HeliosCondC';
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+    font-size: 13px;
 
     &.success {
       color: #0066cc;
@@ -103,8 +129,9 @@ const OilProductsPageWrapper = styled.div`
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     overflow-x: auto;
     margin: 0;
-    padding: 8px;
+    padding: 6px;
     font-family: 'HeliosCondC';
+    max-width: calc(100vw - 290px);
 
     /* Стилизация скроллбара */
     &::-webkit-scrollbar {
@@ -125,13 +152,23 @@ const OilProductsPageWrapper = styled.div`
       font-family: 'HeliosCondC';
       font-weight: 500;
       text-transform: none;
-      font-size: 15px;
-      min-height: 44px;
+      font-size: 13px;
+      min-height: 40px;
       color: #666;
-      padding: 6px 16px;
-      margin: 0 4px;
+      padding: 4px 12px;
+      margin: 0 2px;
       border-radius: 8px;
       transition: all 0.3s ease;
+      max-width: 200px;
+      min-width: 120px;
+
+      .MuiTab-wrapper {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: block;
+        width: 100%;
+      }
 
       &:hover {
         background-color: rgba(0, 102, 204, 0.04);
@@ -148,6 +185,7 @@ const OilProductsPageWrapper = styled.div`
     .MuiTabs-scrollButtons {
       width: 28px;
       color: #0066cc;
+      flex-shrink: 0;
 
       &.Mui-disabled {
         opacity: 0.3;
@@ -162,33 +200,68 @@ const OilProductsPageWrapper = styled.div`
   }
 
   .tab-content {
-    padding: 1.5rem;
+    padding: 1rem;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
     margin: 0;
     font-family: 'HeliosCondC';
+    max-width: 100%;
+    font-size: 13px;
   }
 
   .development-message {
     text-align: center;
-    padding: 2rem;
+    padding: 1.5rem;
     color: #666;
-    font-size: 1.1rem;
+    font-size: 13px;
     background: #f8f9fa;
     border-radius: 8px;
-    margin: 1rem 0;
+    margin: 0.75rem 0;
     font-family: 'HeliosCondC';
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
   }
 
   /* Добавляем шрифт для всех Typography компонентов Material-UI */
   .MuiTypography-root {
     font-family: 'HeliosCondC' !important;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+    margin-bottom: 0.5rem;
+
+    /* Размеры для разных вариантов Typography */
+    &.MuiTypography-h6 {
+      font-size: 15px !important;
+
+      /* Для заголовков методов */
+      &[style*='text-align: center'] {
+        font-size: 16px !important;
+      }
+    }
+
+    &.MuiTypography-body1 {
+      font-size: 13px !important;
+    }
+
+    &.MuiTypography-body2 {
+      font-size: 12px !important;
+    }
   }
 
   /* Добавляем шрифт для Alert компонента */
   .MuiAlert-root {
     font-family: 'HeliosCondC';
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+    margin: 0.5rem 0;
+    font-size: 13px;
   }
 `;
 

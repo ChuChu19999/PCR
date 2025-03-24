@@ -1,0 +1,18 @@
+.hide-method-form {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.hide-method-form .MuiTypography-root {
+  color: #333;
+  font-size: 24px;
+  line-height: 1.5;
+  font-family: 'HeliosCondC';
+  margin-bottom: 0;
+  text-align: center;
+  max-width: 100%;
+  word-wrap: break-word;
+}

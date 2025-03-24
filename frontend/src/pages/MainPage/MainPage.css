@@ -75,13 +75,13 @@
 .no-laboratories {
   grid-column: 1 / -1;
   text-align: center;
-  padding: 3rem;
+  padding: 1.5rem;
+  padding-top: 0;
   background: #f8f9fa;
   border-radius: 12px;
   color: #666;
 }
 
 .no-laboratories p {
-  margin-bottom: 1.5rem;
   font-size: 1.1rem;
 }

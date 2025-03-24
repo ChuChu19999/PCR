@@ -1,6 +1,12 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
-from .models import Laboratory, Department, ResearchMethod, ResearchObject
+from .models import (
+    Laboratory,
+    Department,
+    ResearchMethod,
+    ResearchObject,
+    ResearchMethodGroup,
+)
 
 
 User = get_user_model()
@@ -115,6 +121,7 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
             "rounding_decimal",
             "is_active",
             "parallel_count",
+            "is_group_member",
         )
         read_only_fields = ("created_at", "updated_at", "deleted_at")
 
@@ -124,6 +131,30 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
                 "Количество параллелей не может быть отрицательным"
             )
         return value
+
+    def validate(self, data):
+        parallel_count = data.get("parallel_count", 0)
+        input_data = data.get("input_data", {})
+
+        if parallel_count == 0:
+            # Проверяем, что нет полей с is_general=True
+            general_fields = [
+                field["name"]
+                for field in input_data.get("fields", [])
+                if field.get("is_general")
+            ]
+
+            if general_fields:
+                raise serializers.ValidationError(
+                    {
+                        "parallel_count": (
+                            f"Нельзя использовать общие переменные при отсутствии параллельных расчетов. "
+                            f"Следующие переменные отмечены как общие: {', '.join(general_fields)}"
+                        )
+                    }
+                )
+
+        return data
 
     def validate_measurement_error(self, value):
         if not isinstance(value, dict):
@@ -190,6 +221,30 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f"Входные данные должны содержать следующие ключи: {required_keys}"
             )
+
+        for field in value.get("fields", []):
+            if not isinstance(field, dict):
+                raise serializers.ValidationError("Каждое поле должно быть объектом")
+
+            required_field_keys = {"name", "description", "is_general", "card_index"}
+            if not all(key in field for key in required_field_keys):
+                raise serializers.ValidationError(
+                    f"Каждое поле должно содержать следующие ключи: {required_field_keys}"
+                )
+
+            if not isinstance(field["is_general"], bool):
+                raise serializers.ValidationError(
+                    "Поле is_general должно быть логическим значением (true/false)"
+                )
+
+            if not isinstance(field["card_index"], int) or field["card_index"] < 1:
+                raise serializers.ValidationError(
+                    "Поле card_index должно быть положительным целым числом"
+                )
+
+            if "unit" in field and not isinstance(field["unit"], str):
+                raise serializers.ValidationError("Поле unit должно быть строкой")
+
         return value
 
     def validate_intermediate_data(self, value):
@@ -197,6 +252,20 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Промежуточные данные должны быть словарем"
             )
+
+        for field in value.get("fields", []):
+            if not isinstance(field, dict):
+                raise serializers.ValidationError("Каждое поле должно быть объектом")
+
+            required_field_keys = {"name", "formula", "description"}
+            if not all(key in field for key in required_field_keys):
+                raise serializers.ValidationError(
+                    f"Каждое поле должно содержать следующие ключи: {required_field_keys}"
+                )
+
+            if "unit" in field and not isinstance(field["unit"], str):
+                raise serializers.ValidationError("Поле unit должно быть строкой")
+
         return value
 
     def validate_convergence_conditions(self, value):
@@ -258,7 +327,7 @@ class ResearchMethodBriefSerializer(serializers.ModelSerializer):
 
 
 class ResearchObjectSerializer(serializers.ModelSerializer):
-    research_methods = ResearchMethodBriefSerializer(many=True, read_only=True)
+    research_methods = serializers.SerializerMethodField()
     research_method_ids = serializers.PrimaryKeyRelatedField(
         source="research_methods",
         queryset=ResearchMethod.objects.all(),
@@ -272,6 +341,55 @@ class ResearchObjectSerializer(serializers.ModelSerializer):
     department = serializers.PrimaryKeyRelatedField(
         queryset=Department.objects.all(), allow_null=True
     )
+
+    def get_research_methods(self, obj):
+        research_methods = obj.research_methods.through.objects.filter(
+            research_object=obj
+        ).select_related("research_method")
+
+        # Словарь для хранения групп
+        groups = {}
+
+        for method in research_methods:
+            if method.research_method.groups.exists():
+                group = method.research_method.groups.first()
+                group_id = f"group_{group.id}"  # Уникальный ID для группы (group_1, group_2, ...)
+                if group_id not in groups:
+                    groups[group_id] = {
+                        "id": group_id,
+                        "name": group.name,
+                        "is_group": True,
+                        "methods": [],
+                    }
+                groups[group_id]["methods"].append(
+                    {
+                        "id": method.research_method.id,
+                        "name": method.research_method.name,
+                        "is_active": method.is_active,
+                    }
+                )
+
+        result = []
+
+        # Cамостоятельные методы (не входящие в группы)
+        for method in research_methods:
+            if not method.research_method.is_group_member:
+                result.append(
+                    {
+                        "id": method.research_method.id,
+                        "name": method.research_method.name,
+                        "is_active": method.is_active,
+                    }
+                )
+
+        for group in groups.values():
+            group["methods"].sort(key=lambda x: x["name"])
+            result.append(group)
+
+        # Сортируем результат: сначала одиночные методы, потом группы
+        result.sort(key=lambda x: (1 if x.get("is_group", False) else 0, x["name"]))
+
+        return result
 
     class Meta:
         model = ResearchObject
@@ -290,3 +408,90 @@ class ResearchObjectSerializer(serializers.ModelSerializer):
             "deleted_at",
         )
         read_only_fields = ("created_at", "updated_at", "is_deleted", "deleted_at")
+
+
+class ResearchMethodGroupSerializer(serializers.ModelSerializer):
+    methods = ResearchMethodSerializer(many=True, read_only=True)
+    method_ids = serializers.PrimaryKeyRelatedField(
+        source="methods",
+        queryset=ResearchMethod.objects.filter(is_group_member=False),
+        many=True,
+        write_only=True,
+        required=False,
+    )
+
+    class Meta:
+        model = ResearchMethodGroup
+        fields = (
+            "id",
+            "name",
+            "methods",
+            "method_ids",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+            "deleted_at",
+            "is_active",
+        )
+        read_only_fields = ("created_at", "updated_at", "is_deleted", "deleted_at")
+
+    def validate_name(self, value):
+        if value:
+            value = value.strip()
+            if not value:
+                raise serializers.ValidationError(
+                    "Название группы не может быть пустым"
+                )
+        return value
+
+    def validate_method_ids(self, value):
+        if not value:
+            raise serializers.ValidationError("Необходимо выбрать хотя бы один метод")
+
+        # Проверяем, что ни один из методов не входит в другую группу
+        existing_group_methods = ResearchMethod.objects.filter(
+            id__in=[method.id for method in value], is_group_member=True
+        )
+
+        if existing_group_methods.exists():
+            method_names = ", ".join([m.name for m in existing_group_methods])
+            raise serializers.ValidationError(
+                f"Следующие методы уже входят в другие группы: {method_names}"
+            )
+
+        return value
+
+    def create(self, validated_data):
+        method_ids = validated_data.pop("methods", [])
+        group = super().create(validated_data)
+
+        if method_ids:
+            # Обновляем флаг is_group_member для методов
+            ResearchMethod.objects.filter(id__in=[m.id for m in method_ids]).update(
+                is_group_member=True
+            )
+            group.methods.set(method_ids)
+
+        return group
+
+    def update(self, instance, validated_data):
+        method_ids = validated_data.pop("methods", None)
+        group = super().update(instance, validated_data)
+
+        if method_ids is not None:
+            old_method_ids = set(instance.methods.values_list("id", flat=True))
+            new_method_ids = set(m.id for m in method_ids)
+
+            # Обновляем флаг is_group_member
+            # Для удаленных методов
+            ResearchMethod.objects.filter(
+                id__in=old_method_ids - new_method_ids
+            ).update(is_group_member=False)
+            # Для новых методов
+            ResearchMethod.objects.filter(
+                id__in=new_method_ids - old_method_ids
+            ).update(is_group_member=True)
+
+            group.methods.set(method_ids)
+
+        return group

@@ -159,6 +159,7 @@ class ResearchObject(models.Model):
         related_name="research_objects",
         verbose_name="Методы исследования",
         help_text="Методы исследования, привязанные к объекту",
+        through="ResearchObjectMethod",
     )
     is_deleted = models.BooleanField(default=False, verbose_name="Удалено")
     deleted_at = models.DateTimeField(
@@ -196,6 +197,38 @@ class ResearchObject(models.Model):
         self.is_deleted = True
         self.deleted_at = timezone.now()
         self.save()
+
+
+class ResearchObjectMethod(models.Model):
+    research_object = models.ForeignKey(
+        ResearchObject,
+        on_delete=models.CASCADE,
+        verbose_name="Объект исследования",
+    )
+    research_method = models.ForeignKey(
+        "ResearchMethod",
+        on_delete=models.CASCADE,
+        verbose_name="Метод исследования",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Активен",
+        help_text="Указывает, отображается ли метод на странице",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Дата создания",
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Дата обновления",
+    )
+
+    class Meta:
+        verbose_name = "Связь объекта исследования с методом"
+        verbose_name_plural = "Связи объектов исследования с методами"
+        unique_together = ("research_object", "research_method")
+        ordering = ("created_at",)
 
 
 def get_default_convergence_conditions():
@@ -299,6 +332,11 @@ class ResearchMethod(models.Model):
         help_text="Указывает, активен ли метод исследования",
         db_index=True,
     )
+    is_group_member = models.BooleanField(
+        default=False,
+        verbose_name="Является частью группы",
+        help_text="Указывает, входит ли метод в группу или является самостоятельным",
+    )
 
     class Meta:
         verbose_name = "Метод исследования"
@@ -310,6 +348,61 @@ class ResearchMethod(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.nd_code})"
+
+    def mark_as_deleted(self):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save()
+
+
+class ResearchMethodGroup(models.Model):
+    name = models.CharField(
+        max_length=255,
+        verbose_name="Наименование группы",
+        help_text="Наименование группы методов исследования",
+        db_index=True,
+    )
+    methods = models.ManyToManyField(
+        ResearchMethod,
+        related_name="groups",
+        verbose_name="Методы исследования",
+        help_text="Методы исследования в группе",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Дата создания",
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Дата обновления",
+    )
+    is_deleted = models.BooleanField(
+        default=False,
+        verbose_name="Удалено",
+        db_index=True,
+    )
+    deleted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Дата удаления",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Активна",
+        help_text="Указывает, активна ли группа",
+        db_index=True,
+    )
+
+    class Meta:
+        verbose_name = "Группа методов исследования"
+        verbose_name_plural = "Группы методов исследования"
+        ordering = ("name",)
+        indexes = [
+            models.Index(fields=["name"]),
+        ]
+
+    def __str__(self):
+        return self.name
 
     def mark_as_deleted(self):
         self.is_deleted = True

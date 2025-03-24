@@ -1,14 +1,17 @@
 import styled from 'styled-components';
 
 const ModalWrapper = styled.div`
-  position: absolute;
-  z-index: 4;
+  position: fixed;
+  z-index: 1000;
   top: 50%;
-  left: 50%;
+  left: calc(50% + 125px); /* 125px - половина ширины бокового меню */
   transform: translate(-50%, -50%);
-
+  max-height: 90vh;
+  max-width: min(90vw, 1200px);
   width: ${props => props.style?.width || '80%'};
-  padding-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  margin: 0 auto;
 
   color: #000;
   font-family: 'HeliosCondC';
@@ -16,6 +19,7 @@ const ModalWrapper = styled.div`
 
   border: 1px solid #babfc7;
   border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 
   span {
     font-family: 'HeliosCondC';
@@ -31,6 +35,7 @@ const ModalWrapper = styled.div`
     flex-direction: row;
     justify-content: center;
     align-items: center;
+    flex-shrink: 0;
 
     width: 100%;
     height: 40px;
@@ -45,17 +50,42 @@ const ModalWrapper = styled.div`
     position: absolute;
     right: 15px;
     cursor: pointer;
+    transition: all 0.2s ease;
 
     &:hover {
       color: black;
+      transform: scale(1.1);
     }
   }
 
   .body {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    padding: 0px 20px;
+    overflow-y: auto;
+    padding: 20px;
+    padding-right: 20px;
+    max-height: calc(
+      90vh - 40px - 80px
+    ); /* 40px - header, 80px - примерная высота футера с кнопками */
+
+    /* Стилизация скроллбара */
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 3px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 3px;
+    }
+
+    &::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
 
     &-info {
       display: flex;
@@ -84,11 +114,17 @@ const ModalWrapper = styled.div`
       flex-direction: row;
       justify-content: center;
       align-items: center;
-
-      width: 100%;
-      gap: 15px;
       margin-top: 20px;
+      gap: 15px;
+      flex-shrink: 0;
+      padding-top: 10px;
+      border-top: 1px solid #e4e6e8;
     }
+  }
+
+  @media (max-width: 1024px) {
+    left: 50%; /* На мобильных устройствах центрируем по центру экрана */
+    width: 95%;
   }
 `;
 

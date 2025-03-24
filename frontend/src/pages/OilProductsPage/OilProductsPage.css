@@ -1,34 +1,313 @@
 .input-field-container {
-  margin-bottom: 16px;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
 }
 
 .input-field-container .ant-form-item-label {
   display: flex;
   align-items: center;
+  max-width: 100%;
+  margin-bottom: 2px;
+  font-size: 13px;
+}
+
+.input-field-container .ant-form-item-label > label {
+  white-space: normal;
+  text-align: left;
+  line-height: 1.2;
+  height: auto;
+  padding-bottom: 0;
+  font-size: 13px;
+}
+
+/* Стили для горизонтальной группы переменных */
+.variables-group {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 8px;
+  background-color: rgba(248, 250, 252, 0.5);
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.variables-group .input-field-container {
+  flex: 1;
+  min-width: 150px;
+  max-width: 200px;
+}
+
+.variables-group-title {
+  width: 100%;
+  font-size: 14px;
+  color: #2c5282;
+  font-weight: 500;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: center;
+}
+
+/* Стили для групп с одинаковым индексом */
+.variables-group[data-index] {
+  background-color: rgba(248, 250, 252, 0.5);
+}
+
+.variables-group[data-index='1'] {
+  background-color: rgba(235, 248, 255, 0.5);
+}
+
+.variables-group[data-index='2'] {
+  background-color: rgba(240, 253, 244, 0.5);
+}
+
+.variables-group[data-index='3'] {
+  background-color: rgba(255, 245, 235, 0.5);
+}
+
+.variables-group[data-index='4'] {
+  background-color: rgba(245, 235, 255, 0.5);
+}
+
+.variables-group[data-index='5'] {
+  background-color: rgba(235, 255, 245, 0.5);
+}
+
+/* Для остальных индексов используем чередующиеся оттенки */
+.variables-group[data-index='n'] {
+  background-color: rgba(248, 250, 252, 0.5);
 }
 
 .calculation-results {
   background-color: #f5f5f5;
   border-radius: 4px;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  margin-top: 12px;
 }
 
 .calculation-results > div {
-  margin-bottom: 8px;
-  font-size: 14px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
 }
 
 .input-fields {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
+  max-width: 100%;
 }
 
 /* Стили для иконки подсказки */
 .MuiIconButton-root.MuiIconButton-sizeSmall {
-  padding: 4px;
-  margin-left: 4px;
+  padding: 2px;
+  margin-left: 2px;
   color: rgba(0, 0, 0, 0.54);
+  flex-shrink: 0;
 }
 
 .MuiIconButton-root.MuiIconButton-sizeSmall:hover {
   background-color: rgba(0, 0, 0, 0.04);
   color: rgba(0, 0, 0, 0.87);
+}
+
+/* Стили для групп методов */
+.method-group-selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 8px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.method-group-selector select {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  font-size: 13px;
+  color: #2d3748;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 200px;
+  max-width: 100%;
+}
+
+.method-group-selector select:hover {
+  border-color: #2c5282;
+}
+
+.method-group-selector select:focus {
+  outline: none;
+  border-color: #2c5282;
+  box-shadow: 0 0 0 2px rgba(44, 82, 130, 0.1);
+}
+
+.method-group-name {
+  font-size: 13px;
+  color: #4a5568;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.method-group-content {
+  background-color: #ffffff;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  max-width: 100%;
+}
+
+.method-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+  max-width: 100%;
+}
+
+.method-group-title {
+  font-size: 15px;
+  color: #2c5282;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.method-group-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.method-group-method {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.method-group-method:hover {
+  background-color: #edf2f7;
+}
+
+.method-group-method.active {
+  background-color: rgba(44, 82, 130, 0.1);
+}
+
+/* Стили для формул и математических выражений */
+.formula-container {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+/* Стили для математических символов */
+.calculation-results div {
+  font-feature-settings:
+    'kern' 1,
+    'liga' 1,
+    'calt' 1,
+    'pnum' 1,
+    'tnum' 0,
+    'onum' 0,
+    'lnum' 0,
+    'dlig' 0;
+}
+
+/* Отображение математических символов */
+.calculation-results div {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Стили для подсказок */
+.MuiTooltip-tooltip {
+  max-width: 300px;
+  word-wrap: break-word;
+  font-size: 12px;
+}
+
+/* Стили для результатов расчета */
+.calculation-results-container {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.calculation-step {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+/* Стили для уведомлений */
+.MuiAlert-root {
+  white-space: pre-line;
+  font-family: 'HeliosCondC', sans-serif;
+  margin: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.MuiSnackbar-root {
+  transform: translateX(0);
+  transition: transform 0.3s ease-in-out;
+}
+
+.MuiSnackbar-root.MuiSnackbar-anchorOriginTopRight {
+  top: 24px !important;
+  right: 24px !important;
+}
+
+.MuiAlert-message {
+  font-size: 14px;
+  line-height: 1.4;
+  padding-right: 8px;
+}
+
+.MuiAlert-standardWarning {
+  background-color: #fff3e0;
+  color: #663c00;
+  border-left: 4px solid #ff9800;
+}
+
+.MuiAlert-standardError {
+  background-color: #fdecea;
+  color: #611a15;
+  border-left: 4px solid #f44336;
+}
+
+.MuiAlert-action {
+  padding-left: 16px;
+  margin-right: -8px;
 }

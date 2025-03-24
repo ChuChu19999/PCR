@@ -126,12 +126,14 @@ function LaboratoryPage() {
               type="default"
               className="back-btn"
             />
-            <Button
-              title="Добавить подразделение"
-              onClick={() => setIsAddModalOpen(true)}
-              buttonColor="#0066cc"
-              type="primary"
-            />
+            {departments.length > 0 && (
+              <Button
+                title="Добавить подразделение"
+                onClick={() => setIsAddModalOpen(true)}
+                buttonColor="#0066cc"
+                type="primary"
+              />
+            )}
           </div>
 
           <div className="departments-grid">
@@ -167,6 +169,7 @@ function LaboratoryPage() {
             ))}
             {departments.length === 0 && (
               <div className="no-departments">
+                <p>Подразделения или расчеты не найдены</p>
                 <div className="no-departments-actions">
                   <Button
                     title="Добавить первое подразделение"

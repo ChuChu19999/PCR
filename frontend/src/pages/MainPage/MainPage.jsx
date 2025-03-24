@@ -106,18 +106,22 @@ function MainPage() {
       <Layout title="Главная">
         <div className="laboratories-container">
           <div className="laboratories-header">
-            <Button
-              title="Добавить лабораторию"
-              onClick={() => setIsAddModalOpen(true)}
-              buttonColor="#0066cc"
-              type="primary"
-            />
-            <Button
-              title="Редактировать шаблон"
-              onClick={() => setIsTemplateModalOpen(true)}
-              buttonColor="#0066cc"
-              type="primary"
-            />
+            {Array.isArray(laboratories) && laboratories.length > 0 && (
+              <>
+                <Button
+                  title="Добавить лабораторию"
+                  onClick={() => setIsAddModalOpen(true)}
+                  buttonColor="#0066cc"
+                  type="primary"
+                />
+                <Button
+                  title="Редактировать шаблон"
+                  onClick={() => setIsTemplateModalOpen(true)}
+                  buttonColor="#0066cc"
+                  type="primary"
+                />
+              </>
+            )}
           </div>
 
           <div className="laboratories-grid">
