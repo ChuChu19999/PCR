@@ -11,14 +11,22 @@ headers = {
 
 # Ккаждый метод в отдельном файле
 method_files = [
-    'method_0_0-0_5.json',
-    'method_0_0-10_0.json',
-    'method_0_005-0_01.json',
-    'method_0_5-1_0.json',
-    'method_0_01-0_1.json',
-    'method_0_1-1_0.json',
-    'method_over_1_0.json',
-    'method_10_0-15_0.json'
+    '01.json',
+    '02.json',
+    '03.json',
+    '04.json',
+    '05.json',
+    '06.json',
+    '07.json',
+    '08.json',
+    '09.json',
+    '10.json',
+    '11.json',
+    '12.json',
+    '13.json',
+    '14.json',
+    '15.json',
+    '16.json'
 ]
 
 def post_method(json_data):
