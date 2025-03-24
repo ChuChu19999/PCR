@@ -81,5 +81,5 @@
         "rounding_decimal": 4,
         "is_active": true,
         "parallel_count": 1,
-        "is_group_member": true
+        "is_group_member": false
     }
