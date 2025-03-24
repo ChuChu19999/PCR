@@ -1,0 +1,85 @@
+{
+        "name": "При 50℃",
+        "formula": "abs((C₁*t₁*1.0017)+(C₂*t₂*1.0017))/2",
+        "measurement_error": {
+            "type": "formula",
+            "value": "(((C₁*t₁*1.0017)+(C₂*t₂*1.0017))/2)*0.51/100",
+            "ranges": []
+        },
+        "unit": "мм²/с",
+        "measurement_method": "ГОСТ 33",
+        "nd_code": "ГОСТ 33-2016",
+        "nd_name": "Нефтепродукты. Прозрачные и непрозрачные жидкости. Определение кинематической  и динамической вязкости",
+        "input_data": {
+            "fields": [
+                {
+                    "name": "t₁",
+                    "unit": "с",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Первое время истечения нефтепродукта"
+                },
+                {
+                    "name": "t₂",
+                    "unit": "с",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Второе время истечения нефтепродукта"
+                },
+                {
+                    "name": "C₁",
+                    "unit": "мм/с²",
+                    "card_index": 1,
+                    "is_general": true,
+                    "description": "Первая постоянная вискозиметра"
+                },
+                {
+                    "name": "C₂",
+                    "unit": "мм/с²",
+                    "card_index": 1,
+                    "is_general": true,
+                    "description": "Вторая постоянная вискозиметра"
+                }
+            ]
+        },
+        "intermediate_data": {
+            "fields": [
+                {
+                    "name": "ν₁",
+                    "unit": "%",
+                    "formula": "C₁*t₁*1.0017",
+                    "description": "Первое содержание компонента"
+                },
+                {
+                    "name": "ν₂",
+                    "unit": "%",
+                    "formula": "C₂*t₂*1.0017",
+                    "description": "Второе содержание компонента"
+                },
+                {
+                    "name": "νср",
+                    "unit": "%",
+                    "formula": "((C₁*t₁*1.0017)+(C₂*t₂*1.0017))/2",
+                    "description": "Среднее значение содержания компонента"
+                }
+            ]
+        },
+        "convergence_conditions": {
+            "formulas": [
+                {
+                    "formula": "abs((C₁*t₁*1.0017)-(C₂*t₂*1.0017))<=(((C₁*t₁*1.0017)+(C₂*t₂*1.0017))/2)*0.35/100",
+                    "convergence_value": "satisfactory"
+                },
+                {
+                    "formula": "abs((C₁*t₁*1.0017)-(C₂*t₂*1.0017))>(((C₁*t₁*1.0017)+(C₂*t₂*1.0017))/2)*0.35/100",
+                    "convergence_value": "unsatisfactory"
+                }
+            ]
+        },
+        "is_deleted": false,
+        "rounding_type": "significant",
+        "rounding_decimal": 4,
+        "is_active": true,
+        "parallel_count": 1,
+        "is_group_member": true
+    }

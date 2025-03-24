@@ -1,0 +1,97 @@
+{
+        "name": "Диапазон св. 0,1 до 1,0",
+        "formula": "(((m₁₁-m₁₂)/m₁₃*100)+((m₂₁-m₂₂)/m₂₃*100))/2",
+        "measurement_error": {
+            "type": "fixed",
+            "value": "0.01",
+            "ranges": []
+        },
+        "unit": "%",
+        "measurement_method": "ГОСТ 6370",
+        "nd_code": "ГОСТ 6370-2018",
+        "nd_name": "Нефть, нефтепродукты и присадки. Метод определения механических примесей",
+        "input_data": {
+            "fields": [
+                {
+                    "name": "m₁₁",
+                    "unit": "г",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Первая масса бюкса с мехпримесями"
+                },
+                {
+                    "name": "m₁₂",
+                    "unit": "г",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Первая масса бюкса без мехпримесей"
+                },
+                {
+                    "name": "m₁₃",
+                    "unit": "г",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Первая масса пробы"
+                },
+                {
+                    "name": "m₂₁",
+                    "unit": "г",
+                    "card_index": 2,
+                    "is_general": false,
+                    "description": "Вторая масса бюкса с мехпримесями"
+                },
+                {
+                    "name": "m₂₂",
+                    "unit": "г",
+                    "card_index": 2,
+                    "is_general": false,
+                    "description": "Вторая масса бюкса без мехпримесей"
+                },
+                {
+                    "name": "m₂₃",
+                    "unit": "г",
+                    "card_index": 2,
+                    "is_general": false,
+                    "description": "Вторая масса пробы"
+                }
+            ]
+        },
+        "intermediate_data": {
+            "fields": [
+                {
+                    "name": "X₁",
+                    "unit": "%",
+                    "formula": "(m₁₁-m₁₂)/m₁₃*100",
+                    "description": "Первый расчет механических примесей"
+                },
+                {
+                    "name": "X₂",
+                    "unit": "%",
+                    "formula": "(m₂₁-m₂₂)/m₂₃*100",
+                    "description": "Второй расчет механических примесей"
+                }
+            ]
+        },
+        "convergence_conditions": {
+            "formulas": [
+                {
+                    "formula": "abs(((m₁₁-m₁₂)/m₁₃*100)-((m₂₁-m₂₂)/m₂₃*100))<=0.01",
+                    "convergence_value": "satisfactory"
+                },
+                {
+                    "formula": "abs(((m₁₁-m₁₂)/m₁₃*100)-((m₂₁-m₂₂)/m₂₃*100))>0.01",
+                    "convergence_value": "unsatisfactory"
+                },
+                {
+                    "formula": "(((m₁₁-m₁₂)/m₁₃*100)+((m₂₁-m₂₂)/m₂₃*100))/2<=0.005",
+                    "convergence_value": "absence"
+                }
+            ]
+        },
+        "is_deleted": false,
+        "rounding_type": "decimal",
+        "rounding_decimal": 4,
+        "is_active": true,
+        "parallel_count": 0,
+        "is_group_member": false
+    }

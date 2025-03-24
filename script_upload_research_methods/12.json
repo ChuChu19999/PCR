@@ -1,0 +1,52 @@
+{
+        "name": "Массовая доля серы",
+        "formula": "(X₁+X₂)/2",
+        "measurement_error": {
+            "type": "formula",
+            "value": "(1.96*0.1215*((X₁+X₂)/2+0.05555))/2.77",
+            "ranges": []
+        },
+        "unit": "%",
+        "measurement_method": "ГОСТ Р 51947",
+        "nd_code": "ГОСТ Р 51947-2002",
+        "nd_name": "Нефть и нефтепродукты. Определение серы методом энергодисперсионной рентгенофлуоресцентной спектрометрии",
+        "input_data": {
+            "fields": [
+                {
+                    "name": "X₁",
+                    "unit": "%",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Первое значение серы"
+                },
+                {
+                    "name": "X₂",
+                    "unit": "%",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Второе значение серы"
+                }
+            ]
+        },
+        "intermediate_data": {
+            "fields": []
+        },
+        "convergence_conditions": {
+            "formulas": [
+                {
+                    "formula": "abs(X₁-X₂)<=0.02894*((X₁+X₂)/2+0.1691)",
+                    "convergence_value": "satisfactory"
+                },
+                {
+                    "formula": "abs(X₁-X₂)>0.02894*((X₁+X₂)/2+0.1691)",
+                    "convergence_value": "unsatisfactory"
+                }
+            ]
+        },
+        "is_deleted": false,
+        "rounding_type": "significant",
+        "rounding_decimal": 3,
+        "is_active": true,
+        "parallel_count": 0,
+        "is_group_member": false
+    }

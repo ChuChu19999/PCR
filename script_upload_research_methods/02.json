@@ -1,0 +1,93 @@
+{
+        "name": "Диапазон 0,0-10,0",
+        "formula": "(((M₁₁-M₁₀)/M₁*100)+((M₂₁-M₂₀)/M₂*100))/2",
+        "measurement_error": {
+            "type": "formula",
+            "value": "0.15*((((M₁₁-M₁₀)/M₁*100)+((M₂₁-M₂₀)/M₂*100))/2)",
+            "ranges": []
+        },
+        "unit": "%",
+        "measurement_method": "СТО 05751745-198-2014",
+        "nd_code": "СТО 05751745-198-2014",
+        "nd_name": "Конденсат газовый, нефть. Определение асфальтенов, смол, парафина. Методика измерения",
+        "input_data": {
+            "fields": [
+                {
+                    "name": "M₁₁",
+                    "unit": "г",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Первая масса бюкса со смолами"
+                },
+                {
+                    "name": "M₁₀",
+                    "unit": "г",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Первая масса пустого бюкса"
+                },
+                {
+                    "name": "M₁",
+                    "unit": "г",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Первая масса навески"
+                },
+                {
+                    "name": "M₂₁",
+                    "unit": "г",
+                    "card_index": 2,
+                    "is_general": false,
+                    "description": "Вторая масса бюкса со смолами"
+                },
+                {
+                    "name": "M₂₀",
+                    "unit": "г",
+                    "card_index": 2,
+                    "is_general": false,
+                    "description": "Вторая масса пустого бюкса"
+                },
+                {
+                    "name": "M₂",
+                    "unit": "г",
+                    "card_index": 2,
+                    "is_general": false,
+                    "description": "Вторая масса навески"
+                }
+            ]
+        },
+        "intermediate_data": {
+            "fields": [
+                {
+                    "name": "X₁",
+                    "unit": "%",
+                    "formula": "((M₁₁-M₁₀)/M₁*100)",
+                    "description": "Первый расчет массовой доли парафина"
+                },
+                {
+                    "name": "X₂",
+                    "unit": "%",
+                    "formula": "((M₂₁-M₂₀)/M₂*100)",
+                    "description": "Второй расчет массовой доли парафина"
+                }
+            ]
+        },
+        "convergence_conditions": {
+            "formulas": [
+                {
+                    "formula": "abs(((M₁₁-M₁₀)/M₁*100)-((M₂₁-M₂₀)/M₂*100))<=((((M₁₁-M₁₀)/M₁*100)+((M₂₁-M₂₀)/M₂*100))/2)*7.5/100",
+                    "convergence_value": "satisfactory"
+                },
+                {
+                    "formula": "abs(((M₁₁-M₁₀)/M₁*100)-((M₂₁-M₂₀)/M₂*100))>((((M₁₁-M₁₀)/M₁*100)+((M₂₁-M₂₀)/M₂*100))/2)*7.5/100",
+                    "convergence_value": "unsatisfactory"
+                }
+            ]
+        },
+        "is_deleted": false,
+        "rounding_type": "decimal",
+        "rounding_decimal": 2,
+        "is_active": true,
+        "parallel_count": 0,
+        "is_group_member": false
+    }

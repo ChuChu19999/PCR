@@ -1,0 +1,107 @@
+{
+        "name": "Для нефти",
+        "formula": "(((a₁*5.12*1000)/(B₁*(Tб₁-Tр₁)))+((a₂*5.12*1000)/(B₂*(Tб₂-Tр₂))))/2",
+        "measurement_error": {
+            "type": "formula",
+            "value": "((((a₁*5.12*1000)/(B₁*(Tб₁-Tр₁)))+((a₂*5.12*1000)/(B₂*(Tб₂-Tр₂))))/2)*5/100",
+            "ranges": []
+        },
+        "unit": "у.е.",
+        "measurement_method": "СТО 05751745-199-2015",
+        "nd_code": "СТО 05751745-199-2015",
+        "nd_name": "Конденсат газовый, нефть, нефтепродукты. Определение молекулярной массы. Методика измерения",
+        "input_data": {
+            "fields": [
+                {
+                    "name": "Tб₁",
+                    "unit": "℃",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Первая температура застывания чистого бензола"
+                },
+                {
+                    "name": "Tб₂",
+                    "unit": "℃",
+                    "card_index": 2,
+                    "is_general": false,
+                    "description": "Вторая температура застывания чистого бензола"
+                },
+                {
+                    "name": "Tр₁",
+                    "unit": "℃",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Первая температура застывания раствора"
+                },
+                {
+                    "name": "Tр₂",
+                    "unit": "℃",
+                    "card_index": 2,
+                    "is_general": false,
+                    "description": "Вторая температура застывания раствора"
+                },
+                {
+                    "name": "B₁",
+                    "unit": "г",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Первая навеска бензола"
+                },
+                {
+                    "name": "B₂",
+                    "unit": "г",
+                    "card_index": 2,
+                    "is_general": false,
+                    "description": "Вторая навеска бензола"
+                },
+                {
+                    "name": "a₁",
+                    "unit": "г",
+                    "card_index": 1,
+                    "is_general": false,
+                    "description": "Первая навеска вещества"
+                },
+                {
+                    "name": "a₂",
+                    "unit": "г",
+                    "card_index": 2,
+                    "is_general": false,
+                    "description": "Вторая навеска вещества"
+                }
+            ]
+        },
+        "intermediate_data": {
+            "fields": [
+                {
+                    "name": "M₁",
+                    "unit": "у.е.",
+                    "formula": "(a₁*5.12*1000)/(B₁*(Tб₁-Tр₁))",
+                    "description": "Первая молекулярная масса"
+                },
+                {
+                    "name": "M₂",
+                    "unit": "у.е.",
+                    "formula": "(a₂*5.12*1000)/(B₂*(Tб₂-Tр₂))",
+                    "description": "Вторая молекулярная масса"
+                }
+            ]
+        },
+        "convergence_conditions": {
+            "formulas": [
+                {
+                    "formula": "abs(((a₁*5.12*1000)/(B₁*(Tб₁-Tр₁)))-((a₂*5.12*1000)/(B₂*(Tб₂-Tр₂))))<=((((a₁*5.12*1000)/(B₁*(Tб₁-Tр₁)))+((a₂*5.12*1000)/(B₂*(Tб₂-Tр₂))))/2)*2.5/100",
+                    "convergence_value": "satisfactory"
+                },
+                {
+                    "formula": "abs((a₁*5.12*1000)/(B₁*(Tб₁-Tр₁)))-((a₂*5.12*1000)/(B₂*(Tб₂-Tр₂)))>((((a₁*5.12*1000)/(B₁*(Tб₁-Tр₁)))+((a₂*5.12*1000)/(B₂*(Tб₂-Tр₂))))/2)*2.5/100",
+                    "convergence_value": "unsatisfactory"
+                }
+            ]
+        },
+        "is_deleted": false,
+        "rounding_type": "decimal",
+        "rounding_decimal": 1,
+        "is_active": true,
+        "parallel_count": 0,
+        "is_group_member": false
+    }
