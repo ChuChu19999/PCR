@@ -4,7 +4,7 @@ const ModalWrapper = styled.div`
   position: fixed;
   z-index: 1000;
   top: 50%;
-  left: calc(50% + 125px); /* 125px - половина ширины бокового меню */
+  left: calc(50% + 100px);
   transform: translate(-50%, -50%);
   max-height: 90vh;
   max-width: min(90vw, 1200px);
