@@ -1,15 +1,13 @@
 import os
 from django.conf import settings
-from django.db import connections
+from django.db import IntegrityError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes, action
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from openpyxl import load_workbook
-from openpyxl.styles import Font
 from .models import (
     Department,
     Laboratory,
@@ -17,6 +15,8 @@ from .models import (
     ResearchMethodGroup,
     ResearchObject,
     ResearchObjectMethod,
+    Calculation,
+    Protocol,
 )
 from .serializers import (
     DepartmentSerializer,
@@ -24,71 +24,16 @@ from .serializers import (
     ResearchMethodSerializer,
     ResearchMethodGroupSerializer,
     ResearchObjectSerializer,
-    UserSerializer,
+    CalculationSerializer,
+    ProtocolSerializer,
 )
+from .user_views import UserViewSet
+from copy import copy
 from decimal import Decimal, ROUND_HALF_UP
 import logging
 
 
 logger = logging.getLogger(__name__)
-
-
-def get_user_role(hach_snils):
-    """
-    Получение роли пользователя по его hsnils
-    """
-    with connections["access_control"].cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT r.name
-            FROM access_control.users_roles_systems urs
-            JOIN access_control.roles r ON urs.role_id = r.id
-            WHERE urs.user_hash=%s
-            AND urs.is_active=TRUE
-            AND urs.system_id = 8
-            LIMIT 1;
-        """,
-            [hach_snils],
-        )
-        row = cursor.fetchone()
-        return row[0] if row else None
-
-
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
-    serializer_class = UserSerializer
-
-    def list(self, request, *args, **kwargs):
-        decoded_token = getattr(request, "decoded_token", None)
-        if decoded_token is None:
-            return Response({"error": "Invalid token"}, status=401)
-
-        hash_snils = decoded_token.get("hashSnils")
-        if not hash_snils:
-            return Response({"error": "Hashsnils not found in token"}, status=400)
-
-        user_role = get_user_role(hash_snils)
-
-        is_staff = user_role == "editor"
-
-        if not user_role:
-            return Response({"error": "Access denied"}, status=403)
-
-        response_data = {
-            "personnelNumber": decoded_token.get("personnelNumber"),
-            "departmentNumber": decoded_token.get("departmentNumber"),
-            "fullName": decoded_token.get("fullName"),
-            "preferred_username": decoded_token.get("preferred_username"),
-            "email": decoded_token.get("email"),
-            "hashSnils": decoded_token.get("hashSnils"),
-            "is_staff": is_staff,
-        }
-        serializer = self.get_serializer(data=response_data)
-        serializer.is_valid(raise_exception=True)
-        return Response(serializer.data)
-
-    def retrieve(self, request, *args, **kwargs):
-        return self.list(request, *args, **kwargs)
 
 
 @permission_classes([AllowAny])
@@ -130,128 +75,6 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         laboratory_id = request.data.get("laboratory")
         get_object_or_404(Laboratory, id=laboratory_id)
         return super().create(request, *args, **kwargs)
-
-
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def save_excel(request):
-    """
-    Сохранение изменений шапки шаблона протокола
-    """
-    try:
-        data = request.data.get("data")
-        styles = request.data.get("styles", {})
-
-        logger.info(f"Получены данные для сохранения: {data}")
-        logger.info(f"Получены стили для сохранения: {styles}")
-
-        if not data:
-            logger.error("Данные не предоставлены")
-            return Response(
-                {"error": "Данные не предоставлены"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        file_path = os.path.join(settings.MEDIA_ROOT, "shablon.xlsx")
-        logger.info(f"Путь к файлу Excel: {file_path}")
-
-        if not os.path.exists(file_path):
-            logger.error(f"Файл не найден: {file_path}")
-            return Response(
-                {"error": "Файл шаблона не найден"}, status=status.HTTP_404_NOT_FOUND
-            )
-
-        workbook = load_workbook(file_path, data_only=False)
-        worksheet = workbook.active
-
-        for row_idx, row_data in enumerate(data):
-            if row_idx < 8:
-                cell = worksheet.cell(row=row_idx + 1, column=1, value=row_data[0])
-                logger.info(
-                    f"Обновлена ячейка [{row_idx + 1}, 1] значением: {row_data[0]}"
-                )
-
-                # Применяем стили, если они есть для данной ячейки
-                cell_key = f"{row_idx}-0"
-                if cell_key in styles:
-                    style = styles[cell_key]
-                    logger.info(f"Применение стилей для ячейки {cell_key}: {style}")
-
-                    # Получаем размер шрифта и конвертируем его в целое число
-                    font_size = style.get("fontSize", "14")
-                    if isinstance(font_size, str):
-                        # Удаляем 'px' и конвертируем в float, затем в int
-                        font_size = font_size.replace("px", "")
-                        try:
-                            font_size = int(float(font_size))
-                        except (ValueError, TypeError):
-                            font_size = 14
-
-                    font = Font(
-                        name="Times New Roman",
-                        bold=style.get("fontWeight") == "bold",
-                        italic=style.get("fontStyle") == "italic",
-                        size=font_size,
-                    )
-                    cell.font = font
-
-                    logger.info(
-                        f"Стили применены: bold={font.bold}, italic={font.italic}, size={font.size}"
-                    )
-
-        logger.info("Сохранение файла...")
-        workbook.save(file_path)
-        logger.info(f"Excel файл успешно обновлен со стилями")
-
-        return Response(
-            {"message": "Файл успешно обновлен", "applied_styles": styles},
-            status=status.HTTP_200_OK,
-        )
-    except Exception as e:
-        logger.error(f"Ошибка при сохранении Excel файла: {str(e)}", exc_info=True)
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def get_excel_styles(request):
-    try:
-        file_path = os.path.join(settings.MEDIA_ROOT, "shablon.xlsx")
-        logger.info(f"Получение стилей из файла: {file_path}")
-
-        workbook = load_workbook(file_path, data_only=False)
-        worksheet = workbook.active
-
-        styles = {}
-
-        # Получаем стили для первых 8 строк первой колонки
-        for row_idx in range(8):
-            cell = worksheet.cell(row=row_idx + 1, column=1)
-            cell_key = f"{row_idx}-0"
-
-            if cell.font:
-                style = {}
-                if cell.font.bold:
-                    style["fontWeight"] = "bold"
-                    logger.info(f"Ячейка {cell_key}: установлен жирный шрифт")
-                if cell.font.italic:
-                    style["fontStyle"] = "italic"
-                    logger.info(f"Ячейка {cell_key}: установлен курсив")
-                if cell.font.size:
-                    style["fontSize"] = f"{cell.font.size}px"
-                    logger.info(
-                        f"Ячейка {cell_key}: установлен размер шрифта {cell.font.size}px"
-                    )
-
-                if style:
-                    styles[cell_key] = style
-                    logger.info(f"Добавлены стили для ячейки {cell_key}: {style}")
-
-        logger.info(f"Всего найдено стилей: {len(styles)}")
-        logger.info(f"Возвращаемые стили: {styles}")
-        return Response({"styles": styles}, status=status.HTTP_200_OK)
-    except Exception as e:
-        logger.error(f"Ошибка при получении стилей Excel: {str(e)}", exc_info=True)
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])
@@ -311,7 +134,6 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
 
-        # Проверяем, есть ли convergence_conditions в запросе
         if "convergence_conditions" in request.data:
             conditions = request.data.get("convergence_conditions")
             if not isinstance(conditions, dict) or "formulas" not in conditions:
@@ -362,7 +184,7 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
 
 
 @permission_classes([AllowAny])
-class ResearchPageViewSet(viewsets.ModelViewSet):
+class ResearchObjectViewSet(viewsets.ModelViewSet):
     serializer_class = ResearchObjectSerializer
 
     def get_queryset(self):
@@ -552,6 +374,9 @@ class ResearchPageViewSet(viewsets.ModelViewSet):
 
 
 def _round_to_significant_figures(number, significant_figures):
+    """
+    Округляет число до заданного количества значащих цифр.
+    """
     if number == 0:
         return 0
 
@@ -578,6 +403,9 @@ def _round_to_significant_figures(number, significant_figures):
 
 
 def _get_decimal_places(number):
+    """
+    Возвращает количество знаков после запятой в числе.
+    """
     str_num = str(Decimal(str(float(number))))
     if "." not in str_num:
         return 0
@@ -585,6 +413,9 @@ def _get_decimal_places(number):
 
 
 def round_result(result, rounding_type, rounding_decimal):
+    """
+    Округляет результат по заданному типу и количеству знаков.
+    """
     if rounding_type == "decimal":
         d = Decimal(str(float(result)))
         # Используем ROUND_HALF_UP для округления 0.5 вверх
@@ -594,6 +425,9 @@ def round_result(result, rounding_type, rounding_decimal):
 
 
 def _replace_subscript_digits(text):
+    """
+    Заменяет подстрочные символы на обычные.
+    """
     subscript_map = {
         "₀": "0",
         "₁": "1",
@@ -640,7 +474,6 @@ def evaluate_formula(formula, variables, is_condition=False):
     Вычисляет результат формулы.
 
     Args:
-        formula (str): Формула для вычисления
         variables (dict): Словарь переменных и их значений
         is_condition (bool): Флаг, указывающий что это вычисление условия
     """
@@ -703,6 +536,9 @@ def evaluate_formula(formula, variables, is_condition=False):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def calculate_result(request):
+    """
+    Вычисляет результат расчета.
+    """
     try:
         logger.info("Начало расчета")
 
@@ -725,6 +561,41 @@ def calculate_result(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Сначала вычисляем промежуточные результаты
+        logger.info("Начало вычисления промежуточных результатов")
+        intermediate_results = {}
+        variables = dict(input_data)
+
+        for field in research_method["intermediate_data"]["fields"]:
+            # Пропускаем поля с пустыми именами или формулами
+            if not field["name"].strip() or not field["formula"].strip():
+                logger.info(f"Пропущено пустое промежуточное поле: {field}")
+                continue
+
+            try:
+                logger.info(
+                    f"Вычисление промежуточного результата: {field['name']}, формула: {field['formula']}"
+                )
+                intermediate_value = evaluate_formula(field["formula"], variables)
+                logger.info(
+                    f"Промежуточный результат {field['name']} = {intermediate_value}"
+                )
+                # Добавляем результат в словарь только если show_calculation = true
+                if field.get("show_calculation", True):
+                    intermediate_results[field["name"]] = str(intermediate_value)
+                # В любом случае добавляем значение в переменные для дальнейших расчетов
+                variables[field["name"]] = intermediate_value
+            except Exception as e:
+                logger.error(
+                    f"Ошибка при вычислении промежуточного результата {field['name']}: {str(e)}"
+                )
+                return Response(
+                    {
+                        "error": f"Ошибка при вычислении промежуточного результата: {str(e)}"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         logger.info("Начало проверки условий сходимости")
         satisfied_conditions = []
 
@@ -732,10 +603,10 @@ def calculate_result(request):
             try:
                 logger.info(f"Проверка условия: {condition['formula']}")
                 condition_result = evaluate_formula(
-                    condition["formula"], input_data, is_condition=True
+                    condition["formula"], variables, is_condition=True
                 )
                 logger.info(
-                    f"Результат проверки условия: {condition_result} (тип: {condition['convergence_value']})"
+                    f"Результат проверки условия: {condition_result} (тип: {condition['convergence_value']}"
                 )
 
                 if condition_result:
@@ -764,7 +635,7 @@ def calculate_result(request):
         for condition in research_method["convergence_conditions"]["formulas"]:
             try:
                 condition_result = evaluate_formula(
-                    condition["formula"], input_data, is_condition=True
+                    condition["formula"], variables, is_condition=True
                 )
                 conditions_info.append(
                     {
@@ -772,7 +643,7 @@ def calculate_result(request):
                         "satisfied": condition_result,
                         "convergence_value": condition["convergence_value"],
                         "calculation_steps": calculate_convergence_steps(
-                            condition["formula"], input_data
+                            condition["formula"], variables
                         ),
                     }
                 )
@@ -807,39 +678,8 @@ def calculate_result(request):
         # Если сходимость удовлетворительная, вычисляем результат
         result = None
         measurement_error = None
-        intermediate_results = {}
-        variables = dict(input_data)
 
         if convergence_result == "satisfactory":
-            logger.info("Начало вычисления промежуточных результатов")
-            # Сначала вычисляем промежуточные результаты
-            for field in research_method["intermediate_data"]["fields"]:
-                # Пропускаем поля с пустыми именами или формулами
-                if not field["name"].strip() or not field["formula"].strip():
-                    logger.info(f"Пропущено пустое промежуточное поле: {field}")
-                    continue
-
-                try:
-                    logger.info(
-                        f"Вычисление промежуточного результата: {field['name']}, формула: {field['formula']}"
-                    )
-                    intermediate_value = evaluate_formula(field["formula"], variables)
-                    logger.info(
-                        f"Промежуточный результат {field['name']} = {intermediate_value}"
-                    )
-                    intermediate_results[field["name"]] = str(intermediate_value)
-                    variables[field["name"]] = intermediate_value
-                except Exception as e:
-                    logger.error(
-                        f"Ошибка при вычислении промежуточного результата {field['name']}: {str(e)}"
-                    )
-                    return Response(
-                        {
-                            "error": f"Ошибка при вычислении промежуточного результата: {str(e)}"
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
             # Затем вычисляем основной результат
             try:
                 logger.info(
@@ -933,6 +773,9 @@ def calculate_result(request):
 @api_view(["PATCH"])
 @permission_classes([AllowAny])
 def update_research_method_status(request, page_id, method_id):
+    """
+    Обновляет статус метода исследования.
+    """
     try:
         research_object = ResearchObject.objects.get(id=page_id)
         research_method = ResearchMethod.objects.get(id=method_id)
@@ -1038,3 +881,265 @@ class ResearchMethodGroupViewSet(viewsets.ModelViewSet):
         return Response(
             {"status": "success", "message": "Группа помечена как удаленная"}
         )
+
+
+@api_view(["PATCH"])
+@permission_classes([AllowAny])
+def update_methods_order(request, page_id):
+    """
+    Обновляет порядок сортировки методов исследования для указанной страницы.
+    """
+    try:
+        research_object = ResearchObject.objects.get(id=page_id)
+        methods_data = request.data.get("methods", [])
+
+        # Проверяем, что все методы принадлежат этой странице
+        method_ids = [item["id"] for item in methods_data]
+        existing_methods = ResearchObjectMethod.objects.filter(
+            research_object=research_object, research_method_id__in=method_ids
+        )
+
+        if len(existing_methods) != len(method_ids):
+            return Response(
+                {
+                    "error": "Некоторые методы не найдены или не принадлежат этой странице"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        for item in methods_data:
+            ResearchObjectMethod.objects.filter(
+                research_object=research_object, research_method_id=item["id"]
+            ).update(sort_order=item["sort_order"])
+
+        return Response({"status": "success"})
+
+    except ResearchObject.DoesNotExist:
+        return Response(
+            {"error": "Страница исследований не найдена"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@permission_classes([AllowAny])
+class ProtocolViewSet(viewsets.ModelViewSet):
+    serializer_class = ProtocolSerializer
+
+    def get_queryset(self):
+        queryset = Protocol.objects.select_related("protocol_details")
+
+        is_deleted = self.request.query_params.get("is_deleted")
+        laboratory_id = self.request.query_params.get("laboratory")
+        department_id = self.request.query_params.get("department")
+
+        if is_deleted is not None:
+            is_deleted = is_deleted.lower() == "true"
+            queryset = queryset.filter(is_deleted=is_deleted)
+
+        if laboratory_id:
+            queryset = queryset.filter(
+                calculations__laboratory_id=laboratory_id
+            ).distinct()
+
+        if department_id:
+            queryset = queryset.filter(
+                calculations__department_id=department_id
+            ).distinct()
+
+        return queryset.order_by("-created_at")
+
+    def create(self, request, *args, **kwargs):
+        try:
+            return super().create(request, *args, **kwargs)
+        except IntegrityError:
+            return Response(
+                {
+                    "error": "Комбинация филиала и места отбора пробы должна быть уникальной"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=True, methods=["post"])
+    def mark_deleted(self, request, pk=None):
+        protocol = self.get_object()
+        protocol.mark_as_deleted()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def save_calculation(request):
+    """
+    Сохраняет расчет.
+    """
+    try:
+        data = request.data
+        protocol_data = None
+        calculation_data = None
+
+        if "protocol_id" in data:
+            existing_calculation = Calculation.objects.filter(
+                protocol_id=data["protocol_id"],
+                research_method=data.get("research_method"),
+                is_deleted=False,
+            ).first()
+
+            if existing_calculation:
+                return Response(
+                    {
+                        "error": "Для данного протокола уже существует расчет по этому методу исследования"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            calculation_data = {
+                "input_data": data.get("input_data"),
+                "result": data.get("result"),
+                "measurement_error": data.get("measurement_error"),
+                "unit": data.get("unit"),
+                "laboratory": data.get("laboratory"),
+                "department": data.get("department"),
+                "research_method": data.get("research_method"),
+                "protocol_id": data["protocol_id"],
+                "laboratory_activity_date": data.get("laboratory_activity_date"),
+            }
+        else:
+            # Создаем новый протокол
+            protocol_data = {
+                "test_protocol_number": data.get("test_protocol_number"),
+                "sampling_act_number": data.get("sampling_act_number"),
+                "registration_number": data.get("registration_number"),
+                "sampling_location": data.get("sampling_location"),
+                "sampling_date": data.get("sampling_date"),
+                "receiving_date": data.get("receiving_date"),
+                "laboratory_activity_dates": data.get("laboratory_activity_dates"),
+                "executor": data.get("executor"),
+                "excel_template": data.get("excel_template"),
+            }
+
+            protocol_serializer = ProtocolSerializer(data=protocol_data)
+            if protocol_serializer.is_valid():
+                protocol = protocol_serializer.save()
+                existing_calculation = Calculation.objects.filter(
+                    protocol_id=protocol.id,
+                    research_method=data.get("research_method"),
+                    is_deleted=False,
+                ).first()
+
+                if existing_calculation:
+                    # Удаляем созданный протокол, так как расчет не может быть создан
+                    protocol.delete()
+                    return Response(
+                        {
+                            "error": "Для данного протокола уже существует расчет по этому методу исследования"
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                calculation_data = {
+                    "input_data": data.get("input_data"),
+                    "result": data.get("result"),
+                    "measurement_error": data.get("measurement_error"),
+                    "unit": data.get("unit"),
+                    "laboratory": data.get("laboratory"),
+                    "department": data.get("department"),
+                    "research_method": data.get("research_method"),
+                    "protocol_id": protocol.id,
+                    "laboratory_activity_date": data.get("laboratory_activity_date"),
+                }
+            else:
+                return Response(
+                    protocol_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+        calculation_serializer = CalculationSerializer(data=calculation_data)
+        if calculation_serializer.is_valid():
+            try:
+                calculation = calculation_serializer.save()
+                return Response(
+                    calculation_serializer.data, status=status.HTTP_201_CREATED
+                )
+            except IntegrityError:
+                if protocol_data:
+                    # Если это был новый протокол, удаляем его
+                    Protocol.objects.filter(id=calculation_data["protocol_id"]).delete()
+                return Response(
+                    {
+                        "error": "Для данного протокола уже существует расчет по этому методу исследования"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        return Response(
+            calculation_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_registration_numbers(request):
+    """
+    Получает список регистрационных номеров для указанного метода и лаборатории.
+    """
+    laboratory_id = request.GET.get("laboratory_id")
+    department_id = request.GET.get("department_id")
+    method_id = request.GET.get("method_id")
+    registration_number = request.GET.get("registration_number")
+    partial_number = request.GET.get("partial_number")
+
+    if not laboratory_id:
+        return Response({"error": "Необходимо указать laboratory_id"}, status=400)
+
+    protocols = Protocol.objects.filter(
+        calculations__laboratory_id=laboratory_id, is_deleted=False
+    ).distinct()
+
+    if department_id:
+        protocols = protocols.filter(calculations__department_id=department_id)
+
+    # Если это поиск для автодополнения
+    if partial_number is not None:
+        if method_id:
+            protocols = protocols.filter(calculations__research_method_id=method_id)
+        protocols = protocols.filter(registration_number__icontains=partial_number)
+        registration_numbers = protocols.values_list(
+            "registration_number", flat=True
+        ).distinct()
+        return Response(list(registration_numbers))
+
+    # Если это запрос конкретных данных
+    if registration_number and method_id:
+        try:
+            calculation = (
+                Calculation.objects.filter(
+                    research_method_id=method_id,
+                    protocol__registration_number=registration_number,
+                    laboratory_id=laboratory_id,
+                    is_deleted=False,
+                )
+                .order_by("-created_at")
+                .first()
+            )
+
+            if calculation:
+                response_data = calculation.input_data.copy()
+                response_data["laboratory_activity_date"] = (
+                    calculation.laboratory_activity_date.isoformat()
+                    if calculation.laboratory_activity_date
+                    else None
+                )
+                return Response(response_data)
+            return Response({})
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+    return Response(
+        {
+            "error": "Для получения данных необходимо указать method_id и registration_number"
+        },
+        status=400,
+    )

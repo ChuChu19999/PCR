@@ -6,6 +6,10 @@ from .models import (
     ResearchMethod,
     ResearchObject,
     ResearchMethodGroup,
+    Calculation,
+    ExcelTemplate,
+    Protocol,
+    ProtocolDetails,
 )
 
 
@@ -120,40 +124,11 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
             "rounding_type",
             "rounding_decimal",
             "is_active",
-            "parallel_count",
             "is_group_member",
         )
         read_only_fields = ("created_at", "updated_at", "deleted_at")
 
-    def validate_parallel_count(self, value):
-        if value < 0:
-            raise serializers.ValidationError(
-                "Количество параллелей не может быть отрицательным"
-            )
-        return value
-
     def validate(self, data):
-        parallel_count = data.get("parallel_count", 0)
-        input_data = data.get("input_data", {})
-
-        if parallel_count == 0:
-            # Проверяем, что нет полей с is_general=True
-            general_fields = [
-                field["name"]
-                for field in input_data.get("fields", [])
-                if field.get("is_general")
-            ]
-
-            if general_fields:
-                raise serializers.ValidationError(
-                    {
-                        "parallel_count": (
-                            f"Нельзя использовать общие переменные при отсутствии параллельных расчетов. "
-                            f"Следующие переменные отмечены как общие: {', '.join(general_fields)}"
-                        )
-                    }
-                )
-
         return data
 
     def validate_measurement_error(self, value):
@@ -226,15 +201,10 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
             if not isinstance(field, dict):
                 raise serializers.ValidationError("Каждое поле должно быть объектом")
 
-            required_field_keys = {"name", "description", "is_general", "card_index"}
+            required_field_keys = {"name", "description", "card_index"}
             if not all(key in field for key in required_field_keys):
                 raise serializers.ValidationError(
                     f"Каждое поле должно содержать следующие ключи: {required_field_keys}"
-                )
-
-            if not isinstance(field["is_general"], bool):
-                raise serializers.ValidationError(
-                    "Поле is_general должно быть логическим значением (true/false)"
                 )
 
             if not isinstance(field["card_index"], int) or field["card_index"] < 1:
@@ -257,7 +227,7 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
             if not isinstance(field, dict):
                 raise serializers.ValidationError("Каждое поле должно быть объектом")
 
-            required_field_keys = {"name", "formula", "description"}
+            required_field_keys = {"name", "formula", "description", "show_calculation"}
             if not all(key in field for key in required_field_keys):
                 raise serializers.ValidationError(
                     f"Каждое поле должно содержать следующие ключи: {required_field_keys}"
@@ -265,6 +235,11 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
 
             if "unit" in field and not isinstance(field["unit"], str):
                 raise serializers.ValidationError("Поле unit должно быть строкой")
+
+            if not isinstance(field["show_calculation"], bool):
+                raise serializers.ValidationError(
+                    "Поле show_calculation должно быть логическим значением"
+                )
 
         return value
 
@@ -343,9 +318,11 @@ class ResearchObjectSerializer(serializers.ModelSerializer):
     )
 
     def get_research_methods(self, obj):
-        research_methods = obj.research_methods.through.objects.filter(
-            research_object=obj
-        ).select_related("research_method")
+        research_methods = (
+            obj.research_methods.through.objects.filter(research_object=obj)
+            .select_related("research_method")
+            .order_by("sort_order", "created_at")
+        )
 
         # Словарь для хранения групп
         groups = {}
@@ -366,6 +343,7 @@ class ResearchObjectSerializer(serializers.ModelSerializer):
                         "id": method.research_method.id,
                         "name": method.research_method.name,
                         "is_active": method.is_active,
+                        "sort_order": method.sort_order,
                     }
                 )
 
@@ -379,15 +357,21 @@ class ResearchObjectSerializer(serializers.ModelSerializer):
                         "id": method.research_method.id,
                         "name": method.research_method.name,
                         "is_active": method.is_active,
+                        "sort_order": method.sort_order,
                     }
                 )
 
         for group in groups.values():
-            group["methods"].sort(key=lambda x: x["name"])
+            group["methods"].sort(key=lambda x: (x["sort_order"], x["name"]))
             result.append(group)
 
-        # Сортируем результат: сначала одиночные методы, потом группы
-        result.sort(key=lambda x: (1 if x.get("is_group", False) else 0, x["name"]))
+        result.sort(
+            key=lambda x: (
+                x.get("sort_order", 0)
+                if not x.get("is_group")
+                else min(m["sort_order"] for m in x["methods"]) if x["methods"] else 0
+            )
+        )
 
         return result
 
@@ -495,3 +479,184 @@ class ResearchMethodGroupSerializer(serializers.ModelSerializer):
             group.methods.set(method_ids)
 
         return group
+
+
+class ExcelTemplateSerializer(serializers.ModelSerializer):
+    file = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ExcelTemplate
+        fields = (
+            "id",
+            "name",
+            "version",
+            "file_name",
+            "file",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("version", "is_active", "created_at", "updated_at")
+
+    def get_file(self, obj):
+        return None
+
+
+class ProtocolDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProtocolDetails
+        fields = (
+            "id",
+            "branch",
+            "sampling_location_detail",
+            "phone",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+            "deleted_at",
+        )
+        read_only_fields = ("created_at", "updated_at", "is_deleted", "deleted_at")
+
+    def validate_unique_together(self, attrs):
+        branch = attrs.get("branch")
+        sampling_location_detail = attrs.get("sampling_location_detail")
+
+        if branch and sampling_location_detail:
+            if ProtocolDetails.objects.filter(
+                branch=branch,
+                sampling_location_detail=sampling_location_detail,
+                is_deleted=False,
+            ).exists():
+                raise serializers.ValidationError(
+                    "Комбинация филиала и места отбора пробы должна быть уникальной"
+                )
+        return attrs
+
+    def create(self, validated_data):
+        self.validate_unique_together(validated_data)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        self.validate_unique_together(validated_data)
+        return super().update(instance, validated_data)
+
+
+class ProtocolSerializer(serializers.ModelSerializer):
+    protocol_details = ProtocolDetailsSerializer(read_only=True)
+    protocol_details_id = serializers.PrimaryKeyRelatedField(
+        source="protocol_details",
+        queryset=ProtocolDetails.objects.filter(is_deleted=False),
+        write_only=True,
+    )
+
+    class Meta:
+        model = Protocol
+        fields = (
+            "id",
+            "test_protocol_number",
+            "test_object",
+            "laboratory_location",
+            "protocol_details",
+            "protocol_details_id",
+            "sampling_act_number",
+            "registration_number",
+            "sampling_date",
+            "receiving_date",
+            "executor",
+            "excel_template",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+            "deleted_at",
+        )
+        read_only_fields = ("created_at", "updated_at", "is_deleted", "deleted_at")
+
+    def validate_registration_number(self, value):
+        request = self.context.get("request")
+        if not request:
+            return value
+
+        laboratory_id = request.query_params.get("laboratory_id")
+        department_id = request.query_params.get("department_id")
+
+        if not laboratory_id:
+            return value
+
+        # Проверяем существование протокола с таким же регистрационным номером
+        existing_protocols = Protocol.objects.filter(
+            registration_number=value, is_deleted=False
+        )
+
+        calculations = Calculation.objects.filter(
+            protocol__in=existing_protocols,
+            laboratory_id=laboratory_id,
+            is_deleted=False,
+        )
+
+        if department_id:
+            calculations = calculations.filter(department_id=department_id)
+        else:
+            calculations = calculations.filter(department__isnull=True)
+
+        if calculations.exists():
+            raise serializers.ValidationError(
+                "Протокол с таким регистрационным номером уже существует для данной лаборатории"
+                + (" и подразделения" if department_id else "")
+            )
+
+        return value
+
+    def create(self, validated_data):
+        return Protocol.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+
+
+class CalculationSerializer(serializers.ModelSerializer):
+    protocol = ProtocolSerializer(read_only=True)
+    protocol_id = serializers.PrimaryKeyRelatedField(
+        source="protocol",
+        queryset=Protocol.objects.filter(is_deleted=False),
+        write_only=True,
+    )
+    laboratory_activity_date = serializers.DateField(
+        format="%Y-%m-%d", input_formats=["%Y-%m-%d"], required=True
+    )
+
+    class Meta:
+        model = Calculation
+        fields = (
+            "id",
+            "input_data",
+            "protocol",
+            "protocol_id",
+            "result",
+            "measurement_error",
+            "unit",
+            "laboratory",
+            "department",
+            "research_method",
+            "laboratory_activity_date",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+            "deleted_at",
+        )
+        read_only_fields = ("created_at", "updated_at", "is_deleted", "deleted_at")
+
+    def validate(self, data):
+        if (
+            data.get("department")
+            and data["department"].laboratory != data["laboratory"]
+        ):
+            raise serializers.ValidationError(
+                {
+                    "department": "Подразделение должно принадлежать выбранной лаборатории"
+                }
+            )
+
+        return data

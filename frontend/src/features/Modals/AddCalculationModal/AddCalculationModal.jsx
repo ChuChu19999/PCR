@@ -27,7 +27,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
     nd_code: '',
     nd_name: '',
     input_data: {
-      fields: [{ name: '', description: '', is_general: false, unit: '' }],
+      fields: [{ name: '', description: '', unit: '', card_index: 1 }],
     },
     intermediate_data: {
       fields: [{ name: '', formula: '', description: '', unit: '' }],
@@ -43,9 +43,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
     is_deleted: false,
     rounding_type: 'decimal',
     rounding_decimal: 0,
-    parallel_count: 1,
     is_active: true,
-    is_group_member: false,
   });
 
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
@@ -66,6 +64,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
     convergence: useRef([]),
     intermediate: useRef([]),
     error: useRef(null),
+    range: useRef([]),
   };
 
   useEffect(() => {
@@ -112,20 +111,27 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
   };
 
   const handleInputDataChange = (index, field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      input_data: {
-        fields: prev.input_data.fields.map((item, i) =>
-          i === index ? { ...item, [field]: value } : item
-        ),
-      },
-    }));
+    setFormData(prevData => {
+      const newInputData = [...prevData.input_data.fields];
+      newInputData[index] = {
+        ...newInputData[index],
+        [field]: value,
+      };
+      return {
+        ...prevData,
+        input_data: {
+          ...prevData.input_data,
+          fields: newInputData,
+        },
+      };
+    });
   };
 
   const handleIntermediateDataChange = (index, field, value) => {
     setFormData(prev => ({
       ...prev,
       intermediate_data: {
+        ...prev.intermediate_data,
         fields: prev.intermediate_data.fields.map((item, i) =>
           i === index ? { ...item, [field]: value } : item
         ),
@@ -163,16 +169,15 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
   };
 
   const addInputField = () => {
-    setFormData(prev => ({
-      ...prev,
+    setFormData(prevData => ({
+      ...prevData,
       input_data: {
+        ...prevData.input_data,
         fields: [
-          ...prev.input_data.fields,
+          ...prevData.input_data.fields,
           {
             name: '',
             description: '',
-            is_general: false,
-            unit: '',
             card_index: 1,
           },
         ],
@@ -184,9 +189,15 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
     setFormData(prev => ({
       ...prev,
       intermediate_data: {
+        ...prev.intermediate_data,
         fields: [
           ...prev.intermediate_data.fields,
-          { name: '', formula: '', description: '', unit: '' },
+          {
+            name: '',
+            formula: '',
+            description: '',
+            show_calculation: true,
+          },
         ],
       },
     }));
@@ -383,12 +394,60 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
           input.focus();
         }, 0);
       }
+    } else if (type === 'range') {
+      const input = formulaRefs.range.current[index];
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+
+      if (value === 'backspace') {
+        if (start !== end) {
+          const newValue = input.value.substring(0, start) + input.value.substring(end);
+          handleMeasurementErrorRangeChange(parseInt(index), 'formula', newValue);
+          setTimeout(() => {
+            input.selectionStart = input.selectionEnd = start;
+            input.focus();
+          }, 0);
+        } else if (start > 0) {
+          const newValue = input.value.substring(0, start - 1) + input.value.substring(end);
+          handleMeasurementErrorRangeChange(parseInt(index), 'formula', newValue);
+          setTimeout(() => {
+            input.selectionStart = input.selectionEnd = start - 1;
+            input.focus();
+          }, 0);
+        }
+      } else {
+        const newValue = input.value.substring(0, start) + value + input.value.substring(end);
+        handleMeasurementErrorRangeChange(parseInt(index), 'formula', newValue);
+        setTimeout(() => {
+          input.selectionStart = input.selectionEnd = start + value.length;
+          input.focus();
+        }, 0);
+      }
     }
   };
 
   const inputVariables = formData.input_data.fields
     .map(field => field.name)
     .filter(name => name.trim() !== '');
+
+  const getAvailableVariables = (type, currentIndex = null) => {
+    const intermediateVariables = formData.intermediate_data.fields
+      .map(field => field.name)
+      .filter(name => name.trim() !== '');
+
+    // Для основной формулы и условий сходимости доступны все переменные
+    if (type === 'main' || type === 'convergence' || type === 'error' || type === 'range') {
+      return [...inputVariables, ...intermediateVariables];
+    }
+
+    // Для промежуточных вычислений доступны только переменные, определенные выше
+    if (type === 'intermediate' && currentIndex !== null) {
+      const previousIntermediateVars = intermediateVariables.slice(0, currentIndex);
+      return [...inputVariables, ...previousIntermediateVars];
+    }
+
+    return inputVariables;
+  };
 
   const renderFormulaInput = (value, onChange, type, index = null, placeholder = '') => (
     <div className="formula-input-container">
@@ -397,17 +456,32 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
         value={value}
         onChange={onChange}
         onFocus={() => setActiveFormulaField(`${type}-${index ?? 'main'}`)}
+        onKeyDown={e => {
+          if (
+            e.key === 'Backspace' ||
+            e.key === 'Delete' ||
+            e.key === 'ArrowLeft' ||
+            e.key === 'ArrowRight' ||
+            ((e.ctrlKey || e.metaKey) && ['c', 'v', 'a', 'x'].includes(e.key.toLowerCase()))
+          ) {
+            return;
+          }
+          e.preventDefault();
+        }}
         ref={el => {
           if (type === 'main') formulaRefs.main.current = el;
           else if (type === 'convergence') formulaRefs.convergence.current[index] = el;
           else if (type === 'intermediate') formulaRefs.intermediate.current[index] = el;
           else if (type === 'error') formulaRefs.error.current = el;
+          else if (type === 'range') formulaRefs.range.current[index] = el;
         }}
         placeholder={placeholder}
-        required
       />
       {activeFormulaField === `${type}-${index ?? 'main'}` && (
-        <FormulaKeyboard onKeyPress={handleFormulaKeyPress} variables={inputVariables} />
+        <FormulaKeyboard
+          onKeyPress={handleFormulaKeyPress}
+          variables={getAvailableVariables(type, index)}
+        />
       )}
     </div>
   );
@@ -481,25 +555,15 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
         // Создание группы методов
         if (!groupData.name.trim()) {
           setError('Введите название группы');
+          setIsSubmitting(false);
           return;
         }
         if (groupData.selectedMethods.length === 0) {
           setError('Выберите хотя бы один метод для группы');
+          setIsSubmitting(false);
           return;
         }
 
-        console.log(
-          JSON.stringify(
-            {
-              name: groupData.name,
-              method_ids: groupData.selectedMethods,
-            },
-            null,
-            2
-          )
-        );
-
-        // Создаем группу
         const groupResponse = await axios.post(
           `${import.meta.env.VITE_API_URL}/api/research-method-groups/`,
           {
@@ -514,11 +578,26 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
           onClose();
         }
       } else {
+        // Валидация одиночного метода
+        if (!formData.name.trim()) {
+          setError('Введите название формулы');
+          setIsSubmitting(false);
+          return;
+        }
+
         // Создание обычного метода
         const dataToSend = {
           name: formData.name || '',
           formula: formData.formula || '',
-          measurement_error: formData.measurement_error.value ? formData.measurement_error : null,
+          measurement_error:
+            formData.measurement_error.type === 'range'
+              ? {
+                  type: 'range',
+                  ranges: formData.measurement_error.ranges,
+                }
+              : formData.measurement_error.value
+                ? formData.measurement_error
+                : null,
           unit: formData.unit || '',
           measurement_method: formData.measurement_method || '',
           nd_code: formData.nd_code || '',
@@ -542,11 +621,9 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
           rounding_type: formData.rounding_type || null,
           rounding_decimal: formData.rounding_decimal ? parseInt(formData.rounding_decimal) : 0,
           is_active: true,
-          parallel_count: formData.parallel_count ? parseInt(formData.parallel_count) : null,
-          is_group_member: false,
         };
 
-        console.log(JSON.stringify(dataToSend, null, 2));
+        console.log('Отправляемые данные:', JSON.stringify(dataToSend, null, 2));
 
         const response = await axios.post(
           `${import.meta.env.VITE_API_URL}/api/research-methods/`,
@@ -563,25 +640,6 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
               typeof method === 'object' ? method.id : method
             );
             const updatedMethodIds = [...currentMethodIds, response.data.id];
-
-            console.log('Отправляем PATCH запрос на /api/research-pages/:');
-            console.log(
-              'URL:',
-              `${import.meta.env.VITE_API_URL}/api/research-pages/${researchPageId}/`
-            );
-            console.log('Текущие ID методов:', currentMethodIds);
-            console.log('ID нового метода:', response.data.id);
-            console.log('Обновленный список ID методов:', updatedMethodIds);
-            console.log(
-              'Тело запроса:',
-              JSON.stringify(
-                {
-                  research_methods: updatedMethodIds,
-                },
-                null,
-                2
-              )
-            );
 
             await axios.patch(
               `${import.meta.env.VITE_API_URL}/api/research-pages/${researchPageId}/`,
@@ -616,6 +674,47 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
   const handleTabChange = tab => {
     if (tab !== activeTab) {
       setIsAnimating(true);
+      setError(null);
+      if (tab === 'group') {
+        setFormData({
+          name: '',
+          formula: '',
+          measurement_error: {
+            type: 'fixed',
+            value: '',
+            ranges: [],
+          },
+          unit: '',
+          measurement_method: '',
+          nd_code: '',
+          nd_name: '',
+          input_data: {
+            fields: [{ name: '', description: '', unit: '', card_index: 1 }],
+          },
+          intermediate_data: {
+            fields: [{ name: '', formula: '', description: '', unit: '' }],
+          },
+          convergence_conditions: {
+            formulas: [
+              {
+                formula: '',
+                convergence_value: 'satisfactory',
+              },
+            ],
+          },
+          is_deleted: false,
+          rounding_type: 'decimal',
+          rounding_decimal: 0,
+          is_active: true,
+        });
+      } else {
+        setGroupData({
+          name: '',
+          selectedMethods: [],
+          is_active: true,
+        });
+      }
+
       setTimeout(() => {
         setActiveTab(tab);
         setTimeout(() => {
@@ -634,6 +733,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
       onSave={handleSubmit}
       style={{ width: '1000px' }}
       isSubmitting={isSubmitting}
+      noValidate={true}
     >
       <div className="add-calculation-form">
         {error && <div className="general-error">{error}</div>}
@@ -642,12 +742,14 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
           <button
             className={`tab ${activeTab === 'single' ? 'active' : ''}`}
             onClick={() => handleTabChange('single')}
+            type="button"
           >
             Одиночный метод
           </button>
           <button
             className={`tab ${activeTab === 'group' ? 'active' : ''}`}
             onClick={() => handleTabChange('group')}
+            type="button"
           >
             Группированный метод
           </button>
@@ -664,9 +766,8 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
                   <input
                     type="text"
                     value={groupData.name}
-                    onChange={e => handleGroupDataChange('name', e.target.value)}
+                    onChange={e => setGroupData(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="Введите название группы"
-                    required
                   />
                 </div>
 
@@ -704,26 +805,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
-                    required
                   />
-                </div>
-
-                <div className="form-group">
-                  <label>Количество параллелей</label>
-                  <input
-                    type="number"
-                    name="parallel_count"
-                    value={formData.parallel_count}
-                    onChange={handleInputChange}
-                    min="0"
-                    required
-                  />
-                  <small
-                    className="help-text"
-                    style={{ color: '#666', display: 'block', marginTop: '4px', fontSize: '12px' }}
-                  >
-                    0 - один расчет, 1 и более - параллельные расчеты
-                  </small>
                 </div>
 
                 <div className="form-section">
@@ -764,18 +846,6 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
                         />
                       </div>
                       <div className="form-group">
-                        <label className="checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={field.is_general}
-                            onChange={e =>
-                              handleInputDataChange(index, 'is_general', e.target.checked)
-                            }
-                          />
-                          <span>Общая переменная</span>
-                        </label>
-                      </div>
-                      <div className="form-group">
                         <label>Номер карточки</label>
                         <select
                           value={field.card_index}
@@ -792,12 +862,92 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
                         >
                           <option value={1}>Карточка 1</option>
                           <option value={2}>Карточка 2</option>
+                          <option value={3}>Карточка 3</option>
+                          <option value={4}>Карточка 4</option>
+                          <option value={5}>Карточка 5</option>
+                          <option value={6}>Карточка 6</option>
+                          <option value={7}>Карточка 7</option>
+                          <option value={8}>Карточка 8</option>
                         </select>
                       </div>
                     </div>
                   ))}
                   <button type="button" onClick={addInputField} className="add-field-btn">
                     + Добавить переменную
+                  </button>
+                </div>
+
+                <div className="form-section">
+                  <h3>Промежуточные вычисления</h3>
+                  {formData.intermediate_data.fields.map((field, index) => (
+                    <div key={index} className="field-group">
+                      <button
+                        type="button"
+                        className="delete-field-btn"
+                        onClick={() => deleteIntermediateField(index)}
+                      >
+                        ×
+                      </button>
+                      <div className="form-group">
+                        <label>Название переменной</label>
+                        <input
+                          type="text"
+                          value={field.name}
+                          onChange={e =>
+                            handleIntermediateDataChange(index, 'name', e.target.value)
+                          }
+                          placeholder="Введите название"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Формула</label>
+                        {renderFormulaInput(
+                          field.formula,
+                          value => handleIntermediateDataChange(index, 'formula', value),
+                          'intermediate',
+                          index
+                        )}
+                      </div>
+                      <div className="form-group">
+                        <label>Описание</label>
+                        <input
+                          type="text"
+                          value={field.description}
+                          onChange={e =>
+                            handleIntermediateDataChange(index, 'description', e.target.value)
+                          }
+                          placeholder="Введите описание"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Единица измерения</label>
+                        <input
+                          type="text"
+                          value={field.unit || ''}
+                          onChange={e =>
+                            handleIntermediateDataChange(index, 'unit', e.target.value)
+                          }
+                          placeholder="Введите единицу измерения"
+                        />
+                      </div>
+                      <label className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={field.show_calculation}
+                          onChange={e =>
+                            handleIntermediateDataChange(
+                              index,
+                              'show_calculation',
+                              e.target.checked
+                            )
+                          }
+                        />
+                        <span>Показывать расчет</span>
+                      </label>
+                    </div>
+                  ))}
+                  <button type="button" onClick={addIntermediateField} className="add-field-btn">
+                    + Добавить промежуточную переменную
                   </button>
                 </div>
 
@@ -810,6 +960,96 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
                     null,
                     'Введите формулу расчета'
                   )}
+                </div>
+
+                <div className="form-group">
+                  <label>Единица измерения</label>
+                  <input
+                    type="text"
+                    name="unit"
+                    value={formData.unit}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Метод измерения</label>
+                  <input
+                    type="text"
+                    name="measurement_method"
+                    value={formData.measurement_method}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Шифр НД</label>
+                  <input
+                    type="text"
+                    name="nd_code"
+                    value={formData.nd_code}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Наименование НД</label>
+                  <input
+                    type="text"
+                    name="nd_name"
+                    value={formData.nd_name}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+
+                <div className="form-section">
+                  <h3>Условия сходимости</h3>
+                  {formData.convergence_conditions.formulas.map((condition, index) => (
+                    <div key={index} className="field-group">
+                      {formData.convergence_conditions.formulas.length > 1 && (
+                        <button
+                          type="button"
+                          className="delete-field-btn"
+                          onClick={() => deleteConvergenceCondition(index)}
+                        >
+                          ×
+                        </button>
+                      )}
+                      <div className="form-group">
+                        <label>Формула условия</label>
+                        {renderFormulaInput(
+                          condition.formula,
+                          e => handleConvergenceChange(index, 'formula', e.target.value),
+                          'convergence',
+                          index,
+                          'Например: (T₁-T₂) ≤ 2'
+                        )}
+                      </div>
+                      <div className="form-group">
+                        <label>Значение сходимости</label>
+                        <select
+                          value={condition.convergence_value}
+                          onChange={e =>
+                            handleConvergenceChange(index, 'convergence_value', e.target.value)
+                          }
+                          required
+                        >
+                          {CONVERGENCE_OPTIONS.map(option => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button" onClick={addConvergenceCondition} className="add-field-btn">
+                    + Добавить условие сходимости
+                  </button>
                 </div>
 
                 <div className="form-group">
@@ -872,9 +1112,9 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
                             range.formula,
                             e =>
                               handleMeasurementErrorRangeChange(index, 'formula', e.target.value),
-                            'range-formula',
+                            'range',
                             index,
-                            'Например: result < 10'
+                            'Например: a + m < 10'
                           )}
                         </div>
                         <div className="form-group">
@@ -900,159 +1140,6 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
                     </button>
                   </div>
                 )}
-
-                <div className="form-group">
-                  <label>Единица измерения</label>
-                  <input
-                    type="text"
-                    name="unit"
-                    value={formData.unit}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Метод измерения</label>
-                  <input
-                    type="text"
-                    name="measurement_method"
-                    value={formData.measurement_method}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Шифр НД</label>
-                  <input
-                    type="text"
-                    name="nd_code"
-                    value={formData.nd_code}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Наименование НД</label>
-                  <input
-                    type="text"
-                    name="nd_name"
-                    value={formData.nd_name}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-
-                <div className="form-section">
-                  <h3>Промежуточные данные</h3>
-                  {formData.intermediate_data.fields.map((field, index) => (
-                    <div key={index} className="field-group">
-                      {formData.intermediate_data.fields.length > 1 && (
-                        <button
-                          type="button"
-                          className="delete-field-btn"
-                          onClick={() => deleteIntermediateField(index)}
-                        >
-                          ×
-                        </button>
-                      )}
-                      <div className="form-group">
-                        <label>Переменная</label>
-                        <input
-                          type="text"
-                          value={field.name}
-                          onChange={e =>
-                            handleIntermediateDataChange(index, 'name', e.target.value)
-                          }
-                          required
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Описание переменной</label>
-                        <input
-                          type="text"
-                          value={field.description}
-                          onChange={e =>
-                            handleIntermediateDataChange(index, 'description', e.target.value)
-                          }
-                          required
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Единица измерения</label>
-                        <input
-                          type="text"
-                          value={field.unit || ''}
-                          onChange={e =>
-                            handleIntermediateDataChange(index, 'unit', e.target.value)
-                          }
-                          placeholder="Например: мг/л"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Формула</label>
-                        {renderFormulaInput(
-                          field.formula,
-                          e => handleIntermediateDataChange(index, 'formula', e.target.value),
-                          'intermediate',
-                          index,
-                          'Введите формулу для промежуточного расчета'
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  <button type="button" onClick={addIntermediateField} className="add-field-btn">
-                    + Добавить промежуточную переменную
-                  </button>
-                </div>
-
-                <div className="form-section">
-                  <h3>Условия сходимости</h3>
-                  {formData.convergence_conditions.formulas.map((condition, index) => (
-                    <div key={index} className="field-group">
-                      {formData.convergence_conditions.formulas.length > 1 && (
-                        <button
-                          type="button"
-                          className="delete-field-btn"
-                          onClick={() => deleteConvergenceCondition(index)}
-                        >
-                          ×
-                        </button>
-                      )}
-                      <div className="form-group">
-                        <label>Формула условия</label>
-                        {renderFormulaInput(
-                          condition.formula,
-                          e => handleConvergenceChange(index, 'formula', e.target.value),
-                          'convergence',
-                          index,
-                          'Например: (T₁-T₂) ≤ 2'
-                        )}
-                      </div>
-                      <div className="form-group">
-                        <label>Значение сходимости</label>
-                        <select
-                          value={condition.convergence_value}
-                          onChange={e =>
-                            handleConvergenceChange(index, 'convergence_value', e.target.value)
-                          }
-                          required
-                        >
-                          {CONVERGENCE_OPTIONS.map(option => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  ))}
-                  <button type="button" onClick={addConvergenceCondition} className="add-field-btn">
-                    + Добавить условие сходимости
-                  </button>
-                </div>
 
                 <div className="form-group">
                   <label>Тип округления</label>

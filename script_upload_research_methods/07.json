@@ -62,13 +62,15 @@
                     "name": "X₁",
                     "unit": "%",
                     "formula": "(m₁₁-m₁₂)/m₁₃*100",
-                    "description": "Первый расчет механических примесей"
+                    "description": "Первый расчет механических примесей",
+                    "show_calculation": true
                 },
                 {
                     "name": "X₂",
                     "unit": "%",
                     "formula": "(m₂₁-m₂₂)/m₂₃*100",
-                    "description": "Второй расчет механических примесей"
+                    "description": "Второй расчет механических примесей",
+                    "show_calculation": true
                 }
             ]
         },

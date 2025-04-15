@@ -62,19 +62,278 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 16px;
-  padding: 0 16px;
+  margin-bottom: 10px;
+  padding: 0 25px;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 16px;
 }
 
 .back-button {
-  min-width: 160px;
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 8px 16px;
+  background: #fff;
+  border: 1px solid #1976d2;
+  border-radius: 4px;
+  color: #1976d2;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  font-size: 14px;
+  height: 40px;
+}
+
+.back-button:hover {
+  background: #1976d2;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.25);
+}
+
+.back-button .anticon {
+  font-size: 16px;
+  transition: transform 0.2s ease-in-out;
+}
+
+.back-button:hover .anticon {
+  transform: translateX(-2px);
+}
+
+.editor-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #1976d2;
+  font-weight: 500;
 }
 
 .editor-content {
   flex: 1;
   overflow: auto;
   padding: 0 16px;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.loading-state p {
+  margin-top: 16px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.upload-container {
+  padding: 24px;
+  text-align: center;
+}
+
+.ant-upload-drag {
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  background: #fafafa;
+  padding: 32px;
+  transition: all 0.3s;
+}
+
+.ant-upload-drag:hover {
+  border-color: #1890ff;
+}
+
+.ant-upload-text {
+  margin: 16px 0;
+  color: rgba(0, 0, 0, 0.85);
+  font-size: 16px;
+}
+
+.ant-upload-hint {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.excel-editor {
+  padding: 24px;
+}
+
+.excel-editor .ant-table-cell {
+  padding: 8px !important;
+}
+
+.excel-editor input {
+  font-family: 'Times New Roman', serif;
+  padding: 4px 8px;
+  outline: none;
+}
+
+.excel-editor input:focus {
+  background-color: #e6f7ff;
+}
+
+.excel-editor .ant-table-thead > tr > th {
+  background-color: #f5f5f5;
+  font-weight: bold;
+}
+
+.excel-editor .ant-table-tbody > tr:hover > td {
+  background-color: #fafafa;
+}
+
+.template-select {
+  padding: 0 24px;
+}
+
+.template-select .ant-select {
+  font-size: 16px;
+}
+
+.template-select .ant-select-selection-placeholder {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.select-dropdown-divider {
+  margin: 4px 0;
+  border-top: 1px solid #f0f0f0;
+}
+
+.select-dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1976d2;
+  transition: background 0.3s;
+}
+
+.select-dropdown-item:hover {
+  background: #f5f5f5;
+}
+
+.new-template-form {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.form-section {
+  margin-bottom: 32px;
+}
+
+.form-section-title {
+  font-size: 20px;
+  color: #1976d2;
+  margin-bottom: 24px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.form-group {
+  margin-bottom: 24px;
+  max-width: 100%;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #262626;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.template-name-input {
+  height: 40px;
+  font-size: 14px;
+  width: 100%;
+}
+
+.template-name-input:focus {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+}
+
+.upload-container {
+  background: #fafafa;
+  border: 1px dashed #e8e8e8;
+  border-radius: 8px;
+  padding: 0px;
+  transition: all 0.3s;
+  width: calc(100% - 20px);
+}
+
+.upload-container:hover {
+  border-color: #1976d2;
+  background: #f5f5f5;
+}
+
+.ant-upload-drag {
+  border: none !important;
+  background: transparent !important;
+}
+
+.ant-upload-drag-icon {
+  color: #1976d2;
+  font-size: 32px;
+  margin-bottom: 16px;
+}
+
+.ant-upload-text {
+  color: #262626;
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.ant-upload-hint {
+  color: #8c8c8c;
+  font-size: 14px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.selected-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.selected-file:hover {
+  border-color: #1976d2;
+  background: #f8f8f8;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-icon {
+  font-size: 24px;
+  color: #1976d2;
+}
+
+.file-name {
+  font-size: 14px;
+  color: #262626;
+  font-weight: 500;
+}
+
+.delete-file-btn {
+  color: #ff4d4f !important;
+  transition: all 0.3s;
+}
+
+.delete-file-btn:hover {
+  color: #ff7875 !important;
+  background: rgba(255, 77, 79, 0.1) !important;
 }

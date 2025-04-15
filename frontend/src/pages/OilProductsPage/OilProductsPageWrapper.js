@@ -200,7 +200,6 @@ const OilProductsPageWrapper = styled.div`
   }
 
   .tab-content {
-    padding: 1rem;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;

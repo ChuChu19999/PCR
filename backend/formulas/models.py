@@ -111,6 +111,13 @@ class Department(models.Model):
             models.Index(fields=["created_at"]),
             models.Index(fields=["updated_at"]),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["laboratory", "name"],
+                condition=models.Q(is_deleted=False),
+                name="unique_department_name_per_laboratory",
+            )
+        ]
 
     def __str__(self):
         return f"{self.laboratory.name} - {self.name}"
@@ -215,6 +222,12 @@ class ResearchObjectMethod(models.Model):
         verbose_name="Активен",
         help_text="Указывает, отображается ли метод на странице",
     )
+    sort_order = models.IntegerField(
+        default=0,
+        verbose_name="Порядок сортировки",
+        help_text="Определяет порядок отображения метода в списке",
+        db_index=True,
+    )
     created_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name="Дата создания",
@@ -228,7 +241,7 @@ class ResearchObjectMethod(models.Model):
         verbose_name = "Связь объекта исследования с методом"
         verbose_name_plural = "Связи объектов исследования с методами"
         unique_together = ("research_object", "research_method")
-        ordering = ("created_at",)
+        ordering = ("sort_order", "created_at")
 
 
 def get_default_convergence_conditions():
@@ -321,11 +334,6 @@ class ResearchMethod(models.Model):
         verbose_name="Количество знаков округления",
         help_text="Количество десятичных знаков или значащих цифр для округления",
     )
-    parallel_count = models.IntegerField(
-        verbose_name="Количество параллелей",
-        help_text="Количество параллельных расчетов (0 - один расчет)",
-        default=0,
-    )
     is_active = models.BooleanField(
         default=True,
         verbose_name="Активен",
@@ -410,47 +418,177 @@ class ResearchMethodGroup(models.Model):
         self.save()
 
 
-class Calculation(models.Model):
-    class Convergence(models.TextChoices):
-        SATISFACTORY = "satisfactory", "Удовлетворительно"
-        UNSATISFACTORY = "unsatisfactory", "Неудовлетворительно"
-        ABSENCE = "absence", "Отсутствие"
-        TRACES = "traces", "Следы"
+class ProtocolDetails(models.Model):
+    branch = models.CharField(max_length=20, verbose_name="Филиал", help_text="Филиал")
+    sampling_location_detail = models.CharField(
+        max_length=255,
+        verbose_name="Место отбора пробы",
+        help_text="Место отбора пробы",
+    )
+    phone = models.CharField(max_length=20, verbose_name="Телефон", help_text="Телефон")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
+    is_deleted = models.BooleanField(
+        default=False,
+        verbose_name="Удалено",
+        db_index=True,
+    )
+    deleted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Дата удаления",
+    )
 
+    class Meta:
+        verbose_name = "Детали протокола"
+        verbose_name_plural = "Детали протоколов"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["is_deleted"]),
+        ]
+
+    def __str__(self):
+        return f"Детали протокола {self.id}"
+
+    def mark_as_deleted(self):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save()
+
+
+class Protocol(models.Model):
+    test_protocol_number = models.CharField(
+        max_length=100,
+        verbose_name="Номер протокола испытаний",
+        help_text="Номер протокола испытаний",
+        null=True,
+        blank=True,
+    )
+    test_object = models.CharField(
+        max_length=255,
+        verbose_name="Объект испытаний",
+        help_text="Объект испытаний",
+    )
+    laboratory_location = models.CharField(
+        max_length=255,
+        verbose_name="Место осуществления лабораторной деятельности",
+        help_text="Место осуществления лабораторной деятельности",
+        null=True,
+        blank=True,
+    )
+    protocol_details = models.ForeignKey(
+        ProtocolDetails,
+        on_delete=models.CASCADE,
+        related_name="protocols",
+        verbose_name="Детали протокола",
+        help_text="Связанные детали протокола",
+    )
+    sampling_act_number = models.CharField(
+        max_length=50,
+        verbose_name="Номер акта отбора",
+        help_text="Номер акта отбора пробы",
+    )
+    registration_number = models.CharField(
+        max_length=50,
+        verbose_name="Регистрационный номер",
+        help_text="Регистрационный номер пробы",
+    )
+    sampling_date = models.DateField(
+        verbose_name="Дата отбора пробы",
+        help_text="Дата отбора пробы",
+        null=True,
+        blank=True,
+    )
+    receiving_date = models.DateField(
+        verbose_name="Дата получения пробы",
+        help_text="Дата получения пробы в лабораторию",
+        null=True,
+        blank=True,
+    )
+    executor = models.CharField(
+        max_length=150,
+        verbose_name="Исполнитель",
+        help_text="ФИО исполнителя",
+        null=True,
+        blank=True,
+    )
+    excel_template = models.ForeignKey(
+        "ExcelTemplate",
+        on_delete=models.SET_NULL,
+        related_name="protocols",
+        verbose_name="Шаблон протокола",
+        help_text="Шаблон протокола для расчета",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
+    is_deleted = models.BooleanField(
+        default=False,
+        verbose_name="Удалено",
+        db_index=True,
+    )
+    deleted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Дата удаления",
+    )
+
+    class Meta:
+        verbose_name = "Протокол"
+        verbose_name_plural = "Протоколы"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["test_protocol_number"]),
+            models.Index(fields=["registration_number"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Протокол {self.test_protocol_number} ({self.registration_number})"
+
+    def mark_as_deleted(self):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save()
+
+
+class Calculation(models.Model):
     input_data = models.JSONField(
         verbose_name="Входные данные",
         help_text="Входные данные для расчета",
         default=dict,
     )
-    intermediate_calculations = models.JSONField(
-        verbose_name="Промежуточные расчеты",
-        help_text="Результаты промежуточных вычислений",
-        default=dict,
-    )
-    result = models.DecimalField(
-        max_digits=20,
-        decimal_places=10,
+    result = models.CharField(
+        max_length=255,
         verbose_name="Результат",
-        help_text="Итоговый результат расчета",
+        help_text="Итоговый результат расчета (число или текстовое значение)",
     )
-    convergence = models.CharField(
+    measurement_error = models.CharField(
         max_length=20,
-        choices=Convergence.choices,
-        verbose_name="Сходимость",
-        help_text="Оценка сходимости результата",
-    )
-    measurement_error = models.DecimalField(
-        max_digits=20,
-        decimal_places=10,
         verbose_name="Погрешность измерения",
-        help_text="Погрешность измерения результата",
+        help_text="Погрешность измерения результата в формате ±число",
+        null=True,
+        blank=True,
     )
-    research_object_type = models.ForeignKey(
-        ResearchObject,
-        on_delete=models.PROTECT,
+    unit = models.CharField(
+        max_length=20,
+        verbose_name="Единица измерения",
+        help_text="Единица измерения результата",
+        null=True,
+        blank=True,
+    )
+    laboratory_activity_date = models.DateField(
+        verbose_name="Дата лабораторной деятельности",
+        help_text="Дата проведения лабораторного исследования",
+    )
+    protocol = models.ForeignKey(
+        Protocol,
+        on_delete=models.CASCADE,
         related_name="calculations",
-        verbose_name="Тип объекта исследования",
-        help_text="Тип объекта, для которого производится расчет",
+        verbose_name="Протокол",
+        help_text="Протокол испытаний",
     )
     laboratory = models.ForeignKey(
         Laboratory,
@@ -493,17 +631,22 @@ class Calculation(models.Model):
         verbose_name_plural = "Расчеты"
         ordering = ("-created_at",)
         indexes = [
-            models.Index(fields=["convergence"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["laboratory"]),
             models.Index(fields=["department"]),
-            models.Index(fields=["research_object_type"]),
             models.Index(fields=["research_method"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["protocol", "research_method"],
+                condition=models.Q(is_deleted=False),
+                name="unique_protocol_method",
+            )
         ]
 
     def __str__(self):
         department_info = f" ({self.department.name})" if self.department else ""
-        return f"Расчет {self.id} - {self.research_object_type.get_type_display()} - {self.laboratory.name}{department_info}"
+        return f"Расчет {self.id} - {self.research_method.name} - {self.laboratory.name}{department_info}"
 
     def clean(self):
         if self.department and self.department.laboratory != self.laboratory:
@@ -513,87 +656,79 @@ class Calculation(models.Model):
                 }
             )
 
-    def _round_to_significant_figures(self, number, significant_figures):
-        if number == 0:
-            return 0
-
-        from decimal import Decimal
-
-        d = Decimal(str(float(number)))
-
-        # Получаем строковое представление числа в экспоненциальной форм и убираем незначащие нули
-        str_num = f"{d:E}"
-        mantissa, exp = str_num.split("E")
-        exp = int(exp)
-
-        mantissa = mantissa.replace(".", "").rstrip("0")
-
-        if len(mantissa) > significant_figures:
-            mantissa = str(round(int(mantissa[: significant_figures + 1]) / 10))
-
-        # Добавляем нули, если не хватает значащих цифр
-        mantissa = mantissa.ljust(significant_figures, "0")
-
-        # Восстанавливаем десятичную точку
-        if exp >= 0:
-            if exp + 1 >= len(mantissa):
-                result = Decimal(mantissa + "0" * (exp + 1 - len(mantissa)))
-            else:
-                result = Decimal(mantissa[: exp + 1] + "." + mantissa[exp + 1 :])
-        else:
-            result = Decimal("0." + "0" * (-exp - 1) + mantissa)
-
-        return result
-
-    def _get_decimal_places(self, number):
-        """
-        Определяет количество знаков после запятой в числе.
-        Сохраняет незначащие нули в конце.
-
-        Например:
-        12.345 -> 3
-        12.100 -> 3
-        0.120 -> 3
-        12.0 -> 1
-        """
-        from decimal import Decimal
-
-        str_num = str(Decimal(str(float(number))))
-
-        # Если в числе нет десятичной точки, знаков после запятой нет
-        if "." not in str_num:
-            return 0
-
-        # Возвращаем количество знаков после точки, включая незначащие нули
-        return len(str_num.split(".")[1])
-
-    def round_result(self):
-        """
-        Округляет результат и погрешность измерения согласно настройкам метода исследования.
-        """
-        if not self.result:
-            return
-
-        if self.research_method.rounding_type == ResearchMethod.RoundingType.DECIMAL:
-            self.result = round(self.result, self.research_method.rounding_decimal)
-        else:
-            self.result = self._round_to_significant_figures(
-                self.result, self.research_method.rounding_decimal
-            )
-
-        result_decimal_places = self._get_decimal_places(self.result)
-
-        if self.measurement_error is not None:
-            self.measurement_error = round(
-                self.measurement_error, result_decimal_places
-            )
-
     def save(self, *args, **kwargs):
         self.clean()
-        self.round_result()
         super().save(*args, **kwargs)
 
     def mark_as_deleted(self):
         self.is_deleted = True
         self.deleted_at = timezone.now()
         self.save()
+
+
+class ExcelTemplate(models.Model):
+    name = models.CharField(
+        max_length=100,
+        verbose_name="Название шаблона",
+        help_text="Введите название шаблона",
+        db_index=True,
+    )
+    version = models.CharField(
+        max_length=8,
+        verbose_name="Версия",
+        help_text="Версия шаблона (например, v1)",
+    )
+    file = models.BinaryField(
+        verbose_name="xlsx файл",
+        help_text="Файл шаблона в формате xlsx",
+    )
+    file_name = models.CharField(
+        max_length=100,
+        verbose_name="Имя файла",
+        help_text="Оригинальное имя файла",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Активен",
+        help_text="Указывает, является ли версия шаблона активной",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Дата создания",
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Дата обновления",
+    )
+
+    class Meta:
+        verbose_name = "Шаблон Excel"
+        verbose_name_plural = "Шаблоны Excel"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["name"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} - {self.version}"
+
+    @classmethod
+    def get_next_version(cls, name):
+        """
+        Получает следующую версию для шаблона с указанным именем.
+        Например, если последняя версия v1, вернет v2.
+        """
+        latest = cls.objects.filter(name=name).order_by("-version").first()
+        if not latest:
+            return "v1"
+
+        current_num = int(latest.version[1:])
+        return f"v{current_num + 1}"
+
+    def deactivate(self):
+        """
+        Деактивирует текущий шаблон и возвращает следующую версию.
+        """
+        self.is_active = False
+        self.save()
+        return self.get_next_version(self.name)

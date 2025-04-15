@@ -1,17 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
-import { Tabs, Tab, Typography, Snackbar, Alert, IconButton, Tooltip } from '@mui/material';
+import { Typography, Snackbar, Alert, IconButton, Tooltip } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import { Form, Input, Button, Select, message } from 'antd';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import { Form, Input, Button, Select, message, Modal, AutoComplete, DatePicker } from 'antd';
 import Layout from '../../shared/ui/Layout/Layout';
 import { FormItem } from '../../features/FormItems';
 import OilProductsPageWrapper from './OilProductsPageWrapper';
 import AddCalculationModal from '../../features/Modals/AddCalculationModal/AddCalculationModal';
 import HideMethodModal from '../../features/Modals/HideMethodModal/HideMethodModal';
+import GenerateProtocolModal from '../../features/Modals/GenerateProtocolModal/GenerateProtocolModal';
+import LoadingCard from '../../features/Cards/ui/LoadingCard/LoadingCard';
+import SaveCalculationForm from '../../features/Forms/SaveCalculationForm/SaveCalculationForm';
 import axios from 'axios';
 import './OilProductsPage.css';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import dayjs from 'dayjs';
+import 'dayjs/locale/ru';
+import locale from 'antd/es/date-picker/locale/ru_RU';
 
 const { Option } = Select;
 
@@ -36,7 +44,10 @@ const OilProductsPage = () => {
   const isDepartment = location.pathname.includes('/departments/');
 
   const [form] = Form.useForm();
+  const [formValues, setFormValues] = useState({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [lastCalculationResult, setLastCalculationResult] = useState({});
   const [researchMethods, setResearchMethods] = useState([]);
   const [methodGroups, setMethodGroups] = useState([]);
   const [currentMethod, setCurrentMethod] = useState(null);
@@ -52,6 +63,36 @@ const OilProductsPage = () => {
   const [methodToHide, setMethodToHide] = useState(null);
   const [selectedMethod, setSelectedMethod] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [laboratoryId, setLaboratoryId] = useState(null);
+  const [isGenerateProtocolModalOpen, setIsGenerateProtocolModalOpen] = useState(false);
+  const [registrationNumber, setRegistrationNumber] = useState('');
+  const [isLoadingRegistrationData, setIsLoadingRegistrationData] = useState(false);
+  const [lockedMethods, setLockedMethods] = useState({});
+  const [registrationOptions, setRegistrationOptions] = useState([]);
+  const [methodsData, setMethodsData] = useState({});
+  const inputRefs = React.useRef({});
+  const [laboratoryActivityDate, setLaboratoryActivityDate] = useState(null);
+  const [dateError, setDateError] = useState('');
+
+  // Эффект для отслеживания изменений значений формы
+  useEffect(() => {
+    const values = form.getFieldsValue();
+    setFormValues(values);
+  }, [form]);
+
+  // Функция для определения количества знаков после запятой
+  const getDecimalPlaces = numStr => {
+    if (!numStr) return 0;
+    const parts = numStr.toString().split(',');
+    return parts.length > 1 ? parts[1].length : 0;
+  };
+
+  // Функция округления
+  const roundValue = (value, mainResult) => {
+    const decimalPlaces = getDecimalPlaces(mainResult) + 1;
+    const numValue = parseFloat(value.replace(',', '.'));
+    return numValue.toFixed(decimalPlaces).replace('.', ',');
+  };
 
   const fetchResearchMethods = async () => {
     try {
@@ -67,6 +108,7 @@ const OilProductsPage = () => {
       if (response.data.length > 0) {
         const page = response.data[0];
         setResearchPageId(page.id);
+        setLaboratoryId(isDepartment ? page.laboratory : id);
 
         const groupsResponse = await axios.get(
           `${import.meta.env.VITE_API_URL}/api/research-method-groups/`
@@ -132,6 +174,27 @@ const OilProductsPage = () => {
   };
 
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        if (isDepartment) {
+          const departmentResponse = await axios.get(
+            `${import.meta.env.VITE_API_URL}/api/departments/${id}/`
+          );
+          setLaboratoryId(departmentResponse.data.laboratory);
+        } else {
+          setLaboratoryId(id);
+        }
+      } catch (error) {
+        console.error('Ошибка при получении данных:', error);
+      }
+    };
+
+    if (id) {
+      fetchData();
+    }
+  }, [id, isDepartment]);
+
+  useEffect(() => {
     fetchResearchMethods();
   }, [id, isDepartment]);
 
@@ -153,14 +216,13 @@ const OilProductsPage = () => {
 
   const handleTabChange = async (_, newValue) => {
     setSelectedTab(newValue);
+
     const activeMethods = researchMethods.filter(method => method.is_active);
     if (researchPageId && activeMethods[newValue]) {
       const selectedMethod = activeMethods[newValue];
       if (selectedMethod.is_group && selectedMethod.methods && selectedMethod.methods.length > 0) {
-        // Если выбрана группа, загружаем первый метод из группы
         const firstGroupMethod = selectedMethod.methods[0];
         await fetchMethodDetails(researchPageId, firstGroupMethod.id);
-        // Сохраняем информацию о текущей группе
         setCurrentMethod(prev => ({
           ...prev,
           groupInfo: {
@@ -171,7 +233,6 @@ const OilProductsPage = () => {
         }));
       } else {
         await fetchMethodDetails(researchPageId, selectedMethod.id);
-        // Очищаем информацию о группе
         setCurrentMethod(prev => ({
           ...prev,
           groupInfo: null,
@@ -351,7 +412,7 @@ const OilProductsPage = () => {
     return (
       <Option key={method.id} value={method.id}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span>{method.name}</span>
+          <span style={{ fontSize: '14px', fontFamily: 'HeliosCondC' }}>{method.name}</span>
           <span className="method-group-label">{method.group.name}</span>
         </div>
       </Option>
@@ -383,16 +444,23 @@ const OilProductsPage = () => {
     );
   };
 
-  const renderInputFields = (methodId, parallelIndex = 0) => {
+  const renderInputFields = methodId => {
     if (!currentMethod) return null;
 
-    const result = calculationResults[currentMethod.id]?.[parallelIndex];
-    const generalFields = currentMethod.input_data.fields.filter(field => field.is_general);
-    const nonGeneralFields = currentMethod.input_data.fields.filter(field => !field.is_general);
-    const hasParallels = currentMethod.parallel_count > 0;
+    const fields = currentMethod.input_data.fields;
+    const cardIndices = [...new Set(fields.map(field => field.card_index))].sort();
 
-    // Группируем поля по card_index
-    const cardIndices = [...new Set(nonGeneralFields.map(field => field.card_index))].sort();
+    const handleKeyDown = (e, currentFieldIndex, cardFields) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const nextFieldIndex = (currentFieldIndex + 1) % cardFields.length; // Используем остаток от деления для циклического перехода
+        const nextField = cardFields[nextFieldIndex];
+        const nextFieldName = `${methodId}_${nextField.name}`;
+        if (inputRefs.current[nextFieldName]) {
+          inputRefs.current[nextFieldName].focus();
+        }
+      }
+    };
 
     return (
       <>
@@ -400,89 +468,106 @@ const OilProductsPage = () => {
           style={{
             display: 'flex',
             flexDirection: 'row',
+            width: 'calc(100% + 20px)',
             gap: '16px',
-            marginBottom: '16px',
+            marginBottom: '10px',
             justifyContent: 'center',
             flexWrap: 'wrap',
           }}
         >
           {cardIndices.map(cardIndex => {
-            const cardFields = nonGeneralFields.filter(field => field.card_index === cardIndex);
+            const cardFields = fields.filter(field => field.card_index === cardIndex);
             if (cardFields.length === 0) return null;
 
             return (
               <div
                 key={cardIndex}
                 style={{
-                  padding: '20px',
-                  backgroundColor: '#ffffff',
-                  borderRadius: '8px',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-                  marginBottom: '0',
+                  padding: '24px',
+                  background: '#f5f8ff',
+                  borderRadius: '16px',
+                  boxShadow: 'rgba(17, 12, 46, 0.05) 0px 48px 100px 0px',
                   flex: '1',
-                  minWidth: '200px',
-                  maxWidth: '250px',
+                  minWidth: '250px',
+                  maxWidth: '300px',
+                  border: '1px solid rgba(22, 119, 255, 0.3)',
+                  transition: 'all 0.3s ease',
+                  transform: 'translateY(0)',
+                  backdropFilter: 'blur(8px)',
+                  backgroundColor: 'rgba(245, 248, 255, 0.95)',
                 }}
               >
-                {cardFields.map((field, fieldIndex) => (
-                  <div key={fieldIndex} className="input-field-container">
-                    <FormItem
-                      title={
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                          <span style={{ fontSize: '14px' }}>{field.name}</span>
-                          <Tooltip title={field.description} placement="right">
-                            <IconButton size="small">
-                              <HelpOutlineIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </div>
-                      }
-                      name={`${currentMethod.id}_${field.name}_${parallelIndex}`}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Input
-                          placeholder={`Введите ${field.name}`}
-                          maxLength={10}
-                          style={{ fontSize: '14px' }}
-                          onChange={e =>
-                            handleInputChange(
-                              e,
-                              `${currentMethod.id}_${field.name}_${parallelIndex}`
-                            )
-                          }
-                          onKeyPress={e => {
-                            const pattern = /^[0-9,\-]$/;
-                            if (!pattern.test(e.key)) {
-                              e.preventDefault();
-                            }
-                            if (e.key === '.') {
-                              e.preventDefault();
-                              const input = e.target;
-                              const value = input.value;
-                              const position = input.selectionStart;
-                              const newValue =
-                                value.slice(0, position) + ',' + value.slice(position);
-                              form.setFieldValue(
-                                `${currentMethod.id}_${field.name}_${parallelIndex}`,
-                                newValue
-                              );
-                              setTimeout(() => {
-                                input.setSelectionRange(position + 1, position + 1);
-                              }, 0);
-                            }
+                {cardFields.map((field, fieldIndex) => {
+                  const formFieldName = `${methodId}_${field.name}`;
+                  const fieldValue = formValues[formFieldName];
+
+                  return (
+                    <div key={fieldIndex} className="input-field-container">
+                      <FormItem
+                        title={
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <span style={{ fontSize: '14px' }}>{field.name}</span>
+                            <Tooltip title={field.description} placement="right">
+                              <IconButton size="small">
+                                <HelpOutlineIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </div>
+                        }
+                        name={formFieldName}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            width: '100%',
                           }}
-                        />
-                        {field.unit && (
-                          <span
-                            style={{ color: '#666', fontSize: '14px', fontFamily: 'HeliosCondC' }}
-                          >
-                            {field.unit}
-                          </span>
-                        )}
-                      </div>
-                    </FormItem>
-                  </div>
-                ))}
+                        >
+                          <Input
+                            ref={el => (inputRefs.current[formFieldName] = el)}
+                            placeholder={`Введите ${field.name}`}
+                            maxLength={10}
+                            style={{ fontSize: '14px', flex: '1' }}
+                            value={fieldValue}
+                            disabled={lockedMethods[methodId]}
+                            onChange={e => {
+                              const value = e.target.value;
+                              form.setFieldValue(formFieldName, value);
+                              setFormValues(prev => ({
+                                ...prev,
+                                [formFieldName]: value,
+                              }));
+                            }}
+                            onKeyDown={e => handleKeyDown(e, fieldIndex, cardFields)}
+                            onPaste={e => {
+                              e.preventDefault();
+                              const pastedText = e.clipboardData.getData('text');
+                              const cleanedValue = pastedText.trim().replace(/\s+/g, '');
+                              form.setFieldValue(formFieldName, cleanedValue);
+                              setFormValues(prev => ({
+                                ...prev,
+                                [formFieldName]: cleanedValue,
+                              }));
+                            }}
+                          />
+                          {field.unit && (
+                            <span
+                              style={{
+                                color: '#666',
+                                fontSize: '14px',
+                                fontFamily: 'HeliosCondC',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {field.unit}
+                            </span>
+                          )}
+                        </div>
+                      </FormItem>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -491,60 +576,104 @@ const OilProductsPage = () => {
     );
   };
 
+  const handleOpenSaveModal = () => {
+    if (!laboratoryActivityDate) {
+      setSnackbar({
+        open: true,
+        message: 'Необходимо указать дату лабораторной деятельности',
+        severity: 'error',
+      });
+      return;
+    }
+    setDateError('');
+    if (currentMethod?.id && lastCalculationResult[currentMethod.id]) {
+      setIsSaveModalOpen(true);
+    } else {
+      setSnackbar({
+        open: true,
+        message: 'Нет результатов для сохранения',
+        severity: 'warning',
+      });
+    }
+  };
+
+  const handleCloseSaveModal = () => {
+    setIsSaveModalOpen(false);
+  };
+
+  const handleSaveSuccess = savedData => {
+    setIsSaveModalOpen(false);
+
+    // Очищаем результаты расчетов
+    setLastCalculationResult(prev => ({
+      ...prev,
+      [currentMethod.id]: null,
+    }));
+    setCalculationResults(prev => ({
+      ...prev,
+      [currentMethod.id]: [],
+    }));
+
+    // Очищаем поля ввода для текущего метода
+    const emptyValues = {};
+    currentMethod.input_data.fields.forEach(field => {
+      emptyValues[`${currentMethod.id}_${field.name}`] = '';
+    });
+    form.setFieldsValue(emptyValues);
+
+    setMethodsData(prev => ({
+      ...prev,
+      [currentMethod.id]: {
+        ...prev[currentMethod.id],
+        formValues: emptyValues,
+        lastCalculationResult: null,
+        calculationResults: [],
+      },
+    }));
+
+    // Очищаем значения формы в общем состоянии
+    setFormValues(prev => ({
+      ...prev,
+      ...emptyValues,
+    }));
+
+    // Очищаем регистрационный номер и дату лабораторной деятельности
+    setRegistrationNumber('');
+    setLaboratoryActivityDate(null);
+
+    // Снимаем блокировку с полей
+    setLockedMethods(prev => ({
+      ...prev,
+      [currentMethod.id]: false,
+    }));
+
+    message.success('Результат расчета успешно сохранен');
+  };
+
   const handleCalculate = async methodId => {
     try {
-      // Проверяем заполнение полей перед расчетом
       const methodDetailsResponse = await axios.get(
         `${import.meta.env.VITE_API_URL}/api/research-methods/${methodId}/`
       );
       const methodDetails = methodDetailsResponse.data;
-      const parallelCount = methodDetails.parallel_count || 0;
 
-      // Проверяем общие поля
-      const emptyGeneralFields = [];
-      methodDetails.input_data.fields
-        .filter(field => field.is_general)
-        .forEach(field => {
-          const value = form.getFieldValue(`${methodId}_${field.name}_general`);
-          if (!value && value !== 0) {
-            emptyGeneralFields.push(field.name);
-          }
-        });
-
-      // Проверяем поля для каждой параллели
-      const emptyParallelFields = {};
-      for (let i = 0; i <= parallelCount; i++) {
-        const emptyFields = [];
-        methodDetails.input_data.fields
-          .filter(field => !field.is_general)
-          .forEach(field => {
-            const value = form.getFieldValue(`${methodId}_${field.name}_${i}`);
-            if (!value && value !== 0) {
-              emptyFields.push(field.name);
-            }
-          });
-        if (emptyFields.length > 0) {
-          emptyParallelFields[i] = emptyFields;
+      const inputData = {};
+      methodDetails.input_data.fields.forEach(field => {
+        const value = form.getFieldValue(`${methodId}_${field.name}`);
+        if (value) {
+          const cleanedValue = value.toString().trim().replace(',', '.');
+          inputData[field.name] = cleanedValue;
         }
-      }
+      });
 
-      // Если есть незаполненные поля, показываем уведомление
-      if (emptyGeneralFields.length > 0 || Object.keys(emptyParallelFields).length > 0) {
-        let message = 'Необходимо заполнить следующие поля:\n';
+      const emptyFields = methodDetails.input_data.fields
+        .filter(field => !inputData[field.name] || inputData[field.name].length === 0)
+        .map(field => field.name);
 
-        if (emptyGeneralFields.length > 0) {
-          message += `\nОбщие поля:\n${emptyGeneralFields.join(', ')}`;
-        }
-
-        if (Object.keys(emptyParallelFields).length > 0) {
-          Object.entries(emptyParallelFields).forEach(([parallel, fields]) => {
-            message += `\n\nПараллель ${parseInt(parallel) + 1}:\n${fields.join(', ')}`;
-          });
-        }
-
+      if (emptyFields.length > 0) {
         setSnackbar({
           open: true,
-          message,
+          message: `Необходимо заполнить следующие поля:\n${emptyFields.join(', ')}`,
           severity: 'warning',
         });
         return;
@@ -552,90 +681,46 @@ const OilProductsPage = () => {
 
       setIsCalculating(true);
 
-      // Находим метод, учитывая возможность группировки
-      let method = null;
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/calculate/`, {
+        input_data: inputData,
+        research_method: methodDetails,
+      });
 
-      // Сначала ищем среди одиночных методов
-      method = researchMethods.find(m => !m.is_group && m.id === methodId);
-
-      // Если не нашли среди одиночных, ищем в группах
-      if (!method) {
-        for (const groupMethod of researchMethods) {
-          if (groupMethod.is_group && groupMethod.methods) {
-            const foundMethod = groupMethod.methods.find(m => m.id === methodId);
-            if (foundMethod) {
-              method = foundMethod;
-              break;
-            }
-          }
-        }
-      }
-
-      if (!method) {
-        throw new Error('Метод не найден');
-      }
-
-      const parallelResults = [];
-
-      // Получаем значения общих переменных
-      const generalValues = {};
-      methodDetails.input_data.fields
-        .filter(field => field.is_general)
-        .forEach(field => {
-          const value = form.getFieldValue(`${methodId}_${field.name}_general`);
-          if (value) {
-            generalValues[field.name] = value.trim().replace(',', '.');
-          }
-        });
-
-      // Вычисляем для каждой параллели
-      for (let i = 0; i <= parallelCount; i++) {
-        const formValues = form.getFieldsValue();
-        const inputData = { ...generalValues }; // Добавляем общие значения
-
-        // Добавляем значения не общих переменных для текущей параллели
-        methodDetails.input_data.fields
-          .filter(field => !field.is_general)
-          .forEach(field => {
-            let value = formValues[`${methodId}_${field.name}_${i}`];
-
-            if (typeof value === 'string') {
-              value = value.trim().replace(',', '.');
-            }
-            inputData[field.name] = parseFloat(value);
-          });
-
-        // Получаем выбранный вариант расчета
-        const selectedVariantIndex = selectedVariants[`${methodId}_${i}`];
-        const selectedVariant =
-          selectedVariantIndex !== undefined && methodDetails.variants[selectedVariantIndex];
-
-        const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/calculate/`, {
-          input_data: inputData,
-          research_method: {
-            ...methodDetails,
-            formula: selectedVariant ? selectedVariant.formula : methodDetails.formula,
-          },
-        });
-
-        parallelResults.push({
-          ...response.data,
-          result: response.data.result ? response.data.result.replace('.', ',') : null,
-          measurement_error: response.data.measurement_error
-            ? response.data.measurement_error.replace('.', ',')
-            : null,
-          intermediate_results: Object.fromEntries(
-            Object.entries(response.data.intermediate_results).map(([key, value]) => [
-              key,
-              value.replace('.', ','),
-            ])
-          ),
-        });
-      }
+      const result = {
+        ...response.data,
+        result: response.data.result ? response.data.result.replace('.', ',') : null,
+        measurement_error: response.data.measurement_error
+          ? response.data.measurement_error.replace('.', ',')
+          : null,
+        intermediate_results: Object.fromEntries(
+          Object.entries(response.data.intermediate_results || {}).map(([key, value]) => [
+            key,
+            value.replace('.', ','),
+          ])
+        ),
+      };
 
       setCalculationResults(prev => ({
         ...prev,
-        [methodId]: parallelResults,
+        [methodId]: [result],
+      }));
+
+      setLastCalculationResult(prev => ({
+        ...prev,
+        [methodId]: {
+          input_data: inputData,
+          result: result.result,
+          measurement_error: result.measurement_error,
+          unit: methodDetails.unit,
+          convergence:
+            result.convergence === 'unsatisfactory'
+              ? 'Неудовлетворительно'
+              : result.convergence === 'traces'
+                ? 'Следы'
+                : result.convergence === 'absence'
+                  ? 'Отсутствие'
+                  : result.convergence,
+        },
       }));
     } catch (error) {
       console.error('Ошибка при расчете:', error);
@@ -701,11 +786,253 @@ const OilProductsPage = () => {
     return result;
   };
 
+  const onDragEnd = async result => {
+    if (!result.destination) return;
+
+    const items = Array.from(researchMethods);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    const updatedItems = items.map((item, index) => ({
+      ...item,
+      sort_order: index,
+    }));
+
+    setResearchMethods(updatedItems);
+
+    try {
+      // Собираем все методы для обновления
+      const methodsToUpdate = updatedItems.flatMap((item, index) => {
+        if (item.is_group) {
+          // Для группы отправляем все её методы
+          return item.methods.map(method => ({
+            id: method.id,
+            sort_order: index,
+          }));
+        } else {
+          // Для одиночного метода
+          return [
+            {
+              id: item.id,
+              sort_order: index,
+            },
+          ];
+        }
+      });
+
+      await axios.patch(
+        `${import.meta.env.VITE_API_URL}/api/research-pages/${researchPageId}/methods/order/`,
+        { methods: methodsToUpdate }
+      );
+    } catch (error) {
+      console.error('Ошибка при обновлении порядка методов:', error);
+      setSnackbar({
+        open: true,
+        message: 'Не удалось обновить порядок методов',
+        severity: 'error',
+      });
+    }
+  };
+
+  const handleOpenGenerateProtocolModal = () => {
+    setIsGenerateProtocolModalOpen(true);
+  };
+
+  const handleCloseGenerateProtocolModal = () => {
+    setIsGenerateProtocolModalOpen(false);
+  };
+
+  const handleRegistrationSearch = async value => {
+    if (!value) {
+      setRegistrationOptions([]);
+      return;
+    }
+
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/get-registration-numbers/`,
+        {
+          params: {
+            laboratory_id: laboratoryId,
+            department_id: isDepartment ? id : null,
+            method_id: currentMethod?.id,
+            partial_number: value,
+          },
+        }
+      );
+
+      if (Array.isArray(response.data)) {
+        const options = response.data.map(number => ({
+          value: number,
+          label: number,
+        }));
+        setRegistrationOptions(options);
+      }
+    } catch (error) {
+      console.error('Ошибка при получении регистрационных номеров:', error);
+      setRegistrationOptions([]);
+    }
+  };
+
+  const handleLoadRegistrationData = async () => {
+    if (!registrationNumber || !currentMethod) {
+      setSnackbar({
+        open: true,
+        message: 'Введите регистрационный номер',
+        severity: 'warning',
+      });
+      return;
+    }
+
+    setIsLoadingRegistrationData(true);
+    setLockedMethods(prev => ({
+      ...prev,
+      [currentMethod.id]: true,
+    }));
+
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/get-registration-numbers/`,
+        {
+          params: {
+            laboratory_id: laboratoryId,
+            method_id: currentMethod.id,
+            registration_number: registrationNumber,
+            department_id: isDepartment ? id : null,
+          },
+        }
+      );
+
+      console.log('Полученные данные от сервера:', response.data);
+
+      if (response.data) {
+        const initialValues = {};
+
+        // Обрабатываем поля ввода
+        Object.entries(response.data).forEach(([fieldName, value]) => {
+          if (fieldName === 'laboratory_activity_date') {
+            console.log('Найдена дата лабораторной деятельности:', value);
+            const date = dayjs(value);
+            console.log('Дата после преобразования в dayjs:', date);
+            console.log('Дата валидна:', date.isValid());
+            console.log('Дата в формате DD.MM.YYYY:', date.format('DD.MM.YYYY'));
+            if (date.isValid()) {
+              setLaboratoryActivityDate(date);
+              console.log('Дата установлена в состояние');
+            }
+          } else {
+            currentMethod.input_data.fields.forEach(field => {
+              if (field.name === fieldName) {
+                const formFieldName = `${currentMethod.id}_${field.name}`;
+                initialValues[formFieldName] = value.toString().replace('.', ',');
+              }
+            });
+          }
+        });
+
+        // Обновляем значения формы
+        form.setFieldsValue(initialValues);
+        setFormValues(prev => ({
+          ...prev,
+          ...initialValues,
+        }));
+
+        setSnackbar({
+          open: true,
+          message: 'Данные успешно загружены',
+          severity: 'success',
+        });
+      }
+    } catch (error) {
+      console.error('Ошибка при получении данных:', error);
+      setSnackbar({
+        open: true,
+        message: 'Не удалось загрузить данные по указанному номеру',
+        severity: 'error',
+      });
+      setLockedMethods(prev => ({
+        ...prev,
+        [currentMethod.id]: false,
+      }));
+    } finally {
+      setIsLoadingRegistrationData(false);
+    }
+  };
+
+  useEffect(() => {
+    const values = form.getFieldsValue();
+    if (currentMethod?.id) {
+      setMethodsData(prev => ({
+        ...prev,
+        [currentMethod.id]: {
+          formValues: values,
+          calculationResults: calculationResults[currentMethod.id] || [],
+          lastCalculationResult: lastCalculationResult[currentMethod.id],
+          registrationNumber: registrationNumber,
+          lockedMethods: lockedMethods[currentMethod.id],
+        },
+      }));
+    }
+  }, [
+    form,
+    currentMethod?.id,
+    calculationResults,
+    lastCalculationResult,
+    registrationNumber,
+    lockedMethods,
+  ]);
+
+  useEffect(() => {
+    if (currentMethod?.id && methodsData[currentMethod.id]) {
+      const methodData = methodsData[currentMethod.id];
+      form.setFieldsValue(methodData.formValues || {});
+      setCalculationResults(prev => ({
+        ...prev,
+        [currentMethod.id]: methodData.calculationResults || [],
+      }));
+      setLastCalculationResult(prev => ({
+        ...prev,
+        [currentMethod.id]: methodData.lastCalculationResult,
+      }));
+      setRegistrationNumber(methodData.registrationNumber || '');
+      setLockedMethods(prev => ({
+        ...prev,
+        [currentMethod.id]: methodData.lockedMethods,
+      }));
+    }
+  }, [currentMethod?.id]);
+
+  // Функция для форматирования ввода даты
+  const formatDateInput = value => {
+    const numbers = value.replace(/\D/g, '');
+    const limitedNumbers = numbers.slice(0, 8);
+    if (limitedNumbers.length <= 2) return limitedNumbers;
+    if (limitedNumbers.length <= 4)
+      return `${limitedNumbers.slice(0, 2)}.${limitedNumbers.slice(2)}`;
+    return `${limitedNumbers.slice(0, 2)}.${limitedNumbers.slice(2, 4)}.${limitedNumbers.slice(4)}`;
+  };
+
+  // Функция для валидации даты
+  const isValidDate = dateString => {
+    if (!/^\d{2}\.\d{2}\.\d{4}$/.test(dateString)) return false;
+    const [day, month, year] = dateString.split('.').map(Number);
+    const date = new Date(year, month - 1, day);
+    return (
+      date.getDate() === day &&
+      date.getMonth() === month - 1 &&
+      date.getFullYear() === year &&
+      year >= 1900 &&
+      year <= 2100
+    );
+  };
+
   if (isLoading) {
     return (
       <OilProductsPageWrapper>
         <Layout title="Загрузка...">
-          <div>Загрузка данных...</div>
+          <div style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}>
+            <LoadingCard />
+          </div>
         </Layout>
       </OilProductsPageWrapper>
     );
@@ -721,24 +1048,30 @@ const OilProductsPage = () => {
     );
   }
 
+  const activeMethods = researchMethods.filter(method => method.is_active);
+  const hasNoMethods = activeMethods.length === 0;
+
   return (
     <OilProductsPageWrapper>
       <Layout title="Нефтепродукты">
-        <Form form={form} onFinish={onFinish} layout="vertical">
-          <div style={{ display: 'flex', height: 'calc(100vh - 120px)' }}>
+        <Form form={form} onFinish={onFinish} layout="vertical" preserve={false}>
+          <div
+            style={{ display: 'flex', height: 'calc(100vh - 120px)', fontFamily: 'HeliosCondC' }}
+          >
             {/* Левая панель с методами */}
             <div
               style={{
                 width: '250px',
                 borderRight: '1px solid #e2e8f0',
                 overflowY: 'auto',
-                padding: '16px',
+                padding: '12px',
                 paddingTop: '12px',
                 backgroundColor: '#f8fafc',
-                height: '100%',
+                height: 'calc(100% + 9px)',
                 position: 'sticky',
                 top: 0,
-                borderBottomLeftRadius: '15px',
+                borderBottomLeftRadius: '20px',
+                fontFamily: 'HeliosCondC',
               }}
             >
               <div
@@ -765,6 +1098,7 @@ const OilProductsPage = () => {
                     alignItems: 'center',
                     lineHeight: 1,
                     fontWeight: 600,
+                    fontFamily: 'HeliosCondC',
                   }}
                 >
                   Методы исследования
@@ -785,187 +1119,387 @@ const OilProductsPage = () => {
                   <AddIcon fontSize="small" />
                 </IconButton>
               </div>
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '5px',
-                  height: 'calc(100% - 60px)', // Вычитаем высоту заголовка
-                  overflowY: 'auto',
-                  paddingRight: '4px', // Добавляем отступ справа для скроллбара
-                }}
-              >
-                {researchMethods.map((method, index) => {
-                  if (method.is_group) {
-                    return (
+              {hasNoMethods ? (
+                <div
+                  style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    color: '#718096',
+                    fontSize: '14px',
+                    fontFamily: 'HeliosCondC',
+                  }}
+                >
+                  Нет активных методов исследования
+                </div>
+              ) : (
+                <DragDropContext onDragEnd={onDragEnd}>
+                  <Droppable droppableId="methods">
+                    {provided => (
                       <div
-                        key={method.uniqueId}
-                        onClick={() => handleTabChange(null, index)}
+                        {...provided.droppableProps}
+                        ref={provided.innerRef}
                         style={{
-                          padding: '8px 12px',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          backgroundColor: selectedTab === index ? '#e2e8f0' : 'transparent',
                           display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          transition: 'all 0.2s ease-in-out',
-                          boxShadow: selectedTab === index ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
-                          border:
-                            selectedTab === index ? '1px solid #cbd5e0' : '1px solid transparent',
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.backgroundColor = '#edf2f7';
-                          e.currentTarget.style.transform = 'translateY(-1px)';
-                          e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-                          e.currentTarget.style.border = '1px solid #e2e8f0';
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.backgroundColor =
-                            selectedTab === index ? '#e2e8f0' : 'transparent';
-                          e.currentTarget.style.transform = 'none';
-                          e.currentTarget.style.boxShadow =
-                            selectedTab === index ? '0 2px 4px rgba(0,0,0,0.05)' : 'none';
-                          e.currentTarget.style.border =
-                            selectedTab === index ? '1px solid #cbd5e0' : '1px solid transparent';
+                          flexDirection: 'column',
+                          gap: '5px',
+                          height: 'calc(100% - 60px)',
+                          overflowY: 'auto',
+                          paddingRight: '4px',
                         }}
                       >
-                        <span style={{ fontSize: '14px' }}>{method.name}</span>
-                        <IconButton
-                          size="small"
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleOpenHideModal(method);
-                          }}
-                          sx={{ padding: '2px' }}
-                        >
-                          <CloseIcon fontSize="small" />
-                        </IconButton>
+                        {researchMethods.map((method, index) => {
+                          if (method.is_group) {
+                            return (
+                              <Draggable
+                                key={method.uniqueId}
+                                draggableId={method.uniqueId.toString()}
+                                index={index}
+                              >
+                                {(provided, snapshot) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    onClick={() => handleTabChange(null, index)}
+                                    style={{
+                                      ...provided.draggableProps.style,
+                                      padding: '8px 12px',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      backgroundColor:
+                                        selectedTab === index ? '#e2e8f0' : 'transparent',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      transition: 'all 0.2s ease-in-out',
+                                      boxShadow:
+                                        selectedTab === index
+                                          ? '0 2px 4px rgba(0,0,0,0.05)'
+                                          : 'none',
+                                      border:
+                                        selectedTab === index
+                                          ? '1px solid #cbd5e0'
+                                          : '1px solid transparent',
+                                      opacity: snapshot.isDragging ? 0.8 : 1,
+                                      fontFamily: 'HeliosCondC',
+                                    }}
+                                    onMouseEnter={e => {
+                                      e.currentTarget.style.backgroundColor = '#edf2f7';
+                                      e.currentTarget.style.transform = 'translateY(-1px)';
+                                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                                      e.currentTarget.style.border = '1px solid #e2e8f0';
+                                    }}
+                                    onMouseLeave={e => {
+                                      e.currentTarget.style.backgroundColor =
+                                        selectedTab === index ? '#e2e8f0' : 'transparent';
+                                      e.currentTarget.style.transform = 'none';
+                                      e.currentTarget.style.boxShadow =
+                                        selectedTab === index
+                                          ? '0 2px 4px rgba(0,0,0,0.05)'
+                                          : 'none';
+                                      e.currentTarget.style.border =
+                                        selectedTab === index
+                                          ? '1px solid #cbd5e0'
+                                          : '1px solid transparent';
+                                    }}
+                                  >
+                                    <div
+                                      style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                                    >
+                                      <div
+                                        {...provided.dragHandleProps}
+                                        style={{ display: 'flex', alignItems: 'center' }}
+                                      >
+                                        <DragIndicatorIcon
+                                          style={{ fontSize: '20px', color: '#666' }}
+                                        />
+                                      </div>
+                                      <span style={{ fontSize: '14px', fontFamily: 'HeliosCondC' }}>
+                                        {method.name}
+                                      </span>
+                                    </div>
+                                    <IconButton
+                                      size="small"
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        handleOpenHideModal(method);
+                                      }}
+                                      sx={{ padding: '2px' }}
+                                    >
+                                      <CloseIcon fontSize="small" />
+                                    </IconButton>
+                                  </div>
+                                )}
+                              </Draggable>
+                            );
+                          }
+                          return method.is_active ? (
+                            <Draggable
+                              key={method.uniqueId}
+                              draggableId={method.uniqueId.toString()}
+                              index={index}
+                            >
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  onClick={() => handleTabChange(null, index)}
+                                  style={{
+                                    ...provided.draggableProps.style,
+                                    padding: '8px 12px',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    backgroundColor:
+                                      selectedTab === index ? '#e2e8f0' : 'transparent',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    transition: 'all 0.2s ease-in-out',
+                                    boxShadow:
+                                      selectedTab === index ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+                                    border:
+                                      selectedTab === index
+                                        ? '1px solid #cbd5e0'
+                                        : '1px solid transparent',
+                                    opacity: snapshot.isDragging ? 0.8 : 1,
+                                    fontFamily: 'HeliosCondC',
+                                  }}
+                                  onMouseEnter={e => {
+                                    e.currentTarget.style.backgroundColor = '#edf2f7';
+                                    e.currentTarget.style.transform = 'translateY(-1px)';
+                                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                                    e.currentTarget.style.border = '1px solid #e2e8f0';
+                                  }}
+                                  onMouseLeave={e => {
+                                    e.currentTarget.style.backgroundColor =
+                                      selectedTab === index ? '#e2e8f0' : 'transparent';
+                                    e.currentTarget.style.transform = 'none';
+                                    e.currentTarget.style.boxShadow =
+                                      selectedTab === index ? '0 2px 4px rgba(0,0,0,0.05)' : 'none';
+                                    e.currentTarget.style.border =
+                                      selectedTab === index
+                                        ? '1px solid #cbd5e0'
+                                        : '1px solid transparent';
+                                  }}
+                                >
+                                  <div
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                                  >
+                                    <div
+                                      {...provided.dragHandleProps}
+                                      style={{ display: 'flex', alignItems: 'center' }}
+                                    >
+                                      <DragIndicatorIcon
+                                        style={{ fontSize: '20px', color: '#666' }}
+                                      />
+                                    </div>
+                                    <span style={{ fontSize: '14px', fontFamily: 'HeliosCondC' }}>
+                                      {method.name}
+                                    </span>
+                                  </div>
+                                  <IconButton
+                                    size="small"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      handleOpenHideModal(method);
+                                    }}
+                                    sx={{ padding: '2px' }}
+                                  >
+                                    <CloseIcon fontSize="small" />
+                                  </IconButton>
+                                </div>
+                              )}
+                            </Draggable>
+                          ) : null;
+                        })}
+                        {provided.placeholder}
                       </div>
-                    );
-                  }
-                  return method.is_active ? (
-                    <div
-                      key={method.uniqueId}
-                      onClick={() => handleTabChange(null, index)}
-                      style={{
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        backgroundColor: selectedTab === index ? '#e2e8f0' : 'transparent',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        transition: 'all 0.2s ease-in-out',
-                        boxShadow: selectedTab === index ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
-                        border:
-                          selectedTab === index ? '1px solid #cbd5e0' : '1px solid transparent',
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.backgroundColor = '#edf2f7';
-                        e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-                        e.currentTarget.style.border = '1px solid #e2e8f0';
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.backgroundColor =
-                          selectedTab === index ? '#e2e8f0' : 'transparent';
-                        e.currentTarget.style.transform = 'none';
-                        e.currentTarget.style.boxShadow =
-                          selectedTab === index ? '0 2px 4px rgba(0,0,0,0.05)' : 'none';
-                        e.currentTarget.style.border =
-                          selectedTab === index ? '1px solid #cbd5e0' : '1px solid transparent';
-                      }}
-                    >
-                      <span style={{ fontSize: '14px' }}>{method.name}</span>
-                      <IconButton
-                        size="small"
-                        onClick={e => {
-                          e.stopPropagation();
-                          handleOpenHideModal(method);
-                        }}
-                        sx={{ padding: '2px' }}
-                      >
-                        <CloseIcon fontSize="small" />
-                      </IconButton>
-                    </div>
-                  ) : null;
-                })}
-              </div>
+                    )}
+                  </Droppable>
+                </DragDropContext>
+              )}
             </div>
 
             {/* Основной контент */}
-            <div style={{ flex: 1, padding: '16px', overflowY: 'auto' }}>
-              {researchMethods
-                .filter(method => method.is_active)
-                .map((method, index) => (
-                  <TabPanel key={`panel-${method.uniqueId}`} value={selectedTab} index={index}>
-                    {currentMethod && (
-                      <div className="calculation-form">
-                        <Typography
-                          variant="h5"
+            <div style={{ flex: 1, padding: '16px', overflowY: 'auto', position: 'relative' }}>
+              {hasNoMethods ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%',
+                    color: '#4a5568',
+                    textAlign: 'center',
+                    padding: '20px',
+                  }}
+                >
+                  <Typography
+                    variant="h6"
+                    style={{
+                      marginBottom: '16px',
+                      color: '#2d3748',
+                      fontFamily: 'HeliosCondC',
+                      fontSize: '18px',
+                    }}
+                  >
+                    Методы исследования отсутствуют
+                  </Typography>
+                  <Typography
+                    style={{
+                      marginBottom: '24px',
+                      color: '#718096',
+                      fontFamily: 'HeliosCondC',
+                      fontSize: '14px',
+                    }}
+                  >
+                    Добавьте первый метод исследования, нажав на кнопку "+" в левой панели
+                  </Typography>
+                  <Button
+                    type="primary"
+                    onClick={handleOpenAddModal}
+                    icon={<AddIcon />}
+                    style={{ fontFamily: 'HeliosCondC' }}
+                  >
+                    Добавить метод
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: '16px',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <AutoComplete
+                          value={registrationNumber}
+                          onChange={value => setRegistrationNumber(value)}
+                          onSearch={handleRegistrationSearch}
+                          options={registrationOptions}
+                          placeholder="Введите регистрационный номер"
+                          style={{ width: '250px', fontFamily: 'HeliosCondC' }}
+                        />
+                        <Button
+                          onClick={handleLoadRegistrationData}
+                          loading={isLoadingRegistrationData}
+                          style={{ fontFamily: 'HeliosCondC' }}
+                        >
+                          Показать
+                        </Button>
+                      </div>
+                      <div
+                        style={{
+                          width: '195px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          fontFamily: 'HeliosCondC',
+                        }}
+                      >
+                        <DatePicker
+                          locale={locale}
+                          format="DD.MM.YYYY"
+                          value={laboratoryActivityDate}
+                          onChange={date => {
+                            setLaboratoryActivityDate(date);
+                            setDateError('');
+                          }}
+                          placeholder="Дата лабораторной деятельности"
+                          style={{ width: '100%' }}
+                          status={dateError ? 'error' : ''}
+                          required
+                          showToday
+                          allowClear={false}
+                          popupStyle={{ zIndex: 1001 }}
+                          disabled={currentMethod && lockedMethods[currentMethod.id]}
+                        />
+                      </div>
+                      {dateError && (
+                        <div
                           style={{
-                            color: '#2c5282',
-                            fontSize: '20px',
-                            fontWeight: 600,
-                            textAlign: 'center',
-                            marginBottom: '10px',
+                            color: '#ff4d4f',
+                            fontSize: '14px',
+                            position: 'absolute',
+                            top: '45px',
+                            whiteSpace: 'nowrap',
                           }}
                         >
-                          {method.is_group ? method.name : currentMethod.name}
-                        </Typography>
+                          {dateError}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      type="primary"
+                      onClick={handleOpenGenerateProtocolModal}
+                      style={{ fontFamily: 'HeliosCondC' }}
+                    >
+                      Сформировать протокол
+                    </Button>
+                  </div>
 
-                        {method.is_group && method.methods && (
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              marginBottom: '12px',
-                              gap: '8px',
-                            }}
-                          >
-                            <select
-                              value={currentMethod.id}
-                              onChange={e => {
-                                const newMethodId = parseInt(e.target.value);
-                                fetchMethodDetails(researchPageId, newMethodId);
-                              }}
+                  {researchMethods
+                    .filter(method => method.is_active)
+                    .map((method, index) => (
+                      <TabPanel key={`panel-${method.uniqueId}`} value={selectedTab} index={index}>
+                        {currentMethod && (
+                          <div className="calculation-form">
+                            <Typography
+                              variant="h5"
                               style={{
-                                padding: '4px 8px',
-                                borderRadius: '4px',
-                                border: '1px solid #ddd',
-                                fontSize: '14px',
-                                color: '#333',
-                                backgroundColor: 'white',
-                                cursor: 'pointer',
-                                minWidth: '200px',
+                                color: '#2c5282',
+                                fontSize: '20px',
+                                fontWeight: 600,
+                                textAlign: 'center',
+                                marginBottom: '20px',
                               }}
                             >
-                              {method.methods.map(m => (
-                                <option key={`method-${m.id}`} value={m.id}>
-                                  {m.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
+                              {method.is_group ? method.name : currentMethod.name}
+                            </Typography>
 
-                        {/* Блок параллелей */}
-                        {currentMethod.parallel_count > -1 && (
-                          <>
-                            {currentMethod.parallel_count > 0 && (
-                              <Typography
-                                variant="h6"
+                            {method.is_group && method.methods && (
+                              <div
                                 style={{
-                                  color: '#2c5282',
-                                  fontSize: '15px',
-                                  fontWeight: 600,
-                                  marginBottom: '0',
-                                  textAlign: 'center',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  marginBottom: '12px',
+                                  gap: '8px',
                                 }}
-                              ></Typography>
+                              >
+                                <select
+                                  value={currentMethod.id}
+                                  onChange={e => {
+                                    const newMethodId = parseInt(e.target.value);
+                                    fetchMethodDetails(researchPageId, newMethodId);
+                                  }}
+                                  style={{
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #ddd',
+                                    fontSize: '14px',
+                                    color: '#333',
+                                    backgroundColor: 'white',
+                                    cursor: 'pointer',
+                                    minWidth: '200px',
+                                  }}
+                                >
+                                  {method.methods.map(m => (
+                                    <option key={`method-${m.id}`} value={m.id}>
+                                      {m.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
                             )}
+
+                            {/* Блок полей ввода */}
+                            {renderInputFields(currentMethod.id)}
+
+                            {/* Блок результатов */}
                             <div
                               style={{
                                 display: 'flex',
@@ -975,400 +1509,249 @@ const OilProductsPage = () => {
                                 justifyContent: 'center',
                               }}
                             >
-                              {Array.from({ length: (currentMethod.parallel_count || 0) + 1 }).map(
-                                (_, i) => renderInputFields(currentMethod.id, i)
-                              )}
-                            </div>
-                          </>
-                        )}
-
-                        {/* Блок общих переменных */}
-                        {currentMethod.input_data.fields.some(field => field.is_general) && (
-                          <div
-                            style={{
-                              backgroundColor: '#f8fafc',
-                              padding: '12px',
-                              borderRadius: '8px',
-                              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
-                              border: '1px solid #e2e8f0',
-                              maxWidth: '400px',
-                              margin: '0 auto',
-                              marginBottom: '5px',
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                                gap: '0',
-                                alignItems: 'start',
-                                marginBottom: '0',
-                                padding: '0',
-                              }}
-                            >
-                              {currentMethod.input_data.fields
-                                .filter(field => field.is_general)
-                                .map((field, fieldIndex) => (
-                                  <div
-                                    key={fieldIndex}
-                                    className="input-field-container"
-                                    style={{ margin: '-5px 0' }}
+                              {calculationResults[currentMethod?.id]?.map((result, index) => (
+                                <div
+                                  key={`result-${index}`}
+                                  className="calculation-results"
+                                  style={{
+                                    border: '1px solid rgba(64, 150, 255, 0.3)',
+                                    padding: '12px 16px',
+                                    borderRadius: '12px',
+                                    background: 'linear-gradient(to right, #f8f9ff, #f0f7ff)',
+                                    boxShadow: '0 4px 12px rgba(64, 150, 255, 0.08)',
+                                    marginTop: '8px',
+                                    marginBottom: '12px',
+                                    minWidth: '300px',
+                                    maxWidth: '400px',
+                                    flex: '1',
+                                  }}
+                                >
+                                  <Typography
+                                    variant="h6"
+                                    style={{
+                                      color: '#2c5282',
+                                      fontSize: '16px',
+                                      fontWeight: 600,
+                                      marginBottom: '6px',
+                                    }}
                                   >
-                                    <FormItem
-                                      title={
-                                        <div
-                                          style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            fontSize: '14px',
-                                            color: '#4a5568',
-                                            marginBottom: '0',
-                                          }}
-                                        >
-                                          <span style={{ fontSize: '14px' }}>{field.name}</span>
-                                          <Tooltip title={field.description} placement="right">
-                                            <IconButton size="small">
-                                              <HelpOutlineIcon fontSize="small" />
-                                            </IconButton>
-                                          </Tooltip>
-                                        </div>
-                                      }
-                                      name={`${currentMethod.id}_${field.name}_general`}
-                                    >
-                                      <div
-                                        style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '8px',
-                                        }}
-                                      >
-                                        <Input
-                                          placeholder={`Введите ${field.name}`}
-                                          maxLength={10}
-                                          style={{ fontSize: '14px' }}
-                                          onChange={e =>
-                                            handleInputChange(
-                                              e,
-                                              `${currentMethod.id}_${field.name}_general`
-                                            )
-                                          }
-                                          onKeyPress={e => {
-                                            // Разрешаем только цифры, запятую и минус
-                                            const pattern = /^[0-9,\-]$/;
-                                            if (!pattern.test(e.key)) {
-                                              e.preventDefault();
-                                            }
-                                            // Если пытаемся ввести точку, заменяем на запятую
-                                            if (e.key === '.') {
-                                              e.preventDefault();
-                                              const input = e.target;
-                                              const value = input.value;
-                                              const position = input.selectionStart;
-                                              const newValue =
-                                                value.slice(0, position) +
-                                                ',' +
-                                                value.slice(position);
-                                              form.setFieldValue(
-                                                `${currentMethod.id}_${field.name}_general`,
-                                                newValue
-                                              );
-                                              setTimeout(() => {
-                                                input.setSelectionRange(position + 1, position + 1);
-                                              }, 0);
-                                            }
-                                          }}
-                                          onPaste={e => {
-                                            // Разрешаем стандартную вставку текста
-                                          }}
-                                        />
-                                        {field.unit && (
-                                          <span
+                                    Результат:
+                                    {result.convergence === 'satisfactory'
+                                      ? ` ${result.result} ± ${result.measurement_error} ${result.unit}`
+                                      : result.convergence === 'absence'
+                                        ? ' Отсутствие'
+                                        : result.convergence === 'traces'
+                                          ? ' Следы'
+                                          : ' Неудовлетворительно'}
+                                  </Typography>
+
+                                  {/* Отображение информации о сходимости */}
+                                  <Typography
+                                    variant="h6"
+                                    style={{
+                                      color: '#2c5282',
+                                      fontSize: '15px',
+                                      fontWeight: 600,
+                                      marginBottom: '6px',
+                                      marginTop: '8px',
+                                      paddingTop: '8px',
+                                      borderTop: '1px solid rgba(64, 150, 255, 0.15)',
+                                    }}
+                                  >
+                                    Проверка сходимости:
+                                  </Typography>
+                                  {result.conditions_info &&
+                                    result.conditions_info.map(
+                                      (condition, condIndex) =>
+                                        condition.satisfied && (
+                                          <div
+                                            key={condIndex}
                                             style={{
-                                              color: '#666',
+                                              margin: '8px 0',
+                                              color: '#2c5282',
                                               fontSize: '14px',
-                                              fontFamily: 'HeliosCondC',
+                                              background: 'rgba(255, 255, 255, 0.5)',
+                                              padding: '8px',
+                                              borderRadius: '8px',
+                                              borderBottom:
+                                                condIndex < result.conditions_info.length - 1
+                                                  ? '1px dashed rgba(64, 150, 255, 0.3)'
+                                                  : 'none',
+                                              paddingBottom:
+                                                condIndex < result.conditions_info.length - 1
+                                                  ? '16px'
+                                                  : '8px',
+                                              marginBottom:
+                                                condIndex < result.conditions_info.length - 1
+                                                  ? '16px'
+                                                  : '8px',
                                             }}
                                           >
-                                            {field.unit}
-                                          </span>
+                                            {/* Исходная формула */}
+                                            <div
+                                              style={{
+                                                fontFamily: 'monospace',
+                                                marginBottom: '12px',
+                                                fontSize: '14px',
+                                                color: '#1a365d',
+                                                paddingBottom: '12px',
+                                                borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
+                                              }}
+                                            >
+                                              {condition.calculation_steps?.step2
+                                                .replace(/\*/g, '×')
+                                                .replace(/<=/g, '≤')
+                                                .replace(/>=/g, '≥')
+                                                .replace(/\./g, ',')}
+                                            </div>
+
+                                            {/* Результат */}
+                                            <div
+                                              style={{
+                                                color: '#0066cc',
+                                                marginTop: '6px',
+                                                fontWeight: 500,
+                                              }}
+                                            >
+                                              {CONVERGENCE_LABELS[condition.convergence_value]}
+                                            </div>
+                                          </div>
+                                        )
+                                    )}
+
+                                  {result.convergence === 'satisfactory' &&
+                                    Object.keys(result.intermediate_results).length > 0 && (
+                                      <>
+                                        <Typography
+                                          variant="h6"
+                                          style={{
+                                            color: '#2c5282',
+                                            fontSize: '15px',
+                                            fontWeight: 600,
+                                            marginBottom: '6px',
+                                            marginTop: '8px',
+                                            paddingTop: '8px',
+                                            borderTop: '1px solid rgba(64, 150, 255, 0.15)',
+                                          }}
+                                        >
+                                          Промежуточные результаты:
+                                        </Typography>
+                                        {Object.entries(result.intermediate_results).map(
+                                          ([name, value]) => (
+                                            <div
+                                              key={name}
+                                              style={{
+                                                color: '#4a5568',
+                                                margin: '3px 0',
+                                                fontSize: '14px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                              }}
+                                            >
+                                              <div
+                                                style={{
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  gap: '4px',
+                                                }}
+                                              >
+                                                {name}
+                                                {currentMethod.intermediate_data.fields.map(
+                                                  field =>
+                                                    field.name === name && (
+                                                      <Tooltip
+                                                        key={field.name}
+                                                        title={
+                                                          field.description ||
+                                                          'Описание отсутствует'
+                                                        }
+                                                        placement="right"
+                                                      >
+                                                        <IconButton
+                                                          size="small"
+                                                          style={{ padding: '0px' }}
+                                                        >
+                                                          <HelpOutlineIcon
+                                                            style={{
+                                                              fontSize: '16px',
+                                                              color: '#718096',
+                                                            }}
+                                                          />
+                                                        </IconButton>
+                                                      </Tooltip>
+                                                    )
+                                                )}
+                                              </div>
+                                              <span
+                                                style={{
+                                                  color: '#2d3748',
+                                                  fontWeight: 500,
+                                                  marginLeft: '4px',
+                                                }}
+                                              >
+                                                {roundValue(value, result.result)}
+                                                {currentMethod.intermediate_data.fields.find(
+                                                  f => f.name === name
+                                                )?.unit && (
+                                                  <span
+                                                    style={{
+                                                      marginLeft: '4px',
+                                                      color: '#666',
+                                                      fontWeight: 'normal',
+                                                    }}
+                                                  >
+                                                    {
+                                                      currentMethod.intermediate_data.fields.find(
+                                                        f => f.name === name
+                                                      ).unit
+                                                    }
+                                                  </span>
+                                                )}
+                                              </span>
+                                            </div>
+                                          )
                                         )}
-                                      </div>
-                                    </FormItem>
-                                  </div>
-                                ))}
+                                      </>
+                                    )}
+                                </div>
+                              ))}
+                            </div>
+
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                width: '100%',
+                                gap: '16px',
+                              }}
+                            >
+                              <Button
+                                type="primary"
+                                buttonColor="#0066cc"
+                                onClick={() => handleCalculate(currentMethod.id)}
+                                loading={isCalculating}
+                                style={{ fontFamily: 'HeliosCondC' }}
+                              >
+                                Рассчитать
+                              </Button>
+                              {lastCalculationResult[currentMethod?.id] && (
+                                <Button
+                                  type="primary"
+                                  buttonColor="#28a745"
+                                  onClick={handleOpenSaveModal}
+                                  style={{ fontFamily: 'HeliosCondC' }}
+                                >
+                                  Сохранить результат
+                                </Button>
+                              )}
                             </div>
                           </div>
                         )}
-
-                        {/* Блок результатов */}
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'row',
-                            gap: '16px',
-                            marginBottom: '0',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          {calculationResults[currentMethod?.id]?.map((result, index) => (
-                            <div
-                              key={`result-${index}`}
-                              className="calculation-results"
-                              style={{
-                                border: '1px solid rgba(64, 150, 255, 0.3)',
-                                padding: '12px 16px',
-                                borderRadius: '12px',
-                                background: 'linear-gradient(to right, #f8f9ff, #f0f7ff)',
-                                boxShadow: '0 4px 12px rgba(64, 150, 255, 0.08)',
-                                marginTop: '8px',
-                                marginBottom: '12px',
-                                minWidth: '300px',
-                                maxWidth: '400px',
-                                flex: '1',
-                              }}
-                            >
-                              <Typography
-                                variant="h6"
-                                style={{
-                                  color: '#2c5282',
-                                  fontSize: '16px',
-                                  fontWeight: 600,
-                                  marginBottom: '6px',
-                                }}
-                              >
-                                {currentMethod.parallel_count > 0 && `Параллель ${index + 1}: `}
-                                Результат:
-                                {result.convergence === 'satisfactory'
-                                  ? ` ${result.result} ± ${result.measurement_error} ${result.unit}`
-                                  : result.convergence === 'absence'
-                                    ? ' Отсутствие'
-                                    : result.convergence === 'traces'
-                                      ? ' Следы'
-                                      : ' Неудовлетворительно'}
-                              </Typography>
-
-                              {/* Отображение информации о сходимости */}
-                              <Typography
-                                variant="h6"
-                                style={{
-                                  color: '#2c5282',
-                                  fontSize: '15px',
-                                  fontWeight: 600,
-                                  marginBottom: '6px',
-                                  marginTop: '8px',
-                                  paddingTop: '8px',
-                                  borderTop: '1px solid rgba(64, 150, 255, 0.15)',
-                                }}
-                              >
-                                Проверка сходимости:
-                              </Typography>
-                              {result.conditions_info &&
-                                result.conditions_info.map(
-                                  (condition, condIndex) =>
-                                    condition.satisfied && (
-                                      <div
-                                        key={condIndex}
-                                        style={{
-                                          margin: '8px 0',
-                                          color: '#2c5282',
-                                          fontSize: '14px',
-                                          background: 'rgba(255, 255, 255, 0.5)',
-                                          padding: '8px',
-                                          borderRadius: '8px',
-                                          borderBottom:
-                                            condIndex < result.conditions_info.length - 1
-                                              ? '1px dashed rgba(64, 150, 255, 0.3)'
-                                              : 'none',
-                                          paddingBottom:
-                                            condIndex < result.conditions_info.length - 1
-                                              ? '16px'
-                                              : '8px',
-                                          marginBottom:
-                                            condIndex < result.conditions_info.length - 1
-                                              ? '16px'
-                                              : '8px',
-                                        }}
-                                      >
-                                        {/* Исходная формула */}
-                                        <div
-                                          style={{
-                                            fontFamily: 'monospace',
-                                            marginBottom: '12px',
-                                            fontSize: '14px',
-                                            color: '#1a365d',
-                                            paddingBottom: '12px',
-                                            borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
-                                          }}
-                                        >
-                                          {processAbs(condition.formula)
-                                            .replace(/\*/g, '×')
-                                            .replace(/<=/g, '≤')
-                                            .replace(/>=/g, '≥')}
-                                        </div>
-
-                                        {/* Шаги расчета */}
-                                        {condition.calculation_steps && (
-                                          <>
-                                            <div
-                                              style={{
-                                                fontFamily: 'monospace',
-                                                marginBottom: '12px',
-                                                color: '#4a5568',
-                                                paddingBottom: '12px',
-                                                borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
-                                              }}
-                                            >
-                                              {processAbs(condition.calculation_steps.step1)
-                                                .replace(/\*/g, '×')
-                                                .replace(/<=/g, '≤')
-                                                .replace(/>=/g, '≥')
-                                                .replace(/\./g, ',')}
-                                            </div>
-                                            <div
-                                              style={{
-                                                fontFamily: 'monospace',
-                                                marginBottom: '12px',
-                                                color: '#4a5568',
-                                                paddingBottom: '12px',
-                                                borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
-                                              }}
-                                            >
-                                              {processAbs(condition.calculation_steps.step2)
-                                                .replace(/\*/g, '×')
-                                                .replace(/<=/g, '≤')
-                                                .replace(/>=/g, '≥')
-                                                .replace(/\./g, ',')}
-                                            </div>
-                                          </>
-                                        )}
-
-                                        {/* Результат */}
-                                        <div
-                                          style={{
-                                            color: '#0066cc',
-                                            marginTop: '6px',
-                                            fontWeight: 500,
-                                          }}
-                                        >
-                                          {CONVERGENCE_LABELS[condition.convergence_value]}
-                                        </div>
-                                      </div>
-                                    )
-                                )}
-
-                              {result.convergence === 'satisfactory' &&
-                                Object.keys(result.intermediate_results).length > 0 && (
-                                  <>
-                                    <Typography
-                                      variant="h6"
-                                      style={{
-                                        color: '#2c5282',
-                                        fontSize: '15px',
-                                        fontWeight: 600,
-                                        marginBottom: '6px',
-                                        marginTop: '8px',
-                                        paddingTop: '8px',
-                                        borderTop: '1px solid rgba(64, 150, 255, 0.15)',
-                                      }}
-                                    >
-                                      Промежуточные результаты:
-                                    </Typography>
-                                    {Object.entries(result.intermediate_results).map(
-                                      ([name, value]) => (
-                                        <div
-                                          key={name}
-                                          style={{
-                                            color: '#4a5568',
-                                            margin: '3px 0',
-                                            fontSize: '14px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                          }}
-                                        >
-                                          <div
-                                            style={{
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              gap: '4px',
-                                            }}
-                                          >
-                                            {name}
-                                            {currentMethod.intermediate_data.fields.map(
-                                              field =>
-                                                field.name === name && (
-                                                  <Tooltip
-                                                    key={field.name}
-                                                    title={
-                                                      field.description || 'Описание отсутствует'
-                                                    }
-                                                    placement="right"
-                                                  >
-                                                    <IconButton
-                                                      size="small"
-                                                      style={{ padding: '0px' }}
-                                                    >
-                                                      <HelpOutlineIcon
-                                                        style={{
-                                                          fontSize: '16px',
-                                                          color: '#718096',
-                                                        }}
-                                                      />
-                                                    </IconButton>
-                                                  </Tooltip>
-                                                )
-                                            )}
-                                          </div>
-                                          <span
-                                            style={{
-                                              color: '#2d3748',
-                                              fontWeight: 500,
-                                              marginLeft: '4px',
-                                            }}
-                                          >
-                                            {value}
-                                            {currentMethod.intermediate_data.fields.find(
-                                              f => f.name === name
-                                            )?.unit && (
-                                              <span
-                                                style={{
-                                                  marginLeft: '4px',
-                                                  color: '#666',
-                                                  fontWeight: 'normal',
-                                                }}
-                                              >
-                                                {
-                                                  currentMethod.intermediate_data.fields.find(
-                                                    f => f.name === name
-                                                  ).unit
-                                                }
-                                              </span>
-                                            )}
-                                          </span>
-                                        </div>
-                                      )
-                                    )}
-                                  </>
-                                )}
-                            </div>
-                          ))}
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-                          <Button
-                            type="primary"
-                            buttonColor="#0066cc"
-                            onClick={() => handleCalculate(currentMethod.id)}
-                            loading={isCalculating}
-                            style={{ fontFamily: 'HeliosCondC' }}
-                          >
-                            Рассчитать
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </TabPanel>
-                ))}
+                      </TabPanel>
+                    ))}
+                </>
+              )}
             </div>
           </div>
 
@@ -1378,36 +1761,67 @@ const OilProductsPage = () => {
             onConfirm={handleHideMethod}
             methodName={methodToHide?.name}
           />
-        </Form>
 
-        <AddCalculationModal
-          isOpen={isAddModalOpen}
-          onClose={handleCloseAddModal}
-          researchPageId={researchPageId}
-          onSuccess={handleMethodAdded}
-        />
-
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={6000}
-          onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-          sx={{
-            '& .MuiAlert-root': {
-              width: '100%',
-              maxWidth: '400px',
-            },
-          }}
-        >
-          <Alert
-            onClose={handleCloseSnackbar}
-            severity={snackbar.severity}
-            variant="filled"
-            sx={{ width: '100%' }}
+          <Modal
+            title="Сохранение результата расчета"
+            open={isSaveModalOpen}
+            onCancel={handleCloseSaveModal}
+            footer={null}
+            width={600}
+            maskClosable={false}
+            style={{ marginLeft: '550px' }}
           >
-            {snackbar.message}
-          </Alert>
-        </Snackbar>
+            {currentMethod && (
+              <SaveCalculationForm
+                calculationResult={{
+                  ...lastCalculationResult[currentMethod.id],
+                  laboratory_activity_date: laboratoryActivityDate,
+                }}
+                currentMethod={currentMethod}
+                laboratoryId={laboratoryId}
+                departmentId={isDepartment ? id : null}
+                onSuccess={handleSaveSuccess}
+                onCancel={handleCloseSaveModal}
+              />
+            )}
+          </Modal>
+
+          <AddCalculationModal
+            isOpen={isAddModalOpen}
+            onClose={handleCloseAddModal}
+            researchPageId={researchPageId}
+            onSuccess={handleMethodAdded}
+          />
+
+          <GenerateProtocolModal
+            isOpen={isGenerateProtocolModalOpen}
+            onClose={handleCloseGenerateProtocolModal}
+            laboratoryId={isDepartment ? laboratoryId : id}
+            departmentId={isDepartment ? id : null}
+          />
+
+          <Snackbar
+            open={snackbar.open}
+            autoHideDuration={6000}
+            onClose={handleCloseSnackbar}
+            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+            sx={{
+              '& .MuiAlert-root': {
+                width: '100%',
+                maxWidth: '400px',
+              },
+            }}
+          >
+            <Alert
+              onClose={handleCloseSnackbar}
+              severity={snackbar.severity}
+              variant="filled"
+              sx={{ width: '100%' }}
+            >
+              {snackbar.message}
+            </Alert>
+          </Snackbar>
+        </Form>
       </Layout>
     </OilProductsPageWrapper>
   );

@@ -11,6 +11,7 @@ const AddDepartmentModal = ({ isOpen, onClose, onSuccess, laboratoryId }) => {
   });
 
   const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
 
   const handleInputChange = field => e => {
     setFormData(prev => ({
@@ -41,6 +42,8 @@ const AddDepartmentModal = ({ isOpen, onClose, onSuccess, laboratoryId }) => {
         return;
       }
 
+      setLoading(true);
+
       await axios.post(`${import.meta.env.VITE_API_URL}/api/departments/`, {
         name: formData.name.trim(),
         laboratory: laboratoryId,
@@ -56,10 +59,26 @@ const AddDepartmentModal = ({ isOpen, onClose, onSuccess, laboratoryId }) => {
     } catch (error) {
       console.error('Ошибка при создании подразделения:', error);
       if (error.response?.data) {
-        setErrors(error.response.data);
+        // Проверяем наличие ошибки о дублировании имени
+        if (error.response.data.name?.[0]?.includes('уже существует')) {
+          setErrors({
+            name: error.response.data.name[0],
+          });
+        } else {
+          setErrors({
+            general:
+              error.response.data.detail ||
+              error.response.data.error ||
+              'Подразделение с таким именем уже существует',
+          });
+        }
       } else {
-        setErrors({ general: 'Произошла ошибка при создании подразделения' });
+        setErrors({
+          general: 'Произошла ошибка при создании подразделения',
+        });
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -71,6 +90,7 @@ const AddDepartmentModal = ({ isOpen, onClose, onSuccess, laboratoryId }) => {
       onClose={onClose}
       onSave={handleSave}
       style={{ width: '550px' }}
+      loading={loading}
     >
       <div className="add-department-form">
         <div className="form-group">

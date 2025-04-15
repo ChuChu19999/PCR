@@ -29,10 +29,17 @@
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 12px;
-  padding: 8px;
-  background-color: rgba(248, 250, 252, 0.5);
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  padding: 16px;
+  background: linear-gradient(135deg, #f0f7ff 0%, #e6f3ff 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(44, 82, 130, 0.1);
+  box-shadow: 0 4px 12px rgba(44, 82, 130, 0.05);
+  transition: all 0.3s ease;
+}
+
+.variables-group:hover {
+  box-shadow: 0 6px 16px rgba(44, 82, 130, 0.08);
+  transform: translateY(-1px);
 }
 
 .variables-group .input-field-container {
@@ -54,27 +61,27 @@
 
 /* Стили для групп с одинаковым индексом */
 .variables-group[data-index] {
-  background-color: rgba(248, 250, 252, 0.5);
+  background: linear-gradient(135deg, #f0f7ff 0%, #e6f3ff 100%);
 }
 
 .variables-group[data-index='1'] {
-  background-color: rgba(235, 248, 255, 0.5);
+  background: linear-gradient(135deg, #e6f3ff 0%, #d9edff 100%);
 }
 
 .variables-group[data-index='2'] {
-  background-color: rgba(240, 253, 244, 0.5);
+  background: linear-gradient(135deg, #e6ffed 0%, #d9ffe6 100%);
 }
 
 .variables-group[data-index='3'] {
-  background-color: rgba(255, 245, 235, 0.5);
+  background: linear-gradient(135deg, #fff3e6 0%, #ffe6d9 100%);
 }
 
 .variables-group[data-index='4'] {
-  background-color: rgba(245, 235, 255, 0.5);
+  background: linear-gradient(135deg, #f3e6ff 0%, #e6d9ff 100%);
 }
 
 .variables-group[data-index='5'] {
-  background-color: rgba(235, 255, 245, 0.5);
+  background: linear-gradient(135deg, #e6fff3 0%, #d9ffe6 100%);
 }
 
 /* Для остальных индексов используем чередующиеся оттенки */
@@ -274,7 +281,7 @@
 /* Стили для уведомлений */
 .MuiAlert-root {
   white-space: pre-line;
-  font-family: 'HeliosCondC', sans-serif;
+  font-family: 'HeliosCondC';
   margin: 16px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
 }
@@ -310,4 +317,38 @@
 .MuiAlert-action {
   padding-left: 16px;
   margin-right: -8px;
+}
+
+/* Стили для DatePicker */
+.ant-picker {
+  font-family: 'HeliosCondC' !important;
+}
+
+.ant-picker input {
+  font-family: 'HeliosCondC' !important;
+}
+
+.ant-picker-dropdown {
+  font-family: 'HeliosCondC' !important;
+}
+
+.ant-picker-content th,
+.ant-picker-content td {
+  font-family: 'HeliosCondC' !important;
+}
+
+.ant-picker-header-view {
+  font-family: 'HeliosCondC' !important;
+}
+
+.ant-picker-today-btn {
+  font-family: 'HeliosCondC' !important;
+}
+
+.ant-picker-cell {
+  font-family: 'HeliosCondC' !important;
+}
+
+.ant-picker-time-panel-column > li {
+  font-family: 'HeliosCondC' !important;
 }

@@ -62,13 +62,15 @@
                     "name": "X₁",
                     "unit": "%",
                     "formula": "((M₁₁-M₁₀)/M₁*100)",
-                    "description": "Первый расчет массовой доли асфальтенов"
+                    "description": "Первый расчет массовой доли асфальтенов",
+                    "show_calculation": true
                 },
                 {
                     "name": "X₂",
                     "unit": "%",
                     "formula": "((M₂₁-M₂₀)/M₂*100)",
-                    "description": "Второй расчет массовой доли асфальтенов"
+                    "description": "Второй расчет массовой доли асфальтенов",
+                    "show_calculation": true
                 }
             ]
         },

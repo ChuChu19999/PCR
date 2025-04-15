@@ -323,6 +323,7 @@
 .tabs {
   display: flex;
   border-bottom: 1px solid #d9d9d9;
+  margin-bottom: 16px;
 }
 
 .tab {
@@ -406,4 +407,25 @@
   transition:
     opacity 0.3s ease,
     transform 0.3s ease;
+}
+
+.intermediate-field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.show-calculation-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #666;
+}
+
+.show-calculation-checkbox input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
 }

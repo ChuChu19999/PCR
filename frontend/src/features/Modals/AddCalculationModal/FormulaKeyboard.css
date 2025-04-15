@@ -1,48 +1,91 @@
 .formula-keyboard {
   background-color: #f5f5f5;
   border-radius: 8px;
-  padding: 12px;
+  padding: 16px;
   margin-top: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .keyboard-section {
-  margin-bottom: 12px;
-}
-
-.keyboard-section:last-child {
   margin-bottom: 0;
 }
 
 .section-title {
   font-size: 14px;
   color: #666;
-  margin-bottom: 8px;
+  margin-top: 12px;
+  margin-bottom: 23px;
 }
 
-.operators {
+.left-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.numbers-section {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
+}
+
+.numbers-section .keyboard-button {
+  height: 48px;
+  padding: 0;
+}
+
+.main-operators-section {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.main-operators-section .keyboard-button {
+  height: 48px;
+  padding: 0;
+}
+
+.comparison-operators {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.comparison-operators .keyboard-button {
+  height: 48px;
+  padding: 0;
+}
+
+.keyboard-layout {
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.variables {
+  margin-top: -8px;
 }
 
 .variables-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
 .keyboard-button {
-  padding: 14px;
   border: none;
   border-radius: 4px;
   background-color: #1890ff;
   color: white;
   cursor: pointer;
   transition: all 0.2s ease;
-  font-size: 16px;
+  font-size: 18px;
   min-width: 40px;
-  height: 36px;
+  font-weight: bold;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -66,8 +109,25 @@
   font-weight: bold;
 }
 
+/* Специальные стили для разных типов операторов */
+.main-operators-section .keyboard-button {
+  background-color: #1890ff;
+}
+
+.numbers-section .keyboard-button {
+  background-color: #40a9ff;
+}
+
+.comparison-operators .keyboard-button {
+  background-color: #1890ff;
+  font-size: 14px;
+}
+
 .keyboard-button.variable {
   background-color: #1890ff;
+  height: 48px;
+  padding: 0;
+  font-size: 14px;
 }
 
 .keyboard-button.operator:hover,

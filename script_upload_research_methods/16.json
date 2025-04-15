@@ -1,5 +1,5 @@
 {
-        "name": "Температура плавления",
+        "name": "Температура плавления парафина",
         "formula": "(T₁+T₂)/2",
         "measurement_error": {
             "type": "fixed",
@@ -16,27 +16,18 @@
                     "name": "T₁",
                     "unit": "℃",
                     "card_index": 1,
-                    "is_general": false,
                     "description": "Первая температура плавления"
                 },
                 {
                     "name": "T₂",
                     "unit": "℃",
                     "card_index": 1,
-                    "is_general": false,
                     "description": "Вторая температура плавления"
                 }
             ]
         },
         "intermediate_data": {
-            "fields": [
-                {
-                    "name": "",
-                    "unit": "",
-                    "formula": "",
-                    "description": ""
-                }
-            ]
+            "fields": []
         },
         "convergence_conditions": {
             "formulas": [
@@ -54,6 +45,5 @@
         "rounding_type": "decimal",
         "rounding_decimal": 1,
         "is_active": true,
-        "parallel_count": 0,
         "is_group_member": false
     }

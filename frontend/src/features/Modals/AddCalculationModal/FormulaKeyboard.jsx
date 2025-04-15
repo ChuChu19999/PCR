@@ -2,45 +2,47 @@ import React from 'react';
 import './FormulaKeyboard.css';
 
 const FormulaKeyboard = ({ onKeyPress, variables = [] }) => {
-  const operators = [
+  const numbers = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '0', '.'];
+  const mainOperators = [
     { symbol: '+', display: '+' },
     { symbol: '-', display: '−' },
     { symbol: '*', display: '×' },
     { symbol: '/', display: '÷' },
+    { symbol: '(', display: '(' },
+    { symbol: ')', display: ')' },
+    { symbol: 'abs(', display: '|x|' },
+  ];
+  const comparisonOperators = [
     { symbol: '=', display: '=' },
     { symbol: '>', display: '>' },
     { symbol: '<', display: '<' },
     { symbol: '>=', display: '≥' },
     { symbol: '<=', display: '≤' },
-    { symbol: '.', display: '.' },
-    { symbol: 'abs(', display: '|x|' },
-    { symbol: '(', display: '(' },
-    { symbol: ')', display: ')' },
     { symbol: 'backspace', display: '⌫' },
-    { symbol: '0', display: '0' },
-    { symbol: '1', display: '1' },
-    { symbol: '2', display: '2' },
-    { symbol: '3', display: '3' },
-    { symbol: '4', display: '4' },
-    { symbol: '5', display: '5' },
-    { symbol: '6', display: '6' },
-    { symbol: '7', display: '7' },
-    { symbol: '8', display: '8' },
-    { symbol: '9', display: '9' },
   ];
+
+  // Разбиваем переменные на группы по 3
+  const variableGroups = variables.reduce((acc, variable, index) => {
+    const groupIndex = Math.floor(index / 3);
+    if (!acc[groupIndex]) {
+      acc[groupIndex] = [];
+    }
+    acc[groupIndex].push(variable);
+    return acc;
+  }, []);
 
   const handleOperatorClick = op => {
     if (op.symbol === 'backspace') {
       onKeyPress('backspace');
     } else {
-      onKeyPress(op.symbol);
+      onKeyPress(typeof op === 'string' ? op : op.symbol);
     }
   };
 
   return (
     <div className="formula-keyboard">
-      <div className="keyboard-section operators">
-        {operators.map(op => (
+      <div className="keyboard-section comparison-operators">
+        {comparisonOperators.map(op => (
           <button
             key={op.symbol}
             onClick={() => handleOperatorClick(op)}
@@ -52,17 +54,51 @@ const FormulaKeyboard = ({ onKeyPress, variables = [] }) => {
         ))}
       </div>
 
-      <div className="keyboard-section variables">
-        <div className="section-title">Переменные:</div>
-        <div className="variables-grid">
-          {variables.map(variable => (
+      <div className="keyboard-layout">
+        <div className="left-section">
+          <div className="numbers-section">
+            {numbers.map(num => (
+              <button
+                key={num}
+                onClick={() => handleOperatorClick(num)}
+                className="keyboard-button operator"
+                type="button"
+              >
+                {num}
+              </button>
+            ))}
+          </div>
+
+          {variables.length > 0 && (
+            <div className="keyboard-section variables">
+              <div className="section-title">Переменные:</div>
+              <div className="variables-grid">
+                {variableGroups.map((group, groupIndex) =>
+                  group.map((variable, index) => (
+                    <button
+                      key={variable}
+                      onClick={() => onKeyPress(variable)}
+                      className="keyboard-button variable"
+                      type="button"
+                    >
+                      {variable}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="main-operators-section">
+          {mainOperators.map(op => (
             <button
-              key={variable}
-              onClick={() => onKeyPress(variable)}
-              className="keyboard-button variable"
+              key={op.symbol}
+              onClick={() => handleOperatorClick(op)}
+              className="keyboard-button operator"
               type="button"
             >
-              {variable}
+              {op.display}
             </button>
           ))}
         </div>
