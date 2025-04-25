@@ -64,7 +64,11 @@ const ProtocolsPage = () => {
           >
             Поиск
           </Button>
-          <Button onClick={() => handleReset(clearFilters)} size="small" style={{ width: 90 }}>
+          <Button
+            onClick={() => handleReset(clearFilters)}
+            size="small"
+            style={{ width: 90, fontFamily: 'HeliosCondC' }}
+          >
             Сброс
           </Button>
         </Space>

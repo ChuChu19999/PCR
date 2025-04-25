@@ -17,7 +17,7 @@
                     "unit": "г",
                     "card_index": 1,
                     "is_general": false,
-                    "description": "Первая масса бюкса со смолами"
+                    "description": "Первая масса бюкса с асфальтенами"
                 },
                 {
                     "name": "M₁₀",
@@ -38,7 +38,7 @@
                     "unit": "г",
                     "card_index": 2,
                     "is_general": false,
-                    "description": "Вторая масса бюкса со смолами"
+                    "description": "Вторая масса бюкса с асфальтенами"
                 },
                 {
                     "name": "M₂₀",

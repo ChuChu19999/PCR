@@ -3,6 +3,7 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from ..serializers import UserSerializer
+from ..models import CustomUser
 
 
 def get_user_role(hach_snils):
@@ -27,7 +28,7 @@ def get_user_role(hach_snils):
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
 
     def list(self, request, *args, **kwargs):
