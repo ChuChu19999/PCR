@@ -37,24 +37,66 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
+  const [laboratories, setLaboratories] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [selectedLaboratory, setSelectedLaboratory] = useState(null);
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
+  const [isSelectOpen, setIsSelectOpen] = useState(false);
 
   // Загрузка списка шаблонов при открытии модального окна
   useEffect(() => {
     if (isOpen) {
       loadTemplates();
+      loadLaboratories();
     }
   }, [isOpen]);
+
+  // Загрузка списка подразделений при выборе лаборатории
+  useEffect(() => {
+    if (selectedLaboratory) {
+      loadDepartments(selectedLaboratory);
+    } else {
+      setDepartments([]);
+      setSelectedDepartment(null);
+    }
+  }, [selectedLaboratory]);
 
   const loadTemplates = async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/excel-templates/`);
-      setTemplates(response.data);
+      // Фильтруем только активные шаблоны и сортируем по имени
+      const activeTemplates = response.data
+        .filter(template => template.is_active)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setTemplates(activeTemplates);
     } catch (error) {
       console.error('Ошибка при загрузке списка шаблонов:', error);
       message.error('Не удалось загрузить список шаблонов');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadLaboratories = async () => {
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
+      setLaboratories(response.data);
+    } catch (error) {
+      console.error('Ошибка при загрузке списка лабораторий:', error);
+      message.error('Не удалось загрузить список лабораторий');
+    }
+  };
+
+  const loadDepartments = async laboratoryId => {
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/departments/`, {
+        params: { laboratory: laboratoryId },
+      });
+      setDepartments(response.data);
+    } catch (error) {
+      console.error('Ошибка при загрузке списка подразделений:', error);
+      message.error('Не удалось загрузить список подразделений');
     }
   };
 
@@ -69,33 +111,35 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
     try {
       console.log('Начало проверки шаблона:', type);
       setLoading(true);
+      // Если у нас уже есть activeTemplate, используем его
+      if (activeTemplate) {
+        return;
+      }
+
       const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/excel-templates/`, {
         params: { name: type },
       });
       console.log('Ответ от сервера:', response.data);
 
-      // Проверяем, что ответ - это массив или объект
-      if (typeof response.data === 'object') {
-        if (Array.isArray(response.data) && response.data.length > 0) {
-          // Фильтруем шаблоны по имени (точное совпадение)
-          const matchingTemplate = response.data.find(template => template.name === type);
+      if (
+        typeof response.data === 'object' &&
+        Array.isArray(response.data) &&
+        response.data.length > 0
+      ) {
+        // Находим шаблон с точным совпадением имени и активным статусом
+        const matchingTemplate = response.data.find(
+          template => template.name === type && template.is_active
+        );
 
-          if (matchingTemplate) {
-            console.log('Найден активный шаблон:', matchingTemplate);
-            console.log('ID шаблона:', matchingTemplate.id);
-            console.log('Версия шаблона:', matchingTemplate.version);
-            console.log('Имя файла:', matchingTemplate.file_name);
-            setActiveTemplate(matchingTemplate);
-          } else {
-            console.log('Активный шаблон с именем', type, 'не найден');
-            setActiveTemplate(null);
-          }
+        if (matchingTemplate) {
+          console.log('Найден активный шаблон:', matchingTemplate);
+          setActiveTemplate(matchingTemplate);
         } else {
-          console.log('Активный шаблон не найден');
+          console.log('Активный шаблон с именем', type, 'не найден');
           setActiveTemplate(null);
         }
       } else {
-        console.error('Неверный формат ответа от сервера');
+        console.log('Активный шаблон не найден');
         setActiveTemplate(null);
       }
     } catch (error) {
@@ -149,16 +193,15 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
     if (value === 'new') {
       setIsCreatingNew(true);
       setSelectedType(null);
-      // Закрываем выпадающий список
-      const selectElement = document.querySelector('.ant-select-dropdown');
-      if (selectElement) {
-        selectElement.classList.add('ant-select-dropdown-hidden');
-      }
-    } else {
-      console.log('Выбран тип шаблона:', value);
-      setIsCreatingNew(false);
-      setSelectedType(value);
+      setIsSelectOpen(false);
       setActiveTemplate(null);
+    } else {
+      setIsCreatingNew(false);
+      const selectedTemplate = templates.find(template => template.id === value);
+      if (selectedTemplate) {
+        setSelectedType(selectedTemplate.name);
+        setActiveTemplate(selectedTemplate);
+      }
     }
   };
 
@@ -173,9 +216,29 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
       return;
     }
 
+    if (!selectedLaboratory) {
+      message.error('Выберите лабораторию');
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('name', newTemplateName.trim());
+    formData.append('laboratory', selectedLaboratory);
+    if (selectedDepartment) {
+      formData.append('department', selectedDepartment);
+    }
+
+    console.log('Отправляемые данные при создании шаблона:');
+    console.log('- Название шаблона:', newTemplateName.trim());
+    console.log('- ID лаборатории:', selectedLaboratory);
+    console.log('- ID подразделения:', selectedDepartment || 'не выбрано');
+    console.log('- Файл:', selectedFile);
+
+    console.log('FormData содержит:');
+    for (let pair of formData.entries()) {
+      console.log(pair[0] + ':', pair[1]);
+    }
 
     try {
       const response = await axios.post(
@@ -192,8 +255,10 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
       setIsCreatingNew(false);
       setNewTemplateName('');
       setSelectedFile(null);
+      setSelectedLaboratory(null);
+      setSelectedDepartment(null);
       message.success('Шаблон успешно создан');
-      loadTemplates(); // Обновляем список шаблонов
+      loadTemplates();
     } catch (error) {
       console.error('Ошибка при создании шаблона:', error);
       message.error('Ошибка при создании шаблона');
@@ -238,9 +303,29 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
           return;
         }
 
+        if (!selectedLaboratory) {
+          message.error('Выберите лабораторию');
+          return;
+        }
+
         const formData = new FormData();
         formData.append('file', selectedFile);
         formData.append('name', newTemplateName.trim());
+        formData.append('laboratory', selectedLaboratory);
+        if (selectedDepartment) {
+          formData.append('department', selectedDepartment);
+        }
+
+        console.log('Отправляемые данные при создании шаблона:');
+        console.log('- Название шаблона:', newTemplateName.trim());
+        console.log('- ID лаборатории:', selectedLaboratory);
+        console.log('- ID подразделения:', selectedDepartment || 'не выбрано');
+        console.log('- Файл:', selectedFile);
+
+        console.log('FormData содержит:');
+        for (let pair of formData.entries()) {
+          console.log(pair[0] + ':', pair[1]);
+        }
 
         const response = await axios.post(
           `${import.meta.env.VITE_API_URL}/api/excel-templates/`,
@@ -256,6 +341,8 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
         setIsCreatingNew(false);
         setNewTemplateName('');
         setSelectedFile(null);
+        setSelectedLaboratory(null);
+        setSelectedDepartment(null);
         message.success('Шаблон успешно создан');
         loadTemplates();
         onClose();
@@ -267,11 +354,12 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
         return;
       }
 
-      console.log('Сохранение данных и стилей:', {
+      console.log('Отправляемые данные при обновлении шаблона:', {
         data: excelData,
         styles: cellStyles,
         type: selectedType,
-        section: selectedSection.id,
+        section: selectedSection?.id,
+        templateId: activeTemplate?.id,
       });
 
       const formData = new FormData();
@@ -279,6 +367,11 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
       formData.append('styles', JSON.stringify(cellStyles));
       formData.append('template_id', activeTemplate.id);
       formData.append('section', selectedSection.id);
+
+      console.log('FormData при обновлении содержит:');
+      for (let pair of formData.entries()) {
+        console.log(pair[0] + ':', pair[1]);
+      }
 
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/save-excel/`,
@@ -322,6 +415,11 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
         setIsCreatingNew(false);
         setNewTemplateName('');
         setSelectedFile(null);
+        setSelectedLaboratory(null);
+        setSelectedDepartment(null);
+        setSelectedType(null);
+        setActiveTemplate(null);
+        setIsSelectOpen(false);
         onClose();
       }}
       onSave={handleSave}
@@ -333,19 +431,27 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
           onChange={handleTypeChange}
           value={selectedType}
           style={{ width: '100%', marginBottom: 24 }}
+          open={isSelectOpen}
+          onDropdownVisibleChange={setIsSelectOpen}
           dropdownRender={menu => (
             <>
               {menu}
               <div className="select-dropdown-divider" />
-              <div className="select-dropdown-item" onClick={() => handleTypeChange('new')}>
+              <div
+                className="select-dropdown-item"
+                onClick={() => {
+                  handleTypeChange('new');
+                  setIsSelectOpen(false);
+                }}
+              >
                 <PlusOutlined /> Создать новый шаблон
               </div>
             </>
           )}
         >
           {templates.map(template => (
-            <Option key={template.name} value={template.name}>
-              {template.name}
+            <Option key={template.id} value={template.id}>
+              {template.name} - {template.version}
             </Option>
           ))}
         </Select>
@@ -361,8 +467,49 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
                 value={newTemplateName}
                 onChange={e => setNewTemplateName(e.target.value)}
                 className="template-name-input"
+                size="large"
+                style={{ height: '40px' }}
               />
             </div>
+
+            <div className="form-group">
+              <label className="form-label">Лаборатория</label>
+              <Select
+                placeholder="Выберите лабораторию"
+                value={selectedLaboratory}
+                onChange={value => {
+                  setSelectedLaboratory(value);
+                  setSelectedDepartment(null);
+                }}
+                className="template-select-input"
+                style={{ width: '100%' }}
+              >
+                {laboratories.map(lab => (
+                  <Option key={lab.id} value={lab.id}>
+                    {lab.name}
+                  </Option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Подразделение (необязательно)</label>
+              <Select
+                placeholder="Выберите подразделение"
+                value={selectedDepartment}
+                onChange={value => setSelectedDepartment(value)}
+                className="template-select-input"
+                style={{ width: '100%' }}
+                disabled={!selectedLaboratory}
+              >
+                {departments.map(dept => (
+                  <Option key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </Option>
+                ))}
+              </Select>
+            </div>
+
             <div className="form-group">
               <label className="form-label">Файл шаблона</label>
               <div className="upload-container">

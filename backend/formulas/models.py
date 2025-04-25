@@ -483,6 +483,8 @@ class Protocol(models.Model):
         related_name="protocols",
         verbose_name="Детали протокола",
         help_text="Связанные детали протокола",
+        null=True,
+        blank=True,
     )
     sampling_act_number = models.CharField(
         max_length=50,
@@ -522,6 +524,22 @@ class Protocol(models.Model):
         null=True,
         blank=True,
     )
+    laboratory = models.ForeignKey(
+        Laboratory,
+        on_delete=models.CASCADE,
+        related_name="protocols",
+        verbose_name="Лаборатория",
+        help_text="Лаборатория, к которой привязан протокол",
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        related_name="protocols",
+        verbose_name="Подразделение",
+        help_text="Подразделение, к которому привязан протокол",
+        null=True,
+        blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
     is_deleted = models.BooleanField(
@@ -543,6 +561,15 @@ class Protocol(models.Model):
             models.Index(fields=["test_protocol_number"]),
             models.Index(fields=["registration_number"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["laboratory"]),
+            models.Index(fields=["department"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["registration_number", "laboratory", "department"],
+                condition=models.Q(is_deleted=False),
+                name="unique_registration_number_per_lab_dept",
+            )
         ]
 
     def __str__(self):
@@ -589,6 +616,8 @@ class Calculation(models.Model):
         related_name="calculations",
         verbose_name="Протокол",
         help_text="Протокол испытаний",
+        null=True,
+        blank=True,
     )
     laboratory = models.ForeignKey(
         Laboratory,
@@ -692,6 +721,22 @@ class ExcelTemplate(models.Model):
         verbose_name="Активен",
         help_text="Указывает, является ли версия шаблона активной",
     )
+    laboratory = models.ForeignKey(
+        Laboratory,
+        on_delete=models.CASCADE,
+        related_name="excel_templates",
+        verbose_name="Лаборатория",
+        help_text="Лаборатория, к которой привязан шаблон",
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        related_name="excel_templates",
+        verbose_name="Подразделение",
+        help_text="Подразделение, к которому привязан шаблон",
+        null=True,
+        blank=True,
+    )
     created_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name="Дата создания",
@@ -711,6 +756,18 @@ class ExcelTemplate(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.version}"
+
+    def clean(self):
+        if self.department and self.department.laboratory != self.laboratory:
+            raise ValidationError(
+                {
+                    "department": "Подразделение должно принадлежать выбранной лаборатории"
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     @classmethod
     def get_next_version(cls, name):

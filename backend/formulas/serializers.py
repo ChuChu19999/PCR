@@ -103,6 +103,11 @@ class LaboratorySerializer(serializers.ModelSerializer):
 
 
 class ResearchMethodSerializer(serializers.ModelSerializer):
+    groups = serializers.SerializerMethodField()
+
+    def get_groups(self, obj):
+        return [{"id": group.id, "name": group.name} for group in obj.groups.all()]
+
     class Meta:
         model = ResearchMethod
         fields = (
@@ -125,6 +130,7 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
             "rounding_decimal",
             "is_active",
             "is_group_member",
+            "groups",
         )
         read_only_fields = ("created_at", "updated_at", "deleted_at")
 
@@ -483,6 +489,8 @@ class ResearchMethodGroupSerializer(serializers.ModelSerializer):
 
 class ExcelTemplateSerializer(serializers.ModelSerializer):
     file = serializers.SerializerMethodField()
+    laboratory_name = serializers.CharField(source="laboratory.name", read_only=True)
+    department_name = serializers.CharField(source="department.name", read_only=True)
 
     class Meta:
         model = ExcelTemplate
@@ -493,6 +501,10 @@ class ExcelTemplateSerializer(serializers.ModelSerializer):
             "file_name",
             "file",
             "is_active",
+            "laboratory",
+            "laboratory_name",
+            "department",
+            "department_name",
             "created_at",
             "updated_at",
         )
@@ -500,6 +512,41 @@ class ExcelTemplateSerializer(serializers.ModelSerializer):
 
     def get_file(self, obj):
         return None
+
+    def create(self, validated_data):
+        # Получаем следующую версию для шаблона
+        version = ExcelTemplate.get_next_version(validated_data["name"])
+        validated_data["version"] = version
+        validated_data["is_active"] = True
+        return super().create(validated_data)
+
+    def validate(self, data):
+        if (
+            data.get("department")
+            and data["department"].laboratory != data["laboratory"]
+        ):
+            raise serializers.ValidationError(
+                {
+                    "department": "Подразделение должно принадлежать выбранной лаборатории"
+                }
+            )
+
+        # При обновлении запрещаем менять лабораторию и подразделение
+        if self.instance:
+            if "laboratory" in data and data["laboratory"] != self.instance.laboratory:
+                raise serializers.ValidationError(
+                    {
+                        "laboratory": "Нельзя изменить лабораторию у существующего шаблона"
+                    }
+                )
+            if "department" in data and data["department"] != self.instance.department:
+                raise serializers.ValidationError(
+                    {
+                        "department": "Нельзя изменить подразделение у существующего шаблона"
+                    }
+                )
+
+        return data
 
 
 class ProtocolDetailsSerializer(serializers.ModelSerializer):
@@ -548,6 +595,8 @@ class ProtocolSerializer(serializers.ModelSerializer):
         queryset=ProtocolDetails.objects.filter(is_deleted=False),
         write_only=True,
     )
+    laboratory_name = serializers.CharField(source="laboratory.name", read_only=True)
+    department_name = serializers.CharField(source="department.name", read_only=True)
 
     class Meta:
         model = Protocol
@@ -564,6 +613,10 @@ class ProtocolSerializer(serializers.ModelSerializer):
             "receiving_date",
             "executor",
             "excel_template",
+            "laboratory",
+            "laboratory_name",
+            "department",
+            "department_name",
             "created_at",
             "updated_at",
             "is_deleted",
@@ -571,37 +624,54 @@ class ProtocolSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("created_at", "updated_at", "is_deleted", "deleted_at")
 
+    def validate(self, data):
+        if (
+            data.get("department")
+            and data["department"].laboratory != data["laboratory"]
+        ):
+            raise serializers.ValidationError(
+                {
+                    "department": "Подразделение должно принадлежать выбранной лаборатории"
+                }
+            )
+
+        return data
+
     def validate_registration_number(self, value):
         request = self.context.get("request")
         if not request:
             return value
 
-        laboratory_id = request.query_params.get("laboratory_id")
-        department_id = request.query_params.get("department_id")
+        laboratory = (
+            self.instance.laboratory
+            if self.instance
+            else self.initial_data.get("laboratory")
+        )
+        department = (
+            self.instance.department
+            if self.instance
+            else self.initial_data.get("department")
+        )
 
-        if not laboratory_id:
+        if not laboratory:
             return value
 
         # Проверяем существование протокола с таким же регистрационным номером
         existing_protocols = Protocol.objects.filter(
-            registration_number=value, is_deleted=False
-        )
-
-        calculations = Calculation.objects.filter(
-            protocol__in=existing_protocols,
-            laboratory_id=laboratory_id,
+            registration_number=value,
+            laboratory=laboratory,
+            department=department,
             is_deleted=False,
         )
 
-        if department_id:
-            calculations = calculations.filter(department_id=department_id)
-        else:
-            calculations = calculations.filter(department__isnull=True)
+        # Исключаем текущий протокол при обновлении
+        if self.instance:
+            existing_protocols = existing_protocols.exclude(pk=self.instance.pk)
 
-        if calculations.exists():
+        if existing_protocols.exists():
             raise serializers.ValidationError(
                 "Протокол с таким регистрационным номером уже существует для данной лаборатории"
-                + (" и подразделения" if department_id else "")
+                + (" и подразделения" if department else "")
             )
 
         return value
@@ -626,6 +696,12 @@ class CalculationSerializer(serializers.ModelSerializer):
     laboratory_activity_date = serializers.DateField(
         format="%Y-%m-%d", input_formats=["%Y-%m-%d"], required=True
     )
+    research_method = ResearchMethodSerializer(read_only=True)
+    research_method_id = serializers.PrimaryKeyRelatedField(
+        source="research_method",
+        queryset=ResearchMethod.objects.filter(is_deleted=False),
+        write_only=True,
+    )
 
     class Meta:
         model = Calculation
@@ -640,6 +716,7 @@ class CalculationSerializer(serializers.ModelSerializer):
             "laboratory",
             "department",
             "research_method",
+            "research_method_id",
             "laboratory_activity_date",
             "created_at",
             "updated_at",

@@ -2,435 +2,28 @@ import json
 import logging
 from copy import copy
 from io import BytesIO
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from django.http import HttpResponse, JsonResponse
 from openpyxl import load_workbook, Workbook
-from openpyxl.styles import Font, Alignment, Border, Side
+from openpyxl.styles import Font, Alignment
 from openpyxl.cell.cell import MergedCell
-from rest_framework import viewsets, status
-from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from .models import ExcelTemplate, Protocol, Calculation, ProtocolDetails
-from .serializers import ExcelTemplateSerializer
-
+from ..models import ExcelTemplate, Protocol, Calculation
+from ..utils.excel_utils import (
+    A4_HEIGHT_POINTS,
+    DEFAULT_ROW_HEIGHT,
+    save_row_dimensions,
+    restore_row_dimensions,
+    format_result,
+    get_content_height,
+    find_table_headers,
+    get_table_header_rows,
+)
 
 logger = logging.getLogger(__name__)
-
-
-@permission_classes([AllowAny])
-class ExcelTemplateViewSet(viewsets.ModelViewSet):
-    serializer_class = ExcelTemplateSerializer
-    queryset = ExcelTemplate.objects.all()
-
-    def get_queryset(self):
-        queryset = ExcelTemplate.objects.filter(is_active=True)
-
-        name = self.request.query_params.get("name")
-        if name:
-            logger.info(f"Фильтрация шаблонов по имени: {name}")
-            queryset = queryset.filter(name=name)
-            logger.info(f"Найдено шаблонов: {queryset.count()}")
-
-        return queryset
-
-    def create(self, request, *args, **kwargs):
-        name = request.data.get("name")
-        if ExcelTemplate.objects.filter(name=name, is_active=True).exists():
-            return Response(
-                {"error": "Активный шаблон с таким именем уже существует"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        file = request.FILES.get("file")
-        if not file:
-            return Response(
-                {"error": "Файл не предоставлен"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        file_content = file.read()
-
-        template = ExcelTemplate.objects.create(
-            name=name,
-            version="v1",
-            file=file_content,
-            file_name=file.name,
-            is_active=True,
-        )
-
-        serializer = self.get_serializer(template)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        logger.info(
-            f"Запрос шаблона: id={instance.id}, name={instance.name}, version={instance.version}"
-        )
-        logger.info(f"Параметры запроса: {request.query_params}")
-
-        if request.query_params.get("download") == "true":
-            logger.info(f"Скачивание файла: {instance.file_name}")
-
-            response = HttpResponse(
-                instance.file,
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-            response["Content-Disposition"] = (
-                f'attachment; filename="{instance.file_name}"'
-            )
-            return response
-        return super().retrieve(request, *args, **kwargs)
-
-    @action(detail=True, methods=["post"])
-    def update_template(self, request, pk=None):
-        """
-        Обновляет существующий шаблон, создавая новую версию
-        """
-        current_template = self.get_object()
-
-        next_version = current_template.deactivate()
-
-        new_template = ExcelTemplate.objects.create(
-            name=current_template.name,
-            version=next_version,
-            file=request.data.get("file", current_template.file),
-            file_name=current_template.file_name,
-            is_active=True,
-        )
-
-        serializer = self.get_serializer(new_template)
-        return Response(serializer.data)
-
-
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def save_excel(request):
-    """
-    Сохранение изменений шаблона протокола
-    """
-    try:
-        data = request.data.get("data")
-        if isinstance(data, str):
-            data = json.loads(data)
-
-        styles = request.data.get("styles")
-        if isinstance(styles, str):
-            styles = json.loads(styles)
-
-        template_id = request.data.get("template_id")
-        if not template_id:
-            return Response(
-                {"error": "Не указан ID шаблона"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        section = request.data.get("section", "header")
-
-        if not data:
-            logger.error("Данные не предоставлены")
-            return Response(
-                {"error": "Данные не предоставлены"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        template = get_object_or_404(ExcelTemplate, id=template_id, is_active=True)
-
-        # Создаем копию содержимого файла
-        original_file_content = template.file
-
-        file_stream = BytesIO(template.file)
-        workbook = load_workbook(file_stream, data_only=False)
-        worksheet = workbook.active
-
-        # В зависимости от типа протокола применяем разную логику
-        if section == "header":
-            # Находим существующие метки в файле
-            start_header_row = None
-            end_header_row = None
-            for row_idx in range(1, worksheet.max_row + 1):
-                cell_value = worksheet.cell(row=row_idx, column=1).value
-                if cell_value == "{{start_header}}":
-                    start_header_row = row_idx
-                elif cell_value == "{{end_header}}":
-                    end_header_row = row_idx
-
-            # Проверяем наличие меток
-            if start_header_row is None or end_header_row is None:
-                error_message = "В файле не найдены метки {{start_header}} и {{end_header}}. Добавьте метки в шаблон для редактирования шапки."
-                logger.error(error_message)
-                return Response(
-                    {"error": error_message},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            # Если нужно больше места между метками
-            if end_header_row - start_header_row - 1 < len(data):
-                # Сдвигаем данные после end_header вниз
-                shift = len(data) - (end_header_row - start_header_row - 1)
-                for row_idx in range(worksheet.max_row, end_header_row - 1, -1):
-                    for col_idx in range(1, worksheet.max_column + 1):
-                        source_cell = worksheet.cell(row=row_idx, column=col_idx)
-                        target_cell = worksheet.cell(
-                            row=row_idx + shift, column=col_idx
-                        )
-
-                        # Если исходная ячейка объединена, находим основную ячейку
-                        if isinstance(source_cell, MergedCell):
-                            for merge_range in worksheet.merged_cells.ranges:
-                                min_row = merge_range.min_row
-                                max_row = merge_range.max_row
-                                min_col = merge_range.min_col
-                                max_col = merge_range.max_col
-
-                                if (
-                                    min_row <= row_idx <= max_row
-                                    and min_col <= col_idx <= max_col
-                                ):
-                                    source_cell = worksheet.cell(
-                                        row=min_row, column=min_col
-                                    )
-                                    # Создаем новый диапазон объединения со сдвигом
-                                    worksheet.merge_cells(
-                                        start_row=min_row + shift,
-                                        start_column=min_col,
-                                        end_row=max_row + shift,
-                                        end_column=max_col,
-                                    )
-                                    break
-
-                        # Копируем значение и стили
-                        if not isinstance(target_cell, MergedCell):
-                            target_cell.value = source_cell.value
-                            if source_cell.has_style:
-                                target_cell._style = copy(source_cell._style)
-                end_header_row += shift
-
-            # Сохраняем информацию об объединенных ячейках
-            merged_ranges = []
-            for merge_range in worksheet.merged_cells.ranges:
-                if start_header_row < merge_range.min_row < end_header_row:
-                    merged_ranges.append(
-                        {
-                            "min_row": merge_range.min_row,
-                            "max_row": merge_range.max_row,
-                            "min_col": merge_range.min_col,
-                            "max_col": merge_range.max_col,
-                        }
-                    )
-
-            # Очищаем старые данные между метками и разъединяем ячейки
-            for row_idx in range(start_header_row + 1, end_header_row):
-                # Находим и удаляем объединения ячеек в этой области
-                ranges_to_remove = []
-                for merge_range in worksheet.merged_cells.ranges:
-                    min_row = merge_range.min_row
-                    max_row = merge_range.max_row
-
-                    if min_row <= row_idx <= max_row:
-                        ranges_to_remove.append(merge_range)
-
-                for merge_range in ranges_to_remove:
-                    worksheet.unmerge_cells(
-                        start_row=merge_range.min_row,
-                        start_column=merge_range.min_col,
-                        end_row=merge_range.max_row,
-                        end_column=merge_range.max_col,
-                    )
-
-                worksheet.cell(row=row_idx, column=1).value = None
-
-            # Записываем новые данные
-            for idx, row_data in enumerate(data):
-                value = str(row_data[0]) if row_data[0] is not None else ""
-                target_row = start_header_row + 1 + idx
-                target_col = 1
-                cell = worksheet.cell(row=target_row, column=target_col)
-                cell.value = value
-
-                # Применяем стили, если они есть для данной ячейки
-                cell_key = f"{idx}-0"
-                if styles and cell_key in styles:
-                    style = styles[cell_key]
-
-                    font_size = style.get("fontSize", "14")
-                    if isinstance(font_size, str):
-                        font_size = font_size.replace("px", "")
-                        try:
-                            font_size = int(float(font_size))
-                        except (ValueError, TypeError):
-                            font_size = 14
-
-                    font = Font(
-                        name="Times New Roman",
-                        bold=style.get("fontWeight") == "bold",
-                        italic=style.get("fontStyle") == "italic",
-                        size=font_size,
-                    )
-                    cell.font = font
-
-                    horizontal_align = "center"
-                    if style.get("textAlign") == "left":
-                        horizontal_align = "left"
-                    elif style.get("textAlign") == "right":
-                        horizontal_align = "right"
-
-                    alignment = Alignment(
-                        horizontal=horizontal_align,
-                        vertical="center",
-                        wrap_text=True,
-                    )
-                    cell.alignment = alignment
-
-            # Восстанавливаем объединенные ячейки
-            for merge_info in merged_ranges:
-                worksheet.merge_cells(
-                    start_row=merge_info["min_row"],
-                    start_column=merge_info["min_col"],
-                    end_row=merge_info["max_row"],
-                    end_column=merge_info["max_col"],
-                )
-
-        else:
-            logger.error(f"Неизвестная секция для редактирования: {section}")
-            return Response(
-                {"error": f"Неизвестная секция: {section}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Сохраняем изменения в новой версии шаблона
-        next_version = template.deactivate()
-
-        output = BytesIO()
-        workbook.save(output)
-        file_content = output.getvalue()
-
-        # Создаем новый шаблон с измененным содержимым
-        new_template = ExcelTemplate.objects.create(
-            name=template.name,
-            version=next_version,
-            file=file_content,  # Новое содержимое
-            file_name=template.file_name,
-            is_active=True,
-        )
-
-        # Деактивируем старый шаблон, сохраняя его оригинальное содержимое
-        template.is_active = False
-        template.file = original_file_content
-        template.save()
-
-        return Response(
-            {
-                "message": "Файл успешно обновлен",
-                "version": next_version,
-                "template_id": new_template.id,
-            },
-            status=status.HTTP_200_OK,
-        )
-    except Exception as e:
-        logger.error(f"Ошибка при сохранении Excel файла: {str(e)}", exc_info=True)
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def get_excel_styles(request):
-    """
-    Получает стили для ячеек в файле
-    """
-    template_id = request.query_params.get("template_id")
-    section = request.query_params.get("section")
-
-    logger.info(f"Запрос стилей Excel: template_id={template_id}, section={section}")
-
-    if not template_id:
-        return Response({"error": "Не указан ID шаблона"}, status=400)
-
-    try:
-        template = ExcelTemplate.objects.get(id=template_id)
-        logger.info(
-            f"Найден шаблон: id={template.id}, name={template.name}, version={template.version}"
-        )
-
-        file_stream = BytesIO(template.file)
-        workbook = load_workbook(file_stream, data_only=False)
-        worksheet = workbook.active
-
-        styles = {}
-
-        # Ищем метки в файле
-        start_header_row = None
-        end_header_row = None
-        for row_idx in range(1, worksheet.max_row + 1):
-            cell_value = worksheet.cell(row=row_idx, column=1).value
-            if cell_value == "{{start_header}}":
-                start_header_row = row_idx
-            elif cell_value == "{{end_header}}":
-                end_header_row = row_idx
-                break
-
-        # Проверяем наличие меток
-        if start_header_row is None or end_header_row is None:
-            error_message = "В файле не найдены метки {{start_header}} и {{end_header}}. Добавьте метки в шаблон для редактирования шапки."
-            logger.error(error_message)
-            return Response(
-                {"error": error_message},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Получаем стили для ячеек между метками
-        for row_idx in range(start_header_row + 1, end_header_row):
-            cell = worksheet.cell(row=row_idx, column=1)
-            cell_key = f"{row_idx - start_header_row - 1}-0"
-
-            if cell.font:
-                style = {}
-                if cell.font.bold:
-                    style["fontWeight"] = "bold"
-                if cell.font.italic:
-                    style["fontStyle"] = "italic"
-                if cell.font.size:
-                    style["fontSize"] = f"{cell.font.size}px"
-
-                if style:
-                    styles[cell_key] = style
-
-        return Response({"styles": styles}, status=status.HTTP_200_OK)
-    except Exception as e:
-        logger.error(f"Ошибка при получении стилей Excel: {str(e)}", exc_info=True)
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-def save_row_dimensions(worksheet):
-    """
-    Сохраняет размеры всех строк в рабочем листе.
-    """
-    return {row: {"height": rd.height} for row, rd in worksheet.row_dimensions.items()}
-
-
-def restore_row_dimensions(
-    worksheet, original_dimensions, shift_after_row, shift_amount
-):
-    """
-    Восстанавливает размеры строк с учетом сдвига.
-    """
-    new_dimensions = {}
-
-    # Копируем размеры до строки вставки без изменений
-    for row, dims in original_dimensions.items():
-        if row <= shift_after_row:
-            new_dimensions[row] = dims
-        else:
-            # Сдвигаем размеры после строки вставки
-            new_dimensions[row + shift_amount] = dims
-
-    # Копируем размеры для вставленных строк
-    for i in range(shift_amount):
-        new_row = shift_after_row + 1 + i
-        if shift_after_row in original_dimensions:
-            new_dimensions[new_row] = original_dimensions[shift_after_row]
-
-    # Применяем новые размеры
-    for row, dims in new_dimensions.items():
-        worksheet.row_dimensions[row].height = dims["height"]
 
 
 @api_view(["GET"])
@@ -1153,13 +746,21 @@ def generate_protocol_excel(request):
 
                         # Обработка значений ячеек
                         if cell.value and isinstance(cell.value, str):
+                            # Форматируем погрешность с добавлением ±
+                            error_value = calc.measurement_error
+                            formatted_error = (
+                                f"±{error_value}"
+                                if error_value and error_value != "не указано"
+                                else "не указано"
+                            )
+
                             value = (
                                 cell.value.replace("{id_method}", str(idx))
                                 .replace("{name_method}", calc.research_method.name)
                                 .replace("{result}", format_result(calc.result))
                                 .replace(
                                     "{measurement_error}",
-                                    format_result(calc.measurement_error),
+                                    formatted_error,
                                 )
                                 .replace("{unit}", calc.unit or "не указано")
                                 .replace(
@@ -1420,74 +1021,163 @@ def generate_protocol_excel(request):
                 row_mapping[source_row] = target_row
                 target_row += 1
 
-        # Копируем содержимое с учетом маппинга
+        # Группируем строки по листам с учетом шапок таблиц
+        sheets_content = []
+        current_sheet_rows = []
+        current_sheet_height = 0
+        last_header_row = None
+        last_header_rows = []
+
         for source_row, target_row in row_mapping.items():
-            # Копируем высоту строки
-            if source_row in source_worksheet.row_dimensions:
-                target_worksheet.row_dimensions[target_row] = copy(
-                    source_worksheet.row_dimensions[source_row]
+            # Получаем высоту строки
+            row_height = (
+                source_worksheet.row_dimensions[source_row].height
+                if source_row in source_worksheet.row_dimensions
+                else DEFAULT_ROW_HEIGHT
+            )
+
+            # Проверяем, является ли текущая строка частью таблицы
+            header_row = find_table_headers(source_worksheet, source_row)
+
+            # Если нашли шапку таблицы, сохраняем её и получаем все строки шапки
+            if header_row is not None:
+                last_header_row = header_row
+                last_header_rows = get_table_header_rows(
+                    source_worksheet, header_row, source_row
                 )
 
-            # Копируем ячейки и их стили
-            for col in range(1, source_worksheet.max_column + 1):
-                source_cell = source_worksheet.cell(row=source_row, column=col)
-                target_cell = target_worksheet.cell(row=target_row, column=col)
+            # Если текущий лист превысит высоту А4
+            if (
+                current_sheet_height + row_height > A4_HEIGHT_POINTS
+                and current_sheet_rows
+            ):
+                # Добавляем текущий набор строк в список листов
+                sheets_content.append(current_sheet_rows)
+                current_sheet_rows = []
+                current_sheet_height = 0
 
-                # Копируем значение
-                target_cell.value = source_cell.value
+                # Если есть шапка таблицы, добавляем только строки шапки в начало нового листа
+                if last_header_rows:
+                    header_height = 0
+                    for header_row in last_header_rows:
+                        if header_row in row_mapping:
+                            header_row_height = (
+                                source_worksheet.row_dimensions[header_row].height
+                                if header_row in source_worksheet.row_dimensions
+                                else DEFAULT_ROW_HEIGHT
+                            )
+                            header_height += header_row_height
+                            current_sheet_rows.append(header_row)
+                    current_sheet_height = header_height
 
-                # Копируем стили
-                if source_cell.has_style:
-                    if source_cell.font:
-                        target_cell.font = Font(
-                            name=source_cell.font.name,
-                            size=source_cell.font.size,
-                            bold=source_cell.font.bold,
-                            italic=source_cell.font.italic,
-                            vertAlign=source_cell.font.vertAlign,
-                            underline=source_cell.font.underline,
-                            strike=source_cell.font.strike,
-                            color=source_cell.font.color,
-                        )
+            current_sheet_rows.append(source_row)
+            current_sheet_height += row_height
 
-                    if source_cell.alignment:
-                        target_cell.alignment = Alignment(
-                            horizontal=source_cell.alignment.horizontal,
-                            vertical=source_cell.alignment.vertical,
-                            textRotation=source_cell.alignment.textRotation,
-                            wrapText=source_cell.alignment.wrapText,
-                            shrinkToFit=source_cell.alignment.shrinkToFit,
-                            indent=source_cell.alignment.indent,
-                        )
+        # Добавляем последний набор строк
+        if current_sheet_rows:
+            sheets_content.append(current_sheet_rows)
 
-                    if source_cell.border:
-                        target_cell.border = copy(source_cell.border)
+        # Создаем и заполняем листы
+        for sheet_index, sheet_rows in enumerate(sheets_content):
+            if sheet_index == 0:
+                # Используем первый лист
+                current_sheet = target_worksheet
+            else:
+                # Создаем новый лист для следующей части данных
+                current_sheet = target_workbook.create_sheet(f"Лист {sheet_index + 1}")
 
-                    if source_cell.fill:
-                        target_cell.fill = copy(source_cell.fill)
+                # Копируем размеры столбцов на новый лист
+                for column in source_worksheet.column_dimensions:
+                    current_sheet.column_dimensions[column] = copy(
+                        source_worksheet.column_dimensions[column]
+                    )
 
-                    target_cell.number_format = source_cell.number_format
+            current_sheet_row = 1
 
-        # Обновляем объединенные ячейки
-        for merge_range in source_worksheet.merged_cells.ranges:
-            min_row = merge_range.min_row
-            max_row = merge_range.max_row
-            min_col = merge_range.min_col
-            max_col = merge_range.max_col
+            # Копируем содержимое для текущего листа
+            for source_row in sheet_rows:
+                # Копируем высоту строки
+                if source_row in source_worksheet.row_dimensions:
+                    current_sheet.row_dimensions[current_sheet_row] = copy(
+                        source_worksheet.row_dimensions[source_row]
+                    )
 
-            # Проверяем, что все строки диапазона не находятся в пропускаемых
-            if all(row in row_mapping for row in range(min_row, max_row + 1)):
-                new_min_row = row_mapping[min_row]
-                new_max_row = row_mapping[max_row]
+                # Копируем ячейки и их стили
+                for col in range(1, source_worksheet.max_column + 1):
+                    source_cell = source_worksheet.cell(row=source_row, column=col)
+                    target_cell = current_sheet.cell(row=current_sheet_row, column=col)
+
+                    # Копируем значение
+                    target_cell.value = source_cell.value
+
+                    # Копируем стили
+                    if source_cell.has_style:
+                        if source_cell.font:
+                            target_cell.font = Font(
+                                name=source_cell.font.name,
+                                size=source_cell.font.size,
+                                bold=source_cell.font.bold,
+                                italic=source_cell.font.italic,
+                                vertAlign=source_cell.font.vertAlign,
+                                underline=source_cell.font.underline,
+                                strike=source_cell.font.strike,
+                                color=source_cell.font.color,
+                            )
+
+                        if source_cell.alignment:
+                            target_cell.alignment = Alignment(
+                                horizontal=source_cell.alignment.horizontal,
+                                vertical=source_cell.alignment.vertical,
+                                textRotation=source_cell.alignment.textRotation,
+                                wrapText=source_cell.alignment.wrapText,
+                                shrinkToFit=source_cell.alignment.shrinkToFit,
+                                indent=source_cell.alignment.indent,
+                            )
+
+                        if source_cell.border:
+                            target_cell.border = copy(source_cell.border)
+
+                        if source_cell.fill:
+                            target_cell.fill = copy(source_cell.fill)
+
+                        target_cell.number_format = source_cell.number_format
+
+                current_sheet_row += 1
+
+            # Обновляем объединенные ячейки для текущего листа
+            current_merged_cells = []
+            for merge_range in source_worksheet.merged_cells.ranges:
+                min_row = merge_range.min_row
+                max_row = merge_range.max_row
+
+                # Проверяем, что объединенные ячейки находятся в текущем наборе строк
+                if min_row in sheet_rows and max_row in sheet_rows:
+                    # Получаем новые номера строк для текущего листа
+                    new_min_row = sheet_rows.index(min_row) + 1
+                    new_max_row = sheet_rows.index(max_row) + 1
+
+                    current_merged_cells.append(
+                        {
+                            "min_row": new_min_row,
+                            "max_row": new_max_row,
+                            "min_col": merge_range.min_col,
+                            "max_col": merge_range.max_col,
+                        }
+                    )
+
+            # Применяем объединение ячеек для текущего листа
+            for merge_info in current_merged_cells:
                 try:
-                    target_worksheet.merge_cells(
-                        start_row=new_min_row,
-                        start_column=min_col,
-                        end_row=new_max_row,
-                        end_column=max_col,
+                    current_sheet.merge_cells(
+                        start_row=merge_info["min_row"],
+                        start_column=merge_info["min_col"],
+                        end_row=merge_info["max_row"],
+                        end_column=merge_info["max_col"],
                     )
                 except Exception as e:
-                    logger.warning(f"Не удалось объединить ячейки: {str(e)}")
+                    logger.warning(
+                        f"Не удалось объединить ячейки на листе {sheet_index + 1}: {str(e)}"
+                    )
 
         # Сохраняем финальный результат
         final_output = BytesIO()
@@ -1516,52 +1206,3 @@ def generate_protocol_excel(request):
             {"error": f"Произошла ошибка при генерации файла: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
-
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def get_sampling_locations(request):
-    """
-    Получает список мест отбора проб
-    """
-    branch = request.query_params.get("branch")
-    if not branch:
-        return Response(
-            {"error": "Необходимо указать филиал"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
-    locations = (
-        ProtocolDetails.objects.filter(branch=branch, is_deleted=False)
-        .values("id", "sampling_location_detail", "phone")
-        .distinct()
-    )
-
-    return Response(locations)
-
-
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def get_branches(request):
-    """
-    Получает список уникальных филиалов
-    """
-    branches = (
-        ProtocolDetails.objects.filter(is_deleted=False)
-        .values_list("branch", flat=True)
-        .distinct()
-        .order_by("branch")
-    )
-    return Response(list(branches))
-
-
-def format_result(value):
-    """
-    Форматирует результат измерения, заменяя минус на слово
-    """
-    if not value or value == "не указано":
-        return "не указано"
-
-    str_value = str(value)
-    if str_value.startswith("-"):
-        return f"минус {str_value[1:]}"
-    return str_value

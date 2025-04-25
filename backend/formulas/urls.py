@@ -1,28 +1,31 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import (
+from .views.views import (
     DepartmentViewSet,
     LaboratoryViewSet,
     ResearchMethodGroupViewSet,
     ResearchMethodViewSet,
     ResearchObjectViewSet,
     ProtocolViewSet,
+    CalculationViewSet,
+    check_status_api,
+)
+from .views.excel_views import (
+    ExcelTemplateViewSet,
+    get_excel_styles,
+    save_excel,
+    get_sampling_locations,
+    get_branches,
+)
+from .services.protocol_generator import generate_protocol_excel
+from .views.user_views import UserViewSet
+from .api.calculation_api import (
     calculate_result,
     update_research_method_status,
     save_calculation,
     update_methods_order,
     get_registration_numbers,
-    check_status_api,
 )
-from .excel_views import (
-    ExcelTemplateViewSet,
-    get_excel_styles,
-    save_excel,
-    generate_protocol_excel,
-    get_sampling_locations,
-    get_branches,
-)
-from .user_views import UserViewSet
 
 
 router = DefaultRouter()
@@ -36,6 +39,7 @@ router.register(
 )
 router.register(r"research-pages", ResearchObjectViewSet, basename="research-page")
 router.register(r"protocols", ProtocolViewSet, basename="protocol")
+router.register(r"calculations", CalculationViewSet, basename="calculation")
 router.register(r"excel-templates", ExcelTemplateViewSet, basename="excel-template")
 router.register(r"users", UserViewSet, basename="user")
 

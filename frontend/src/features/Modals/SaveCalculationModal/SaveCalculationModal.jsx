@@ -4,7 +4,8 @@ import axios from 'axios';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import locale from 'antd/es/date-picker/locale/ru_RU';
-import './SaveCalculationForm.css';
+import Modal from '../ui/Modal';
+import './SaveCalculationModal.css';
 
 const { Option } = Select;
 
@@ -38,13 +39,14 @@ const isValidDate = dateString => {
   );
 };
 
-const SaveCalculationForm = ({
+const SaveCalculationModal = ({
+  isOpen,
+  onClose,
   calculationResult,
   currentMethod,
   laboratoryId,
   departmentId,
   onSuccess,
-  onCancel,
 }) => {
   const [formData, setFormData] = useState({
     test_protocol_number: '',
@@ -74,7 +76,12 @@ const SaveCalculationForm = ({
   const [branchesLoading, setBranchesLoading] = useState(false);
 
   useEffect(() => {
-    fetchTemplates();
+    if (isOpen) {
+      fetchTemplates();
+    }
+  }, [isOpen, laboratoryId, departmentId]);
+
+  useEffect(() => {
     fetchBranches();
   }, []);
 
@@ -154,7 +161,41 @@ const SaveCalculationForm = ({
   const fetchTemplates = async () => {
     try {
       const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/excel-templates/`);
-      setTemplates(response.data.filter(template => template.is_active));
+      const allTemplates = response.data.filter(template => template.is_active);
+      console.log('Все активные шаблоны:', allTemplates);
+
+      // Фильтруем шаблоны по лаборатории и подразделению
+      const filteredTemplates = allTemplates.filter(template => {
+        // Приводим значения к числам для корректного сравнения
+        const templateLab = Number(template.laboratory);
+        const templateDept = template.department ? Number(template.department) : null;
+        const lab = Number(laboratoryId);
+        const dept = departmentId ? Number(departmentId) : null;
+
+        const matchesLaboratory = templateLab === lab;
+        if (dept) {
+          return matchesLaboratory && templateDept === dept;
+        }
+        return matchesLaboratory && !templateDept;
+      });
+      console.log('Отфильтрованные шаблоны:', filteredTemplates, {
+        laboratoryId: Number(laboratoryId),
+        departmentId: departmentId ? Number(departmentId) : null,
+      });
+
+      // Сортируем шаблоны по имени и версии
+      const sortedTemplates = filteredTemplates.sort((a, b) => {
+        if (a.name !== b.name) {
+          return a.name.localeCompare(b.name);
+        }
+        // Извлекаем номер версии и сравниваем как числа
+        const versionA = parseInt(a.version.replace('v', ''));
+        const versionB = parseInt(b.version.replace('v', ''));
+        return versionB - versionA; // Сортировка по убыванию версии
+      });
+      console.log('Отсортированные шаблоны:', sortedTemplates);
+
+      setTemplates(sortedTemplates);
     } catch (error) {
       console.error('Ошибка при загрузке шаблонов:', error);
       message.error('Не удалось загрузить список шаблонов');
@@ -170,7 +211,7 @@ const SaveCalculationForm = ({
     setProtocolsLoading(true);
     try {
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/protocols/?search=${searchText}`
+        `${import.meta.env.VITE_API_URL}/api/protocols/?search=${searchText}&laboratory=${laboratoryId}${departmentId ? `&department=${departmentId}` : ''}`
       );
       // Фильтруем протоколы, чтобы искать только по регистрационному номеру
       const filteredProtocols = response.data.filter(protocol =>
@@ -271,17 +312,6 @@ const SaveCalculationForm = ({
 
   const handleSave = async () => {
     try {
-      console.log('Входящие данные calculationResult:', calculationResult);
-      console.log(
-        'Тип laboratory_activity_date:',
-        typeof calculationResult.laboratory_activity_date
-      );
-      console.log(
-        'Является ли Dayjs объектом:',
-        dayjs.isDayjs(calculationResult.laboratory_activity_date)
-      );
-      console.log('Значение laboratory_activity_date:', calculationResult.laboratory_activity_date);
-
       if (!validate()) {
         return;
       }
@@ -305,20 +335,13 @@ const SaveCalculationForm = ({
           receiving_date: formData.receiving_date?.format('YYYY-MM-DD'),
           executor: formData.executor,
           excel_template: formData.excel_template,
+          laboratory: laboratoryId,
+          department: departmentId || null,
         };
-
-        console.log('Отправляемые данные протокола:');
-        console.log(JSON.stringify(protocolData, null, 2));
 
         const protocolResponse = await axios.post(
           `${import.meta.env.VITE_API_URL}/api/protocols/`,
-          protocolData,
-          {
-            params: {
-              laboratory_id: laboratoryId,
-              department_id: departmentId || undefined,
-            },
-          }
+          protocolData
         );
         protocolId = protocolResponse.data.id;
       }
@@ -351,9 +374,6 @@ const SaveCalculationForm = ({
         return;
       }
 
-      console.log('Отправляемые данные расчета:');
-      console.log(JSON.stringify(calculationData, null, 2));
-
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/save-calculation/`,
         calculationData
@@ -363,8 +383,6 @@ const SaveCalculationForm = ({
     } catch (error) {
       console.error('Ошибка при сохранении:', error);
       if (error.response?.data) {
-        console.log('Ответ сервера:', JSON.stringify(error.response.data, null, 2));
-
         // Проверяем наличие ошибки регистрационного номера
         if (error.response.data.registration_number) {
           setErrors(prev => ({
@@ -391,9 +409,22 @@ const SaveCalculationForm = ({
     }
   };
 
-  return (
-    <div className="save-calculation-form">
-      <div className="form-group">
+  const handleModalClose = () => {
+    setSelectedProtocol(null);
+    setUseExistingProtocol(false);
+    setErrors({});
+    onClose();
+  };
+
+  return isOpen ? (
+    <Modal
+      header="Сохранение результата расчета"
+      onClose={handleModalClose}
+      onSave={handleSave}
+      loading={loading}
+      style={{ width: '600px' }}
+    >
+      <div className="save-calculation-form">
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
           <Switch
             checked={useExistingProtocol}
@@ -414,6 +445,7 @@ const SaveCalculationForm = ({
                   executor: '',
                   excel_template: undefined,
                 });
+                setErrors({});
               }
             }}
           />
@@ -436,6 +468,7 @@ const SaveCalculationForm = ({
                   }
                 }}
                 className="protocol-search"
+                style={{ width: '100%' }}
               />
               {protocols.length > 0 && !selectedProtocol && (
                 <div className="protocol-dropdown">
@@ -503,6 +536,7 @@ const SaveCalculationForm = ({
                 onChange={e => handleInputChange('test_protocol_number')(e.target.value)}
                 placeholder="Введите номер протокола испытаний"
                 status={errors.test_protocol_number ? 'error' : ''}
+                style={{ width: '100%' }}
               />
               {errors.test_protocol_number && (
                 <div className="error-message">{errors.test_protocol_number}</div>
@@ -519,6 +553,7 @@ const SaveCalculationForm = ({
                 placeholder="Введите номер акта отбора"
                 status={errors.sampling_act_number ? 'error' : ''}
                 required
+                style={{ width: '100%' }}
               />
               {errors.sampling_act_number && (
                 <div className="error-message">{errors.sampling_act_number}</div>
@@ -536,6 +571,7 @@ const SaveCalculationForm = ({
                 placeholder="Введите регистрационный номер"
                 status={errors.registration_number ? 'error' : ''}
                 required
+                style={{ width: '100%' }}
               />
               {errors.registration_number && (
                 <div className="error-message">{errors.registration_number}</div>
@@ -551,7 +587,7 @@ const SaveCalculationForm = ({
                 onChange={handleProtocolDetailsChange('branch')}
                 placeholder="Выберите филиал"
                 status={errors.protocol_details?.branch ? 'error' : ''}
-                style={{ width: 'calc(100% - 20px)' }}
+                style={{ width: '100%' }}
                 required
                 loading={branchesLoading}
               >
@@ -578,7 +614,7 @@ const SaveCalculationForm = ({
                 onChange={handleProtocolDetailsChange('sampling_location_detail')}
                 placeholder="Выберите место отбора пробы"
                 status={errors.protocol_details?.sampling_location_detail ? 'error' : ''}
-                style={{ width: 'calc(100% - 20px)' }}
+                style={{ width: '100%' }}
                 disabled={!formData.selectedBranch}
                 required
               >
@@ -603,6 +639,7 @@ const SaveCalculationForm = ({
                 }
                 placeholder="Телефон будет заполнен автоматически"
                 disabled={true}
+                style={{ width: '100%', background: '#f5f5f5' }}
               />
             </div>
 
@@ -615,6 +652,7 @@ const SaveCalculationForm = ({
                 onChange={e => handleInputChange('laboratory_location')(e.target.value)}
                 placeholder="Введите место осуществления лабораторной деятельности"
                 status={errors.laboratory_location ? 'error' : ''}
+                style={{ width: '100%' }}
               />
               {errors.laboratory_location && (
                 <div className="error-message">{errors.laboratory_location}</div>
@@ -646,9 +684,14 @@ const SaveCalculationForm = ({
                   placeholder="Введите объект испытаний"
                   status={errors.test_object ? 'error' : ''}
                   required
+                  style={{ width: '100%' }}
                 />
               ) : (
-                <Input value={formData.test_object} disabled style={{ background: '#f5f5f5' }} />
+                <Input
+                  value={formData.test_object}
+                  disabled
+                  style={{ width: '100%', background: '#f5f5f5' }}
+                />
               )}
               {errors.test_object && <div className="error-message">{errors.test_object}</div>}
             </div>
@@ -661,8 +704,11 @@ const SaveCalculationForm = ({
                 value={formData.sampling_date}
                 onChange={handleInputChange('sampling_date')}
                 placeholder="ДД.ММ.ГГГГ"
-                style={{ width: 'calc(100% - 20px)' }}
+                style={{ width: '100%' }}
                 status={errors.sampling_date ? 'error' : ''}
+                className="custom-date-picker"
+                rootClassName="custom-date-picker-root"
+                popupClassName="custom-date-picker-popup"
                 inputReadOnly={false}
                 showToday={false}
                 allowClear={true}
@@ -702,8 +748,11 @@ const SaveCalculationForm = ({
                 value={formData.receiving_date}
                 onChange={handleInputChange('receiving_date')}
                 placeholder="ДД.ММ.ГГГГ"
-                style={{ width: 'calc(100% - 20px)' }}
+                style={{ width: '100%' }}
                 status={errors.receiving_date ? 'error' : ''}
+                className="custom-date-picker"
+                rootClassName="custom-date-picker-root"
+                popupClassName="custom-date-picker-popup"
                 inputReadOnly={false}
                 showToday={false}
                 allowClear={true}
@@ -744,6 +793,7 @@ const SaveCalculationForm = ({
                 onChange={e => handleInputChange('executor')(e.target.value)}
                 placeholder="Введите ФИО исполнителя"
                 status={errors.executor ? 'error' : ''}
+                style={{ width: '100%' }}
               />
               {errors.executor && <div className="error-message">{errors.executor}</div>}
             </div>
@@ -757,7 +807,7 @@ const SaveCalculationForm = ({
                 onChange={handleInputChange('excel_template')}
                 placeholder="Выберите шаблон протокола"
                 status={errors.excel_template ? 'error' : ''}
-                style={{ width: 'calc(100% - 20px)' }}
+                style={{ width: '100%' }}
                 required
               >
                 {templates.map(template => (
@@ -774,16 +824,9 @@ const SaveCalculationForm = ({
         )}
 
         {errors.general && <div className="error-message general-error">{errors.general}</div>}
-
-        <div className="buttons-container">
-          <Button onClick={onCancel}>Отмена</Button>
-          <Button type="primary" onClick={handleSave} loading={loading}>
-            Сохранить
-          </Button>
-        </div>
       </div>
-    </div>
-  );
+    </Modal>
+  ) : null;
 };
 
-export default SaveCalculationForm;
+export default SaveCalculationModal;

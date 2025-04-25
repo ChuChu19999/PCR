@@ -1,0 +1,508 @@
+from django.db import IntegrityError
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from decimal import Decimal
+import logging
+from ..models import (
+    ResearchObject,
+    ResearchMethod,
+    ResearchObjectMethod,
+    Protocol,
+    Calculation,
+)
+from ..serializers import ProtocolSerializer, CalculationSerializer
+from ..utils.formula_utils import (
+    round_result,
+    evaluate_formula,
+    calculate_convergence_steps,
+)
+
+logger = logging.getLogger(__name__)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def calculate_result(request):
+    """
+    Вычисляет результат расчета.
+    """
+    try:
+        logger.info("Начало расчета")
+
+        input_data = request.data.get("input_data", {})
+        research_method = request.data.get("research_method", {})
+
+        logger.info(f"Полученные входные данные: {input_data}")
+        logger.info(
+            f"Метод исследования: {research_method['name']} (ID: {research_method['id']})"
+        )
+        logger.info(f"Формула расчета: {research_method['formula']}")
+        logger.info(f"Погрешность: {research_method['measurement_error']}")
+
+        if not input_data or not research_method:
+            logger.error("Отсутствуют необходимые данные для расчета")
+            return Response(
+                {
+                    "error": "Необходимо предоставить входные данные и метод исследования"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Сначала вычисляем промежуточные результаты
+        logger.info("Начало вычисления промежуточных результатов")
+        intermediate_results = {}
+        variables = dict(input_data)
+
+        for field in research_method["intermediate_data"]["fields"]:
+            # Пропускаем поля с пустыми именами или формулами
+            if not field["name"].strip() or not field["formula"].strip():
+                logger.info(f"Пропущено пустое промежуточное поле: {field}")
+                continue
+
+            try:
+                logger.info(
+                    f"Вычисление промежуточного результата: {field['name']}, формула: {field['formula']}"
+                )
+                intermediate_value = evaluate_formula(field["formula"], variables)
+                logger.info(
+                    f"Промежуточный результат {field['name']} = {intermediate_value}"
+                )
+                # Добавляем результат в словарь только если show_calculation = true
+                if field.get("show_calculation", True):
+                    intermediate_results[field["name"]] = str(intermediate_value)
+                # В любом случае добавляем значение в переменные для дальнейших расчетов
+                variables[field["name"]] = intermediate_value
+            except Exception as e:
+                logger.error(
+                    f"Ошибка при вычислении промежуточного результата {field['name']}: {str(e)}"
+                )
+                return Response(
+                    {
+                        "error": f"Ошибка при вычислении промежуточного результата: {str(e)}"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        logger.info("Начало проверки условий сходимости")
+        satisfied_conditions = []
+
+        for condition in research_method["convergence_conditions"]["formulas"]:
+            try:
+                logger.info(f"Проверка условия: {condition['formula']}")
+                condition_result = evaluate_formula(
+                    condition["formula"], variables, is_condition=True
+                )
+                logger.info(
+                    f"Результат проверки условия: {condition_result} (тип: {condition['convergence_value']}"
+                )
+
+                if condition_result:
+                    satisfied_conditions.append(condition["convergence_value"])
+                    logger.info(
+                        f"Условие {condition['formula']} выполнено, тип: {condition['convergence_value']}"
+                    )
+            except Exception as e:
+                logger.error(f"Ошибка при проверке условия сходимости: {str(e)}")
+                return Response(
+                    {"error": f"Ошибка при проверке условия сходимости: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        logger.info(f"Все выполненные условия: {satisfied_conditions}")
+
+        # Проверяем наличие особых условий
+        special_conditions = [
+            cond
+            for cond in satisfied_conditions
+            if cond in ["traces", "unsatisfactory", "absence"]
+        ]
+
+        # Сохраняем информацию о выполненных условиях
+        conditions_info = []
+        for condition in research_method["convergence_conditions"]["formulas"]:
+            try:
+                condition_result = evaluate_formula(
+                    condition["formula"], variables, is_condition=True
+                )
+                conditions_info.append(
+                    {
+                        "formula": condition["formula"],
+                        "satisfied": condition_result,
+                        "convergence_value": condition["convergence_value"],
+                        "calculation_steps": calculate_convergence_steps(
+                            condition["formula"], variables
+                        ),
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Ошибка при проверке условия сходимости: {str(e)}")
+                return Response(
+                    {"error": f"Ошибка при проверке условия сходимости: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        if special_conditions:
+            # Если есть особые условия, возвращаем их через запятую
+            convergence_result = ", ".join(special_conditions)
+            logger.info(f"Найдены особые условия: {convergence_result}")
+
+            return Response(
+                {
+                    "convergence": convergence_result,
+                    "intermediate_results": {},
+                    "result": None,
+                    "measurement_error": None,
+                    "unit": research_method["unit"],
+                    "conditions_info": conditions_info,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # Если особых условий нет, считаем результат удовлетворительным
+        convergence_result = "satisfactory"
+        logger.info("Условия сходимости удовлетворительны, продолжаем расчет")
+
+        # Если сходимость удовлетворительная, вычисляем результат
+        result = None
+        measurement_error = None
+
+        if convergence_result == "satisfactory":
+            # Затем вычисляем основной результат
+            try:
+                logger.info(
+                    f"Вычисление основного результата по формуле: {research_method['formula']}"
+                )
+                logger.info(f"Используемые переменные: {variables}")
+                result = evaluate_formula(research_method["formula"], variables)
+                logger.info(f"Неокругленный результат: {result}")
+            except Exception as e:
+                logger.error(f"Ошибка при вычислении основного результата: {str(e)}")
+                return Response(
+                    {"error": f"Ошибка при вычислении результата: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Округляем результат
+            logger.info(
+                f"Округление результата: тип={research_method['rounding_type']}, знаков={research_method['rounding_decimal']}"
+            )
+            result = round_result(
+                result,
+                research_method["rounding_type"],
+                research_method["rounding_decimal"],
+            )
+            logger.info(f"Окончательный результат после округления: {result}")
+
+            # Вычисляем количество знаков после запятой в результате
+            result_decimal_places = (
+                len(str(result).split(".")[-1]) if "." in str(result) else 0
+            )
+            logger.info(
+                f"Количество знаков после запятой в результате: {result_decimal_places}"
+            )
+
+            # Вычисляем погрешность
+            try:
+                error_config = research_method["measurement_error"]
+                logger.info(f"Вычисление погрешности: {error_config}")
+
+                if error_config["type"] == "fixed":
+                    measurement_error = float(error_config["value"])
+                elif error_config["type"] == "formula":
+                    variables["result"] = result
+                    measurement_error = float(
+                        evaluate_formula(error_config["value"], variables)
+                    )
+                elif error_config["type"] == "range":
+                    for range_item in error_config["ranges"]:
+                        if evaluate_formula(
+                            range_item["formula"], variables, is_condition=True
+                        ):
+                            measurement_error = float(range_item["value"])
+                            break
+                    if measurement_error is None:
+                        logger.warning("Не найден подходящий диапазон для погрешности")
+                        measurement_error = 0
+
+                # Округляем погрешность до того же количества знаков после запятой, что и результат
+                if measurement_error is not None:
+                    measurement_error = round(
+                        Decimal(str(measurement_error)), result_decimal_places
+                    )
+                    logger.info(f"Погрешность после округления: {measurement_error}")
+
+            except Exception as e:
+                logger.error(f"Ошибка при вычислении погрешности: {str(e)}")
+                return Response(
+                    {"error": f"Ошибка при вычислении погрешности: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        response_data = {
+            "convergence": convergence_result,
+            "intermediate_results": intermediate_results,
+            "result": str(result) if result is not None else None,
+            "measurement_error": (
+                str(measurement_error) if measurement_error is not None else None
+            ),
+            "unit": research_method["unit"],
+            "conditions_info": conditions_info,
+        }
+        logger.info(f"Подготовлен ответ: {response_data}")
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Необработанная ошибка при расчете: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PATCH"])
+@permission_classes([AllowAny])
+def update_research_method_status(request, page_id, method_id):
+    """
+    Обновляет статус метода исследования.
+    """
+    try:
+        research_object = ResearchObject.objects.get(id=page_id)
+        research_method = ResearchMethod.objects.get(id=method_id)
+
+        research_object_method = ResearchObjectMethod.objects.get(
+            research_object=research_object, research_method=research_method
+        )
+
+        research_object_method.is_active = request.data.get("is_active", True)
+        research_object_method.save()
+
+        return Response({"status": "success"})
+    except (
+        ResearchObject.DoesNotExist,
+        ResearchMethod.DoesNotExist,
+        ResearchObjectMethod.DoesNotExist,
+    ):
+        return Response(
+            {"error": "Объект или метод исследования не найден"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PATCH"])
+@permission_classes([AllowAny])
+def update_methods_order(request, page_id):
+    """
+    Обновляет порядок сортировки методов исследования для указанной страницы.
+    """
+    try:
+        research_object = ResearchObject.objects.get(id=page_id)
+        methods_data = request.data.get("methods", [])
+
+        # Проверяем, что все методы принадлежат этой странице
+        method_ids = [item["id"] for item in methods_data]
+        existing_methods = ResearchObjectMethod.objects.filter(
+            research_object=research_object, research_method_id__in=method_ids
+        )
+
+        if len(existing_methods) != len(method_ids):
+            return Response(
+                {
+                    "error": "Некоторые методы не найдены или не принадлежат этой странице"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        for item in methods_data:
+            ResearchObjectMethod.objects.filter(
+                research_object=research_object, research_method_id=item["id"]
+            ).update(sort_order=item["sort_order"])
+
+        return Response({"status": "success"})
+
+    except ResearchObject.DoesNotExist:
+        return Response(
+            {"error": "Страница исследований не найдена"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def save_calculation(request):
+    """
+    Сохраняет расчет.
+    """
+    try:
+        data = request.data
+        protocol_data = None
+        calculation_data = None
+
+        if "protocol_id" in data:
+            existing_calculation = Calculation.objects.filter(
+                protocol_id=data["protocol_id"],
+                research_method_id=data.get("research_method"),
+                is_deleted=False,
+            ).first()
+
+            if existing_calculation:
+                return Response(
+                    {
+                        "error": "Для данного протокола уже существует расчет по этому методу исследования"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            calculation_data = {
+                "input_data": data.get("input_data"),
+                "result": data.get("result"),
+                "measurement_error": data.get("measurement_error"),
+                "unit": data.get("unit"),
+                "laboratory": data.get("laboratory"),
+                "department": data.get("department"),
+                "research_method_id": data.get("research_method"),
+                "protocol_id": data["protocol_id"],
+                "laboratory_activity_date": data.get("laboratory_activity_date"),
+            }
+        else:
+            # Создаем новый протокол
+            protocol_data = {
+                "test_protocol_number": data.get("test_protocol_number"),
+                "sampling_act_number": data.get("sampling_act_number"),
+                "registration_number": data.get("registration_number"),
+                "sampling_location": data.get("sampling_location"),
+                "sampling_date": data.get("sampling_date"),
+                "receiving_date": data.get("receiving_date"),
+                "laboratory_activity_dates": data.get("laboratory_activity_dates"),
+                "executor": data.get("executor"),
+                "excel_template": data.get("excel_template"),
+            }
+
+            protocol_serializer = ProtocolSerializer(data=protocol_data)
+            if protocol_serializer.is_valid():
+                protocol = protocol_serializer.save()
+                existing_calculation = Calculation.objects.filter(
+                    protocol_id=protocol.id,
+                    research_method_id=data.get("research_method"),
+                    is_deleted=False,
+                ).first()
+
+                if existing_calculation:
+                    # Удаляем созданный протокол, так как расчет не может быть создан
+                    protocol.delete()
+                    return Response(
+                        {
+                            "error": "Для данного протокола уже существует расчет по этому методу исследования"
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                calculation_data = {
+                    "input_data": data.get("input_data"),
+                    "result": data.get("result"),
+                    "measurement_error": data.get("measurement_error"),
+                    "unit": data.get("unit"),
+                    "laboratory": data.get("laboratory"),
+                    "department": data.get("department"),
+                    "research_method_id": data.get("research_method"),
+                    "protocol_id": protocol.id,
+                    "laboratory_activity_date": data.get("laboratory_activity_date"),
+                }
+            else:
+                return Response(
+                    protocol_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+        calculation_serializer = CalculationSerializer(data=calculation_data)
+        if calculation_serializer.is_valid():
+            try:
+                calculation = calculation_serializer.save()
+                return Response(
+                    calculation_serializer.data, status=status.HTTP_201_CREATED
+                )
+            except IntegrityError:
+                if protocol_data:
+                    # Если это был новый протокол, удаляем его
+                    Protocol.objects.filter(id=calculation_data["protocol_id"]).delete()
+                return Response(
+                    {
+                        "error": "Для данного протокола уже существует расчет по этому методу исследования"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        return Response(
+            calculation_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_registration_numbers(request):
+    """
+    Получает список регистрационных номеров для указанного метода и лаборатории.
+    """
+    laboratory_id = request.GET.get("laboratory_id")
+    department_id = request.GET.get("department_id")
+    method_id = request.GET.get("method_id")
+    registration_number = request.GET.get("registration_number")
+    partial_number = request.GET.get("partial_number")
+
+    if not laboratory_id:
+        return Response({"error": "Необходимо указать laboratory_id"}, status=400)
+
+    protocols = Protocol.objects.filter(
+        calculations__laboratory_id=laboratory_id, is_deleted=False
+    ).distinct()
+
+    if department_id:
+        protocols = protocols.filter(calculations__department_id=department_id)
+
+    # Если это поиск для автодополнения
+    if partial_number is not None:
+        if method_id:
+            protocols = protocols.filter(calculations__research_method_id=method_id)
+        protocols = protocols.filter(registration_number__icontains=partial_number)
+        registration_numbers = protocols.values_list(
+            "registration_number", flat=True
+        ).distinct()
+        return Response(list(registration_numbers))
+
+    # Если это запрос конкретных данных
+    if registration_number and method_id:
+        try:
+            calculation = (
+                Calculation.objects.filter(
+                    research_method_id=method_id,
+                    protocol__registration_number=registration_number,
+                    laboratory_id=laboratory_id,
+                    is_deleted=False,
+                )
+                .order_by("-created_at")
+                .first()
+            )
+
+            if calculation:
+                response_data = calculation.input_data.copy()
+                response_data["laboratory_activity_date"] = (
+                    calculation.laboratory_activity_date.isoformat()
+                    if calculation.laboratory_activity_date
+                    else None
+                )
+                return Response(response_data)
+            return Response({})
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+    return Response(
+        {
+            "error": "Для получения данных необходимо указать method_id и registration_number"
+        },
+        status=400,
+    )

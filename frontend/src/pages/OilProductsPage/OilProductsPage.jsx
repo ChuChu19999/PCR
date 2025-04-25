@@ -13,7 +13,7 @@ import AddCalculationModal from '../../features/Modals/AddCalculationModal/AddCa
 import HideMethodModal from '../../features/Modals/HideMethodModal/HideMethodModal';
 import GenerateProtocolModal from '../../features/Modals/GenerateProtocolModal/GenerateProtocolModal';
 import LoadingCard from '../../features/Cards/ui/LoadingCard/LoadingCard';
-import SaveCalculationForm from '../../features/Forms/SaveCalculationForm/SaveCalculationForm';
+import SaveCalculationModal from '../../features/Modals/SaveCalculationModal/SaveCalculationModal';
 import axios from 'axios';
 import './OilProductsPage.css';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
@@ -70,6 +70,7 @@ const OilProductsPage = () => {
   const [lockedMethods, setLockedMethods] = useState({});
   const [registrationOptions, setRegistrationOptions] = useState([]);
   const [methodsData, setMethodsData] = useState({});
+  const [entityName, setEntityName] = useState('');
   const inputRefs = React.useRef({});
   const [laboratoryActivityDate, setLaboratoryActivityDate] = useState(null);
   const [dateError, setDateError] = useState('');
@@ -119,15 +120,17 @@ const OilProductsPage = () => {
 
         const methodsWithGroups = page.research_methods.map((method, index) => {
           if (method.is_group) {
-            // Если это группа, добавляем is_active: true для отображения
+            // Если это группа, добавляем только активные методы
             return {
               ...method,
               uniqueId: method.id,
-              is_active: true,
-              methods: method.methods.map(m => ({
-                ...m,
-                uniqueId: `method-${m.id}-${index}`,
-              })),
+              is_active: method.methods.some(m => m.is_active), // группа активна, если есть хоть один активный метод
+              methods: method.methods
+                .filter(m => m.is_active) // фильтруем только активные методы
+                .map(m => ({
+                  ...m,
+                  uniqueId: `method-${m.id}-${index}`,
+                })),
             };
           } else {
             // Если это обычный метод, ищем его группу
@@ -140,11 +143,16 @@ const OilProductsPage = () => {
           }
         });
 
-        console.log('Методы после обработки:', methodsWithGroups);
-        setResearchMethods(methodsWithGroups);
+        // Фильтруем группы, у которых нет активных методов
+        const filteredMethods = methodsWithGroups.filter(
+          method => !method.is_group || (method.is_group && method.methods.length > 0)
+        );
+
+        console.log('Методы после обработки:', filteredMethods);
+        setResearchMethods(filteredMethods);
 
         // Выбираем первый активный метод
-        const activeMethods = methodsWithGroups.filter(method => method.is_active);
+        const activeMethods = filteredMethods.filter(method => method.is_active);
         console.log('Активные методы:', activeMethods);
 
         if (activeMethods.length > 0) {
@@ -181,11 +189,17 @@ const OilProductsPage = () => {
             `${import.meta.env.VITE_API_URL}/api/departments/${id}/`
           );
           setLaboratoryId(departmentResponse.data.laboratory);
+          setEntityName(departmentResponse.data.name);
         } else {
+          const laboratoryResponse = await axios.get(
+            `${import.meta.env.VITE_API_URL}/api/laboratories/${id}/`
+          );
           setLaboratoryId(id);
+          setEntityName(laboratoryResponse.data.name);
         }
       } catch (error) {
         console.error('Ошибка при получении данных:', error);
+        setEntityName('Нефтепродукты');
       }
     };
 
@@ -308,15 +322,54 @@ const OilProductsPage = () => {
 
   const handleHideMethod = async () => {
     try {
-      await axios.patch(
-        `${import.meta.env.VITE_API_URL}/api/research-pages/${researchPageId}/methods/${methodToHide.id}/`,
-        { is_active: false }
-      );
+      // Если это группа методов
+      if (methodToHide.is_group) {
+        // Получаем ID группы
+        const groupId = methodToHide.id.replace('group_', '');
 
-      const updatedMethods = researchMethods.map(method =>
-        method.id === methodToHide.id ? { ...method, is_active: false } : method
-      );
-      setResearchMethods(updatedMethods);
+        // Деактивируем группу
+        await axios.post(
+          `${import.meta.env.VITE_API_URL}/api/research-method-groups/${groupId}/toggle_active/`
+        );
+
+        // Получаем ID всех методов в группе
+        const methodIds = methodToHide.methods.map(method => method.id);
+
+        // Скрываем каждый метод в группе
+        for (const methodId of methodIds) {
+          await axios.patch(
+            `${import.meta.env.VITE_API_URL}/api/research-pages/${researchPageId}/methods/${methodId}/`,
+            { is_active: false }
+          );
+        }
+      } else {
+        // Для обычного метода - стандартная логика
+        await axios.patch(
+          `${import.meta.env.VITE_API_URL}/api/research-pages/${researchPageId}/methods/${methodToHide.id}/`,
+          { is_active: false }
+        );
+      }
+
+      // Обновляем состояние на фронтенде
+      const updatedMethods = researchMethods.map(method => {
+        if (methodToHide.is_group) {
+          // Если текущий метод - это скрываемая группа
+          if (method.id === methodToHide.id) {
+            return {
+              ...method,
+              methods: method.methods.map(m => ({ ...m, is_active: false })),
+              is_active: false,
+            };
+          }
+        } else if (method.id === methodToHide.id) {
+          // Для обычного метода
+          return { ...method, is_active: false };
+        }
+        return method;
+      });
+
+      // Перезагружаем методы для обновления состояния
+      await fetchResearchMethods();
 
       // Находим индекс скрываемого метода среди активных методов
       const activeMethodsBeforeHide = researchMethods.filter(m => m.is_active);
@@ -1053,7 +1106,7 @@ const OilProductsPage = () => {
 
   return (
     <OilProductsPageWrapper>
-      <Layout title="Нефтепродукты">
+      <Layout title={entityName || 'Нефтепродукты'}>
         <Form form={form} onFinish={onFinish} layout="vertical" preserve={false}>
           <div
             style={{ display: 'flex', height: 'calc(100vh - 120px)', fontFamily: 'HeliosCondC' }}
@@ -1762,29 +1815,20 @@ const OilProductsPage = () => {
             methodName={methodToHide?.name}
           />
 
-          <Modal
-            title="Сохранение результата расчета"
-            open={isSaveModalOpen}
-            onCancel={handleCloseSaveModal}
-            footer={null}
-            width={600}
-            maskClosable={false}
-            style={{ marginLeft: '550px' }}
-          >
-            {currentMethod && (
-              <SaveCalculationForm
-                calculationResult={{
-                  ...lastCalculationResult[currentMethod.id],
-                  laboratory_activity_date: laboratoryActivityDate,
-                }}
-                currentMethod={currentMethod}
-                laboratoryId={laboratoryId}
-                departmentId={isDepartment ? id : null}
-                onSuccess={handleSaveSuccess}
-                onCancel={handleCloseSaveModal}
-              />
-            )}
-          </Modal>
+          {currentMethod && (
+            <SaveCalculationModal
+              isOpen={isSaveModalOpen}
+              onClose={handleCloseSaveModal}
+              calculationResult={{
+                ...lastCalculationResult[currentMethod.id],
+                laboratory_activity_date: laboratoryActivityDate,
+              }}
+              currentMethod={currentMethod}
+              laboratoryId={laboratoryId}
+              departmentId={isDepartment ? id : null}
+              onSuccess={handleSaveSuccess}
+            />
+          )}
 
           <AddCalculationModal
             isOpen={isAddModalOpen}

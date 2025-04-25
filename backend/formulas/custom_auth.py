@@ -5,7 +5,6 @@ from rest_framework.exceptions import AuthenticationFailed
 from .models import CustomUser
 import logging
 
-
 logger = logging.getLogger(__name__)
 
 

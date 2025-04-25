@@ -1,8 +1,8 @@
 from django.db import connections
-from rest_framework import viewsets, status
+from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .serializers import UserSerializer
+from ..serializers import UserSerializer
 
 
 def get_user_role(hach_snils):
