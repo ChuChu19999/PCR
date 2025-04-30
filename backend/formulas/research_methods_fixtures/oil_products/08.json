@@ -3,8 +3,7 @@
     "formula": "νср",
     "measurement_error": {
         "type": "formula",
-        "value": "νср*0.51/100",
-        "ranges": []
+        "value": "νср*0.51/100"
     },
     "unit": "мм²/с",
     "measurement_method": "ГОСТ 33",
@@ -16,25 +15,25 @@
                 "name": "t₁",
                 "unit": "с",
                 "card_index": 1,
-                "description": "Первое время истечения нефтепродукта в вискозиметре"
+                "description": "Время истечения нефтепродукта в вискозиметре для первой параллели"
             },
             {
                 "name": "C₁",
                 "unit": "мм/с²",
                 "card_index": 1,
-                "description": "Первая постоянная вискозиметра"
+                "description": "Постоянная вискозиметра для первой параллели"
             },
             {
                 "name": "t₂",
                 "unit": "с",
                 "card_index": 2,
-                "description": "Второе время истечения нефтепродукта в вискозиметре"
+                "description": "Время истечения нефтепродукта в вискозиметре для второй параллели"
             },
             {
                 "name": "C₂",
                 "unit": "мм/с²",
                 "card_index": 2,
-                "description": "Вторая постоянная вискозиметра"
+                "description": "Постоянная вискозиметра для второй параллели"
             }
         ]
     },
@@ -44,22 +43,28 @@
                 "name": "ν₁",
                 "unit": "%",
                 "formula": "C₁*t₁*1.0017",
-                "description": "Первое содержание компонента",
-                "show_calculation": true
+                "description": "Первый расчет содержания компонента",
+                "show_calculation": true,
+                "range_calculation": null,
+                "use_multiple_rounding": false
             },
             {
                 "name": "ν₂",
                 "unit": "%",
                 "formula": "C₂*t₂*1.0017",
-                "description": "Второе содержание компонента",
-                "show_calculation": true
+                "description": "Второй расчет содержания компонента",
+                "show_calculation": true,
+                "range_calculation": null,
+                "use_multiple_rounding": false
             },
             {
                 "name": "νср",
                 "unit": "%",
                 "formula": "(ν₁+ν₂)/2",
                 "description": "Среднее значение содержания компонента",
-                "show_calculation": false
+                "show_calculation": false,
+                "range_calculation": null,
+                "use_multiple_rounding": false
             }
         ]
     },
@@ -79,5 +84,6 @@
     "rounding_type": "significant",
     "rounding_decimal": 4,
     "is_active": true,
-    "is_group_member": false
+    "is_group_member": false,
+    "group_name": "Вязкость кинематическая"
 }

@@ -43,6 +43,18 @@ def _get_decimal_places(number):
     return len(str_num.split(".")[1])
 
 
+def _round_to_multiple(number, multiple):
+    """
+    Округляет число до ближайшего кратного заданному числу.
+    """
+    try:
+        d = Decimal(str(float(number)))
+        m = Decimal(str(float(multiple)))
+        return Decimal(round(d / m) * m)
+    except Exception as e:
+        raise ValueError(f"Ошибка при округлении до кратного: {str(e)}")
+
+
 def round_result(result, rounding_type, rounding_decimal):
     """
     Округляет результат по заданному типу и количеству знаков.
@@ -51,7 +63,7 @@ def round_result(result, rounding_type, rounding_decimal):
         d = Decimal(str(float(result)))
         # Используем ROUND_HALF_UP для округления 0.5 вверх
         return d.quantize(Decimal("0.1") ** rounding_decimal, rounding=ROUND_HALF_UP)
-    else:
+    else:  # significant
         return _round_to_significant_figures(result, rounding_decimal)
 
 
@@ -100,65 +112,192 @@ def _replace_subscript_digits(text):
     return result
 
 
-def evaluate_formula(formula, variables, is_condition=False):
+def evaluate_formula(
+    formula, variables, is_condition=False, range_calculation=None, rounding_params=None
+):
     """
     Вычисляет результат формулы.
 
     Args:
         variables (dict): Словарь переменных и их значений
         is_condition (bool): Флаг, указывающий что это вычисление условия
+        range_calculation (dict): Параметры диапазонного расчета
+        rounding_params (dict): Параметры округления (тип и значение)
     """
-    # Создаем копию переменных с замененными индексами
-    decimal_vars = {}
-    for name, value in variables.items():
-        try:
-            if isinstance(value, str):
-                value = value.strip().replace(",", ".")
-            new_name = _replace_subscript_digits(name)
-            decimal_vars[new_name] = float(value)
-        except Exception as e:
-            raise ValueError(
-                f"Ошибка преобразования значения {name} = {value} в число: {str(e)}"
-            )
-
     try:
         formula = _replace_subscript_digits(formula)
         formula = formula.replace("×", "*").replace("÷", "/")
 
-        # Создаем безопасный контекст для вычислений
-        safe_dict = {"abs": abs, "pow": pow, "round": round, "max": max, "min": min}
+        # Если есть диапазонный расчет, сразу его применяем
+        if not is_condition and range_calculation and "ranges" in range_calculation:
+            # Создаем словарь переменных для диапазонного расчета
+            decimal_vars = {}
+            for name, value in variables.items():
+                try:
+                    if isinstance(value, str):
+                        value = value.strip().replace(",", ".")
+                    new_name = _replace_subscript_digits(name)
+                    decimal_vars[new_name] = float(value)
+                except Exception as e:
+                    raise ValueError(
+                        f"Ошибка преобразования значения {name} = {value} в число: {str(e)}"
+                    )
+
+            safe_dict = {
+                "__builtins__": {},
+                "abs": abs,
+                "pow": pow,
+                "round": round,
+                "max": max,
+                "min": min,
+            }
+            safe_dict.update(decimal_vars)
+
+            # Проверяем каждый диапазон
+            for range_item in range_calculation["ranges"]:
+                # Сначала разбиваем условие на части по or
+                or_conditions = range_item["condition"].split(" or ")
+                any_or_condition_met = False
+
+                for or_condition in or_conditions:
+                    # Разбиваем каждое or-условие на and-условия
+                    and_conditions = or_condition.strip().split(" and ")
+                    all_and_conditions_met = True
+
+                    for and_condition in and_conditions:
+                        and_condition = and_condition.strip().strip(
+                            "()"
+                        )  # Убираем скобки
+                        condition_result = evaluate_formula(
+                            and_condition, variables, is_condition=True
+                        )
+                        if not condition_result:
+                            all_and_conditions_met = False
+                            break
+
+                    if all_and_conditions_met:
+                        any_or_condition_met = True
+                        break
+
+                if any_or_condition_met:
+                    # Если условие выполняется, вычисляем формулу из диапазона
+                    result = float(
+                        eval(range_item["formula"], {"__builtins__": None}, safe_dict)
+                    )
+                    return Decimal(str(result))
+
+            # Если ни одно условие не выполнилось, возвращаем 0
+            return Decimal("0")
+
+        # Проверяем, является ли формула простым числом
+        try:
+            return Decimal(str(float(formula)))
+        except ValueError:
+            pass
+
+        # Создаем словарь переменных для обычного расчета
+        decimal_vars = {}
+        for name, value in variables.items():
+            try:
+                if isinstance(value, str):
+                    value = value.strip().replace(",", ".")
+                new_name = _replace_subscript_digits(name)
+                decimal_vars[new_name] = float(value)
+            except Exception as e:
+                raise ValueError(
+                    f"Ошибка преобразования значения {name} = {value} в число: {str(e)}"
+                )
+
+        safe_dict = {
+            "__builtins__": {},
+            "abs": abs,
+            "pow": pow,
+            "round": round,
+            "max": max,
+            "min": min,
+        }
         safe_dict.update(decimal_vars)
 
         if is_condition:
-            # Для условий разбиваем формулу на части
-            for operator in ["<=", ">=", ">", "<", "="]:
-                if operator in formula:
-                    left, right = formula.split(operator)
-                    # Вычисляем левую и правую части
-                    left_result = float(eval(left, {"__builtins__": {}}, safe_dict))
-                    right_result = float(eval(right, {"__builtins__": {}}, safe_dict))
+            # Проверяем наличие OR в условии
+            if " or " in formula:
+                or_conditions = formula.split(" or ")
+                for or_condition in or_conditions:
+                    # Для каждого OR условия проверяем AND условия
+                    and_conditions = or_condition.strip().split(" and ")
+                    all_and_conditions_met = True
 
-                    # Добавляем эпсилон для сравнения чисел с плавающей точкой
-                    epsilon = 1e-10
+                    for and_condition in and_conditions:
+                        and_condition = and_condition.strip().strip("()")
+                        condition_result = evaluate_formula(
+                            and_condition, variables, is_condition=True
+                        )
+                        if not condition_result:
+                            all_and_conditions_met = False
+                            break
 
-                    if operator == "<=":
-                        return left_result <= (right_result + epsilon)
-                    elif operator == ">=":
-                        return left_result >= (right_result - epsilon)
-                    elif operator == ">":
-                        return left_result > (right_result + epsilon)
-                    elif operator == "<":
-                        return left_result < (right_result - epsilon)
-                    else:  # =
-                        return abs(left_result - right_result) < 1e-10
+                    if all_and_conditions_met:
+                        return True
+                return False
+            # Проверяем наличие AND в условии
+            elif " and " in formula:
+                and_conditions = formula.split(" and ")
+                for and_condition in and_conditions:
+                    and_condition = and_condition.strip().strip("()")
+                    condition_result = evaluate_formula(
+                        and_condition, variables, is_condition=True
+                    )
+                    if not condition_result:
+                        return False
+                return True
+            else:
+                # Для условий разбиваем формулу на части
+                for operator in ["<=", ">=", ">", "<", "="]:
+                    if operator in formula:
+                        left, right = formula.split(operator)
+                        # Вычисляем левую и правую части
+                        left_result = float(
+                            eval(left, {"__builtins__": None}, safe_dict)
+                        )
+                        right_result = float(
+                            eval(right, {"__builtins__": None}, safe_dict)
+                        )
 
-            raise ValueError(
-                f"Неподдерживаемый оператор сравнения в формуле: {formula}"
-            )
+                        # Добавляем эпсилон для сравнения чисел с плавающей точкой
+                        epsilon = 1e-10
+
+                        if operator == "<=":
+                            return left_result <= (right_result + epsilon)
+                        elif operator == ">=":
+                            return left_result >= (right_result - epsilon)
+                        elif operator == ">":
+                            return left_result > (right_result + epsilon)
+                        elif operator == "<":
+                            return left_result < (right_result - epsilon)
+                        else:  # =
+                            return abs(left_result - right_result) < 1e-10
+
+                raise ValueError(
+                    f"Неподдерживаемый оператор сравнения в формуле: {formula}"
+                )
         else:
-            # Для обычных формул
-            result = float(eval(formula, {"__builtins__": {}}, safe_dict))
-            return Decimal(str(result))
+            result = float(eval(formula, {"__builtins__": None}, safe_dict))
+            result = Decimal(str(result))
+
+            # Применяем округление, если заданы параметры
+            if rounding_params:
+                if rounding_params.get("use_multiple_rounding"):
+                    if rounding_params.get("rounding_type") == "multiple":
+                        multiple = float(rounding_params.get("multiple_value", "1"))
+                        result = _round_to_multiple(result, multiple)
+                    else:
+                        result = round_result(
+                            result,
+                            rounding_params.get("rounding_type"),
+                            rounding_params.get("rounding_decimal"),
+                        )
+
+            return result
 
     except Exception as e:
         raise ValueError(f"Ошибка при вычислении формулы '{formula}': {str(e)}")
@@ -176,19 +315,66 @@ def calculate_convergence_steps(formula, variables):
                 value = value.strip().replace(",", ".")
             step1 = step1.replace(name, str(value))
 
-        # Разбиваем формулу на левую и правую части
-        for operator in ["<=", ">=", ">", "<", "="]:
-            if operator in formula:
-                left, right = step1.split(operator)
+        safe_dict = {
+            "abs": abs,
+            "pow": pow,
+            "round": round,
+            "max": max,
+            "min": min,
+        }
 
-                # Вычисляем левую часть
-                safe_dict = {
-                    "abs": abs,
-                    "pow": pow,
-                    "round": round,
-                    "max": max,
-                    "min": min,
-                }
+        # Обрабатываем сложные условия
+        if " or " in formula:
+            or_conditions = step1.split(" or ")
+            steps = []
+            for or_condition in or_conditions:
+                if " and " in or_condition:
+                    and_conditions = or_condition.strip().split(" and ")
+                    and_steps = []
+                    for and_condition in and_conditions:
+                        and_condition = and_condition.strip().strip("()")
+                        step = _calculate_single_condition(and_condition, safe_dict)
+                        if step:
+                            and_steps.append(step)
+                    if and_steps:
+                        steps.append({"type": "and", "conditions": and_steps})
+                else:
+                    step = _calculate_single_condition(
+                        or_condition.strip().strip("()"), safe_dict
+                    )
+                    if step:
+                        steps.append({"type": "single", "condition": step})
+            return {"type": "or", "steps": steps}
+        elif " and " in formula:
+            and_conditions = step1.split(" and ")
+            steps = []
+            for and_condition in and_conditions:
+                step = _calculate_single_condition(
+                    and_condition.strip().strip("()"), safe_dict
+                )
+                if step:
+                    steps.append(step)
+            return {"type": "and", "steps": steps}
+        else:
+            # Обрабатываем простое условие
+            step = _calculate_single_condition(step1, safe_dict)
+            if step:
+                return {"type": "single", "step": step}
+
+        return None
+    except Exception as e:
+        logger.error(f"Ошибка при вычислении шагов сходимости: {str(e)}")
+        return None
+
+
+def _calculate_single_condition(condition, safe_dict):
+    """
+    Вычисляет шаги для одиночного условия.
+    """
+    for operator in ["<=", ">=", ">", "<", "="]:
+        if operator in condition:
+            left, right = condition.split(operator)
+            try:
                 left_result = float(eval(left, {"__builtins__": {}}, safe_dict))
                 right_result = float(eval(right, {"__builtins__": {}}, safe_dict))
 
@@ -197,13 +383,10 @@ def calculate_convergence_steps(formula, variables):
                 right_str = f"{right_result:g}".replace(".", ",")
 
                 return {
-                    "step1": step1.replace("*", "×").replace(
-                        "/", "÷"
-                    ),  # Заменяем символы на математические
-                    "step2": f"{left_str}{operator}{right_str}",
+                    "original": condition.replace("*", "×").replace("/", "÷"),
+                    "evaluated": f"{left_str}{operator}{right_str}",
                 }
-
-        return None
-    except Exception as e:
-        logger.error(f"Ошибка при вычислении шагов сходимости: {str(e)}")
-        return None
+            except Exception as e:
+                logger.error(f"Ошибка при вычислении условия {condition}: {str(e)}")
+                return None
+    return None

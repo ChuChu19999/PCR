@@ -16,6 +16,25 @@ from .models import (
 User = get_user_model()
 
 
+class BaseModelSerializer(serializers.ModelSerializer):
+    def create(self, validated_data):
+        user = validated_data.pop("user", None)
+        instance = super().create(validated_data)
+        if user:
+            instance.created_by = user.get("preferred_username")
+            instance.updated_by = user.get("preferred_username")
+            instance.save()
+        return instance
+
+    def update(self, instance, validated_data):
+        user = validated_data.pop("user", None)
+        instance = super().update(instance, validated_data)
+        if user:
+            instance.updated_by = user.get("preferred_username")
+            instance.save()
+        return instance
+
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -28,7 +47,7 @@ class UserSerializer(serializers.ModelSerializer):
         )
 
 
-class DepartmentSerializer(serializers.ModelSerializer):
+class DepartmentSerializer(BaseModelSerializer):
     laboratory_name = serializers.CharField(source="laboratory.name", read_only=True)
 
     class Meta:
@@ -52,7 +71,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
         return value
 
 
-class LaboratorySerializer(serializers.ModelSerializer):
+class LaboratorySerializer(BaseModelSerializer):
     departments = DepartmentSerializer(many=True, read_only=True)
     departments_count = serializers.SerializerMethodField()
 
@@ -102,7 +121,7 @@ class LaboratorySerializer(serializers.ModelSerializer):
         return data
 
 
-class ResearchMethodSerializer(serializers.ModelSerializer):
+class ResearchMethodSerializer(BaseModelSerializer):
     groups = serializers.SerializerMethodField()
 
     def get_groups(self, obj):
@@ -134,8 +153,17 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("created_at", "updated_at", "deleted_at")
 
-    def validate(self, data):
-        return data
+    def validate_rounding_type(self, value):
+        if value not in ["decimal", "significant"]:
+            raise serializers.ValidationError("Неверный тип округления")
+        return value
+
+    def validate_rounding_decimal(self, value):
+        if value < 0:
+            raise serializers.ValidationError(
+                "Количество знаков округления не может быть отрицательным"
+            )
+        return value
 
     def validate_measurement_error(self, value):
         if not isinstance(value, dict):
@@ -144,10 +172,10 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
         if "type" not in value:
             raise serializers.ValidationError("Не указан тип погрешности")
 
-        if value["type"] not in ["fixed", "formula", "range"]:
+        if value["type"] not in ["fixed", "formula"]:
             raise serializers.ValidationError("Неверный тип погрешности")
 
-        if "value" not in value and value["type"] != "range":
+        if "value" not in value:
             raise serializers.ValidationError("Не указано значение погрешности")
 
         if value["type"] == "fixed":
@@ -157,39 +185,6 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     "Фиксированное значение должно быть числом"
                 )
-
-        elif value["type"] == "formula":
-            if not any(op in value["value"] for op in ["+", "-", "*", "/", "(", ")"]):
-                raise serializers.ValidationError(
-                    "Формула погрешности должна быть корректной"
-                )
-
-        elif value["type"] == "range":
-            if "ranges" not in value or not isinstance(value["ranges"], list):
-                raise serializers.ValidationError(
-                    "Для диапазонного типа необходимо указать ranges"
-                )
-
-            if not value["ranges"]:
-                raise serializers.ValidationError("Ranges не может быть пустым")
-
-            for range_item in value["ranges"]:
-                if not isinstance(range_item, dict):
-                    raise serializers.ValidationError(
-                        "Каждый диапазон должен быть объектом"
-                    )
-
-                if "formula" not in range_item or "value" not in range_item:
-                    raise serializers.ValidationError(
-                        "Каждый диапазон должен содержать formula и value"
-                    )
-
-                try:
-                    float(range_item["value"])
-                except (ValueError, TypeError):
-                    raise serializers.ValidationError(
-                        "Значение в диапазоне должно быть числом"
-                    )
 
         return value
 
@@ -247,6 +242,53 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
                     "Поле show_calculation должно быть логическим значением"
                 )
 
+            # Валидация параметров округления
+            if "rounding_type" in field:
+                if field["rounding_type"] not in [
+                    "decimal",
+                    "significant",
+                    "multiple",
+                    None,
+                ]:
+                    raise serializers.ValidationError(
+                        "Неверный тип округления для промежуточного значения"
+                    )
+                if field["rounding_type"] == "multiple" and (
+                    "rounding_decimal" not in field
+                    or not isinstance(field["rounding_decimal"], (int, float))
+                    or field["rounding_decimal"] <= 0
+                ):
+                    raise serializers.ValidationError(
+                        "Для округления до кратного необходимо указать положительное число"
+                    )
+
+            # Валидация диапазонного расчета
+            if "range_calculation" in field and field["range_calculation"] is not None:
+                if not isinstance(field["range_calculation"], dict):
+                    raise serializers.ValidationError(
+                        "range_calculation должен быть объектом"
+                    )
+
+                if "ranges" not in field["range_calculation"]:
+                    raise serializers.ValidationError(
+                        "range_calculation должен содержать ranges"
+                    )
+
+                if not isinstance(field["range_calculation"]["ranges"], list):
+                    raise serializers.ValidationError("ranges должен быть списком")
+
+                for range_item in field["range_calculation"]["ranges"]:
+                    if not isinstance(range_item, dict):
+                        raise serializers.ValidationError(
+                            "Каждый диапазон должен быть объектом"
+                        )
+
+                    required_range_keys = {"condition", "formula"}
+                    if not all(key in range_item for key in required_range_keys):
+                        raise serializers.ValidationError(
+                            f"Каждый диапазон должен содержать следующие ключи: {required_range_keys}"
+                        )
+
         return value
 
     def validate_convergence_conditions(self, value):
@@ -291,23 +333,53 @@ class ResearchMethodSerializer(serializers.ModelSerializer):
                     f"Значение сходимости должно быть одним из: {', '.join(valid_convergence_values)}"
                 )
 
+            # Проверяем структуру формулы на наличие операторов И/ИЛИ
+            formula = formula_data["formula"]
+            if " and " in formula or " or " in formula:
+                # Разбиваем на подусловия
+                conditions = []
+                if " or " in formula:
+                    conditions = formula.split(" or ")
+                else:
+                    conditions = [formula]
+
+                for condition in conditions:
+                    if " and " in condition:
+                        sub_conditions = condition.strip().split(" and ")
+                        for sub_condition in sub_conditions:
+                            sub_condition = sub_condition.strip().strip("()")
+                            if not any(
+                                op in sub_condition
+                                for op in ["<=", ">=", ">", "<", "="]
+                            ):
+                                raise serializers.ValidationError(
+                                    f"Некорректное условие: {sub_condition}. Должен присутствовать оператор сравнения"
+                                )
+                    else:
+                        condition = condition.strip().strip("()")
+                        if not any(
+                            op in condition for op in ["<=", ">=", ">", "<", "="]
+                        ):
+                            raise serializers.ValidationError(
+                                f"Некорректное условие: {condition}. Должен присутствовать оператор сравнения"
+                            )
+            else:
+                # Проверяем простое условие
+                if not any(op in formula for op in ["<=", ">=", ">", "<", "="]):
+                    raise serializers.ValidationError(
+                        f"Некорректное условие: {formula}. Должен присутствовать оператор сравнения"
+                    )
+
         return value
 
-    def validate_rounding_decimal(self, value):
-        if value < 0:
-            raise serializers.ValidationError(
-                "Количество знаков округления не может быть отрицательным"
-            )
-        return value
 
-
-class ResearchMethodBriefSerializer(serializers.ModelSerializer):
+class ResearchMethodBriefSerializer(BaseModelSerializer):
     class Meta:
         model = ResearchMethod
         fields = ("id", "name")
 
 
-class ResearchObjectSerializer(serializers.ModelSerializer):
+class ResearchObjectSerializer(BaseModelSerializer):
     research_methods = serializers.SerializerMethodField()
     research_method_ids = serializers.PrimaryKeyRelatedField(
         source="research_methods",
@@ -400,7 +472,7 @@ class ResearchObjectSerializer(serializers.ModelSerializer):
         read_only_fields = ("created_at", "updated_at", "is_deleted", "deleted_at")
 
 
-class ResearchMethodGroupSerializer(serializers.ModelSerializer):
+class ResearchMethodGroupSerializer(BaseModelSerializer):
     methods = ResearchMethodSerializer(many=True, read_only=True)
     method_ids = serializers.PrimaryKeyRelatedField(
         source="methods",
@@ -453,20 +525,20 @@ class ResearchMethodGroupSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         method_ids = validated_data.pop("methods", [])
-        group = super().create(validated_data)
+        instance = super().create(validated_data)
 
         if method_ids:
             # Обновляем флаг is_group_member для методов
             ResearchMethod.objects.filter(id__in=[m.id for m in method_ids]).update(
                 is_group_member=True
             )
-            group.methods.set(method_ids)
+            instance.methods.set(method_ids)
 
-        return group
+        return instance
 
     def update(self, instance, validated_data):
         method_ids = validated_data.pop("methods", None)
-        group = super().update(instance, validated_data)
+        instance = super().update(instance, validated_data)
 
         if method_ids is not None:
             old_method_ids = set(instance.methods.values_list("id", flat=True))
@@ -482,12 +554,12 @@ class ResearchMethodGroupSerializer(serializers.ModelSerializer):
                 id__in=new_method_ids - old_method_ids
             ).update(is_group_member=True)
 
-            group.methods.set(method_ids)
+            instance.methods.set(method_ids)
 
-        return group
+        return instance
 
 
-class ExcelTemplateSerializer(serializers.ModelSerializer):
+class ExcelTemplateSerializer(BaseModelSerializer):
     file = serializers.SerializerMethodField()
     laboratory_name = serializers.CharField(source="laboratory.name", read_only=True)
     department_name = serializers.CharField(source="department.name", read_only=True)
@@ -549,7 +621,7 @@ class ExcelTemplateSerializer(serializers.ModelSerializer):
         return data
 
 
-class ProtocolDetailsSerializer(serializers.ModelSerializer):
+class ProtocolDetailsSerializer(BaseModelSerializer):
     class Meta:
         model = ProtocolDetails
         fields = (
@@ -588,7 +660,7 @@ class ProtocolDetailsSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
-class ProtocolSerializer(serializers.ModelSerializer):
+class ProtocolSerializer(BaseModelSerializer):
     protocol_details = ProtocolDetailsSerializer(read_only=True)
     protocol_details_id = serializers.PrimaryKeyRelatedField(
         source="protocol_details",
@@ -676,17 +748,8 @@ class ProtocolSerializer(serializers.ModelSerializer):
 
         return value
 
-    def create(self, validated_data):
-        return Protocol.objects.create(**validated_data)
 
-    def update(self, instance, validated_data):
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        return instance
-
-
-class CalculationSerializer(serializers.ModelSerializer):
+class CalculationSerializer(BaseModelSerializer):
     protocol = ProtocolSerializer(read_only=True)
     protocol_id = serializers.PrimaryKeyRelatedField(
         source="protocol",

@@ -26,6 +26,7 @@ from .api.calculation_api import (
     update_methods_order,
     get_registration_numbers,
 )
+from .api.fixtures_api import get_fixtures
 
 
 router = DefaultRouter()
@@ -50,6 +51,7 @@ urlpatterns = [
     path("monitoring/", check_status_api, name="monitoring"),
     path("calculate/", calculate_result, name="calculate_result"),
     path("save-calculation/", save_calculation, name="save_calculation"),
+    path("get-fixtures/", get_fixtures, name="get_fixtures"),
     path(
         "get-registration-numbers/",
         get_registration_numbers,

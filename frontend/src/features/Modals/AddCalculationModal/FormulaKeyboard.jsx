@@ -21,6 +21,11 @@ const FormulaKeyboard = ({ onKeyPress, variables = [] }) => {
     { symbol: 'backspace', display: '⌫' },
   ];
 
+  const logicalOperators = [
+    { symbol: ' and ', display: 'И' },
+    { symbol: ' or ', display: 'ИЛИ' },
+  ];
+
   // Разбиваем переменные на группы по 3
   const variableGroups = variables.reduce((acc, variable, index) => {
     const groupIndex = Math.floor(index / 3);
@@ -47,6 +52,19 @@ const FormulaKeyboard = ({ onKeyPress, variables = [] }) => {
             key={op.symbol}
             onClick={() => handleOperatorClick(op)}
             className="keyboard-button operator"
+            type="button"
+          >
+            {op.display}
+          </button>
+        ))}
+      </div>
+
+      <div className="keyboard-section logical-operators">
+        {logicalOperators.map(op => (
+          <button
+            key={op.symbol}
+            onClick={() => handleOperatorClick(op)}
+            className="keyboard-button logical"
             type="button"
           >
             {op.display}

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Modal from '../ui/Modal';
 import axios from 'axios';
+import { message } from 'antd';
 import './AddCalculationModal.css';
 import FormulaKeyboard from './FormulaKeyboard';
 
@@ -11,9 +12,15 @@ const CONVERGENCE_OPTIONS = [
   { value: 'traces', label: 'Следы' },
 ];
 
-const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => {
+const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objectType }) => {
   const [activeTab, setActiveTab] = useState('single');
   const [isAnimating, setIsAnimating] = useState(false);
+
+  const [fixtures, setFixtures] = useState({});
+  const [selectedFixture, setSelectedFixture] = useState('');
+  const [isLoadingFixtures, setIsLoadingFixtures] = useState(false);
+  const [methodGroups, setMethodGroups] = useState([]);
+
   const [formData, setFormData] = useState({
     name: '',
     formula: '',
@@ -30,7 +37,17 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
       fields: [{ name: '', description: '', unit: '', card_index: 1 }],
     },
     intermediate_data: {
-      fields: [{ name: '', formula: '', description: '', unit: '' }],
+      fields: [
+        {
+          name: '',
+          formula: '',
+          description: '',
+          unit: '',
+          show_calculation: true,
+          use_multiple_rounding: false,
+          multiple_value: '',
+        },
+      ],
     },
     convergence_conditions: {
       formulas: [
@@ -46,14 +63,15 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
     is_active: true,
   });
 
-  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [groupData, setGroupData] = useState({
     name: '',
     selectedMethods: [],
     is_active: true,
   });
-  const [availableMethods, setAvailableMethods] = useState([]);
+  const [availableMethods, setAvailableMethods] = useState({ individual_methods: [], groups: [] });
   const [isLoadingMethods, setIsLoadingMethods] = useState(false);
+
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -67,24 +85,101 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
     range: useRef([]),
   };
 
-  useEffect(() => {
-    if (isOpen && activeTab === 'group') {
-      loadAvailableMethods();
-    }
-  }, [isOpen, activeTab]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Загрузка списка доступных методов
+  useEffect(() => {
+    if (isOpen) {
+      if (activeTab === 'group') {
+        loadAvailableMethods();
+      } else {
+        loadFixtures(objectType);
+      }
+    }
+  }, [isOpen, activeTab, objectType]);
+
+  const loadFixtures = async type => {
+    try {
+      setIsLoadingFixtures(true);
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/get-fixtures/?object_type=${type}`
+      );
+      setFixtures(response.data);
+    } catch (err) {
+      console.error('Ошибка при загрузке фикстур:', err);
+      setError('Не удалось загрузить готовые методы');
+    } finally {
+      setIsLoadingFixtures(false);
+    }
+  };
+
+  const applyFixture = fixtureName => {
+    if (!fixtures[fixtureName]) return;
+
+    const fixtureData = fixtures[fixtureName];
+    setFormData({
+      name: fixtureData.name || '',
+      formula: fixtureData.formula || '',
+      measurement_error: fixtureData.measurement_error || {
+        type: 'fixed',
+        value: '',
+        ranges: [],
+      },
+      unit: fixtureData.unit || '',
+      measurement_method: fixtureData.measurement_method || '',
+      nd_code: fixtureData.nd_code || '',
+      nd_name: fixtureData.nd_name || '',
+      input_data: fixtureData.input_data || {
+        fields: [{ name: '', description: '', unit: '', card_index: 1 }],
+      },
+      intermediate_data: fixtureData.intermediate_data || {
+        fields: [
+          {
+            name: '',
+            formula: '',
+            description: '',
+            unit: '',
+            show_calculation: true,
+            use_multiple_rounding: false,
+            multiple_value: '',
+          },
+        ],
+      },
+      convergence_conditions: fixtureData.convergence_conditions || {
+        formulas: [
+          {
+            formula: '',
+            convergence_value: 'satisfactory',
+          },
+        ],
+      },
+      is_deleted: false,
+      rounding_type: fixtureData.rounding_type || 'decimal',
+      rounding_decimal: fixtureData.rounding_decimal || 0,
+      is_active: true,
+    });
+  };
+
   const loadAvailableMethods = async () => {
     try {
-      setIsLoadingMethods(true);
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/research-methods/`);
-      // Фильтруем только методы, которые не входят в группы
-      setAvailableMethods(response.data.filter(method => !method.is_group_member));
-    } catch (err) {
-      console.error('Ошибка при загрузке методов:', err);
-      setError('Не удалось загрузить список доступных методов');
-    } finally {
-      setIsLoadingMethods(false);
+      if (!researchPageId) {
+        throw new Error('ID страницы исследований не указан');
+      }
+
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/research-methods/available-methods/`,
+        {
+          params: {
+            research_page_id: researchPageId,
+          },
+        }
+      );
+
+      const { individual_methods = [], groups = [] } = response.data;
+      setAvailableMethods({ individual_methods });
+      setMethodGroups(groups);
+    } catch (error) {
+      console.error('Ошибка при загрузке доступных методов:', error);
+      message.error('Не удалось загрузить список доступных методов');
     }
   };
 
@@ -196,11 +291,93 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
             name: '',
             formula: '',
             description: '',
+            unit: '',
             show_calculation: true,
+            use_multiple_rounding: false,
+            multiple_value: '',
+            range_calculation: null,
           },
         ],
       },
     }));
+  };
+
+  const handleIntermediateRangeChange = (fieldIndex, rangeIndex, key, value) => {
+    setFormData(prev => {
+      const fields = [...prev.intermediate_data.fields];
+      const field = { ...fields[fieldIndex] };
+
+      if (!field.range_calculation) {
+        field.range_calculation = { ranges: [] };
+      }
+
+      const ranges = [...field.range_calculation.ranges];
+      ranges[rangeIndex] = { ...ranges[rangeIndex], [key]: value };
+
+      field.range_calculation.ranges = ranges;
+      fields[fieldIndex] = field;
+
+      return {
+        ...prev,
+        intermediate_data: {
+          ...prev.intermediate_data,
+          fields,
+        },
+      };
+    });
+  };
+
+  const addIntermediateRange = fieldIndex => {
+    setFormData(prev => {
+      const fields = [...prev.intermediate_data.fields];
+      const field = { ...fields[fieldIndex] };
+
+      if (!field.range_calculation) {
+        field.range_calculation = { ranges: [] };
+      }
+
+      field.range_calculation.ranges = [
+        ...(field.range_calculation.ranges || []),
+        { condition: '', formula: '' },
+      ];
+
+      fields[fieldIndex] = field;
+
+      return {
+        ...prev,
+        intermediate_data: {
+          ...prev.intermediate_data,
+          fields,
+        },
+      };
+    });
+  };
+
+  const deleteIntermediateRange = (fieldIndex, rangeIndex) => {
+    setFormData(prev => {
+      const fields = [...prev.intermediate_data.fields];
+      const field = { ...fields[fieldIndex] };
+
+      if (field.range_calculation && field.range_calculation.ranges) {
+        field.range_calculation.ranges = field.range_calculation.ranges.filter(
+          (_, index) => index !== rangeIndex
+        );
+
+        if (field.range_calculation.ranges.length === 0) {
+          field.range_calculation = null;
+        }
+      }
+
+      fields[fieldIndex] = field;
+
+      return {
+        ...prev,
+        intermediate_data: {
+          ...prev.intermediate_data,
+          fields,
+        },
+      };
+    });
   };
 
   const addConvergenceCondition = () => {
@@ -232,7 +409,41 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
   const handleFormulaKeyPress = value => {
     if (!activeFormulaField) return;
 
-    const [type, index, field] = activeFormulaField.split('-');
+    const [type, index, rangeIndex, field] = activeFormulaField.split('-');
+
+    if (type === 'intermediate' && rangeIndex !== undefined && field) {
+      const input = formulaRefs.intermediate.current[index][rangeIndex][field];
+      if (!input) return;
+
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+
+      if (value === 'backspace') {
+        if (start !== end) {
+          const newValue = input.value.substring(0, start) + input.value.substring(end);
+          handleIntermediateRangeChange(parseInt(index), parseInt(rangeIndex), field, newValue);
+          setTimeout(() => {
+            input.selectionStart = input.selectionEnd = start;
+            input.focus();
+          }, 0);
+        } else if (start > 0) {
+          const newValue = input.value.substring(0, start - 1) + input.value.substring(end);
+          handleIntermediateRangeChange(parseInt(index), parseInt(rangeIndex), field, newValue);
+          setTimeout(() => {
+            input.selectionStart = input.selectionEnd = start - 1;
+            input.focus();
+          }, 0);
+        }
+      } else {
+        const newValue = input.value.substring(0, start) + value + input.value.substring(end);
+        handleIntermediateRangeChange(parseInt(index), parseInt(rangeIndex), field, newValue);
+        setTimeout(() => {
+          input.selectionStart = input.selectionEnd = start + value.length;
+          input.focus();
+        }, 0);
+      }
+      return;
+    }
 
     if (type === 'main') {
       const input = formulaRefs.main.current;
@@ -490,13 +701,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
     let newMeasurementError = {
       type,
       value: '',
-      ranges: [],
     };
-
-    if (type === 'range') {
-      newMeasurementError.ranges = [{ formula: '', value: '' }];
-      delete newMeasurementError.value;
-    }
 
     setFormData(prev => ({
       ...prev,
@@ -574,8 +779,26 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
         );
 
         if (groupResponse.data) {
-          onSuccess(groupResponse.data);
-          onClose();
+          const researchPageResponse = await axios.get(
+            `${import.meta.env.VITE_API_URL}/api/research-pages/${researchPageId}/`
+          );
+
+          if (researchPageResponse.data) {
+            const currentMethodIds = researchPageResponse.data.research_methods.map(method =>
+              typeof method === 'object' ? method.id : method
+            );
+            const updatedMethodIds = [...currentMethodIds, groupResponse.data.id];
+
+            await axios.patch(
+              `${import.meta.env.VITE_API_URL}/api/research-pages/${researchPageId}/`,
+              {
+                research_methods: updatedMethodIds,
+              }
+            );
+
+            onSuccess(groupResponse.data);
+            onClose();
+          }
         }
       } else {
         // Валидация одиночного метода
@@ -589,15 +812,10 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
         const dataToSend = {
           name: formData.name || '',
           formula: formData.formula || '',
-          measurement_error:
-            formData.measurement_error.type === 'range'
-              ? {
-                  type: 'range',
-                  ranges: formData.measurement_error.ranges,
-                }
-              : formData.measurement_error.value
-                ? formData.measurement_error
-                : null,
+          measurement_error: {
+            type: formData.measurement_error.type,
+            value: formData.measurement_error.value || '',
+          },
           unit: formData.unit || '',
           measurement_method: formData.measurement_method || '',
           nd_code: formData.nd_code || '',
@@ -606,12 +824,16 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
             formData.input_data.fields.length > 0 && formData.input_data.fields[0].name
               ? formData.input_data
               : null,
-          intermediate_data:
-            formData.intermediate_data.fields.length > 0 &&
-            formData.intermediate_data.fields[0].name &&
-            formData.intermediate_data.fields[0].formula
-              ? formData.intermediate_data
-              : { fields: [] },
+          intermediate_data: {
+            fields: formData.intermediate_data.fields.map(field => ({
+              ...field,
+              formula: field.range_calculation ? '0' : field.formula,
+              rounding_type: field.use_multiple_rounding ? 'multiple' : undefined,
+              rounding_decimal: field.use_multiple_rounding
+                ? parseInt(field.multiple_value)
+                : undefined,
+            })),
+          },
           convergence_conditions:
             formData.convergence_conditions.formulas.length > 0 &&
             formData.convergence_conditions.formulas[0].formula
@@ -692,7 +914,17 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
             fields: [{ name: '', description: '', unit: '', card_index: 1 }],
           },
           intermediate_data: {
-            fields: [{ name: '', formula: '', description: '', unit: '' }],
+            fields: [
+              {
+                name: '',
+                formula: '',
+                description: '',
+                unit: '',
+                show_calculation: true,
+                use_multiple_rounding: false,
+                multiple_value: '',
+              },
+            ],
           },
           convergence_conditions: {
             formulas: [
@@ -722,6 +954,50 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
         }, 50);
       }, 300);
     }
+  };
+
+  const resetFormData = () => {
+    setFormData({
+      name: '',
+      formula: '',
+      measurement_error: {
+        type: 'fixed',
+        value: '',
+        ranges: [],
+      },
+      unit: '',
+      measurement_method: '',
+      nd_code: '',
+      nd_name: '',
+      input_data: {
+        fields: [{ name: '', description: '', unit: '', card_index: 1 }],
+      },
+      intermediate_data: {
+        fields: [
+          {
+            name: '',
+            formula: '',
+            description: '',
+            unit: '',
+            show_calculation: true,
+            use_multiple_rounding: false,
+            multiple_value: '',
+          },
+        ],
+      },
+      convergence_conditions: {
+        formulas: [
+          {
+            formula: '',
+            convergence_value: 'satisfactory',
+          },
+        ],
+      },
+      is_deleted: false,
+      rounding_type: 'decimal',
+      rounding_decimal: 0,
+      is_active: true,
+    });
   };
 
   if (!isOpen) return null;
@@ -755,6 +1031,48 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
           </button>
         </div>
 
+        {activeTab === 'single' && (
+          <div className="fixtures-section">
+            <div className="form-group">
+              <label>Выберите готовый метод</label>
+              <div className="fixtures-controls">
+                {isLoadingFixtures ? (
+                  <div className="loading-text">Загрузка методов...</div>
+                ) : (
+                  <select
+                    value={selectedFixture}
+                    onChange={e => {
+                      setSelectedFixture(e.target.value);
+                      if (e.target.value) {
+                        applyFixture(e.target.value);
+                      } else {
+                        resetFormData();
+                      }
+                    }}
+                    className="fixtures-select"
+                  >
+                    <option value="">Выберите метод из списка</option>
+                    {Object.entries(fixtures)
+                      .map(([key, fixture]) => ({
+                        key,
+                        displayName: fixture.group_name
+                          ? `${fixture.group_name} ${fixture.name.charAt(0).toLowerCase()}${fixture.name.slice(1)}`
+                          : fixture.name,
+                        ndCode: fixture.nd_code,
+                      }))
+                      .sort((a, b) => a.key.localeCompare(b.key))
+                      .map(({ key, displayName, ndCode }) => (
+                        <option key={key} value={key}>
+                          {displayName} ({ndCode})
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div
           className={`modal-content-wrapper ${activeTab === 'group' ? 'group-content' : 'single-content'}`}
         >
@@ -777,7 +1095,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
                     <div>Загрузка методов...</div>
                   ) : (
                     <div className="methods-list">
-                      {availableMethods.map(method => (
+                      {availableMethods.individual_methods.map(method => (
                         <label key={method.id} className="checkbox-label">
                           <input
                             type="checkbox"
@@ -899,15 +1217,172 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
                           placeholder="Введите название"
                         />
                       </div>
-                      <div className="form-group">
-                        <label>Формула</label>
-                        {renderFormulaInput(
-                          field.formula,
-                          value => handleIntermediateDataChange(index, 'formula', value),
-                          'intermediate',
-                          index
+
+                      <div className="range-calculation-section">
+                        <div className="range-header">
+                          <label className="checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={!!field.range_calculation}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  handleIntermediateDataChange(index, 'range_calculation', {
+                                    ranges: [{ condition: '', formula: '' }],
+                                  });
+                                  handleIntermediateDataChange(index, 'formula', '');
+                                } else {
+                                  handleIntermediateDataChange(index, 'range_calculation', null);
+                                }
+                              }}
+                            />
+                            <span>Использовать диапазонный расчет</span>
+                          </label>
+                        </div>
+
+                        {!field.range_calculation && (
+                          <div className="form-group">
+                            <label>Формула</label>
+                            {renderFormulaInput(
+                              field.formula,
+                              value => handleIntermediateDataChange(index, 'formula', value),
+                              'intermediate',
+                              index
+                            )}
+                          </div>
+                        )}
+
+                        {field.range_calculation && (
+                          <div className="ranges-container">
+                            {field.range_calculation.ranges.map((range, rangeIndex) => (
+                              <div key={rangeIndex} className="range-item">
+                                <button
+                                  type="button"
+                                  className="delete-range-btn"
+                                  onClick={() => deleteIntermediateRange(index, rangeIndex)}
+                                >
+                                  ×
+                                </button>
+                                <div className="form-group">
+                                  <label>Условие диапазона</label>
+                                  <div className="formula-input-container">
+                                    <input
+                                      type="text"
+                                      value={range.condition}
+                                      onChange={e =>
+                                        handleIntermediateRangeChange(
+                                          index,
+                                          rangeIndex,
+                                          'condition',
+                                          e.target.value
+                                        )
+                                      }
+                                      onFocus={() =>
+                                        setActiveFormulaField(
+                                          `intermediate-${index}-${rangeIndex}-condition`
+                                        )
+                                      }
+                                      onKeyDown={e => {
+                                        if (
+                                          e.key === 'Backspace' ||
+                                          e.key === 'Delete' ||
+                                          e.key === 'ArrowLeft' ||
+                                          e.key === 'ArrowRight' ||
+                                          ((e.ctrlKey || e.metaKey) &&
+                                            ['c', 'v', 'a', 'x'].includes(e.key.toLowerCase()))
+                                        ) {
+                                          return;
+                                        }
+                                        e.preventDefault();
+                                      }}
+                                      ref={el => {
+                                        if (!formulaRefs.intermediate.current[index]) {
+                                          formulaRefs.intermediate.current[index] = {};
+                                        }
+                                        if (!formulaRefs.intermediate.current[index][rangeIndex]) {
+                                          formulaRefs.intermediate.current[index][rangeIndex] = {};
+                                        }
+                                        formulaRefs.intermediate.current[index][
+                                          rangeIndex
+                                        ].condition = el;
+                                      }}
+                                      placeholder="Введите условие"
+                                    />
+                                    {activeFormulaField ===
+                                      `intermediate-${index}-${rangeIndex}-condition` && (
+                                      <FormulaKeyboard
+                                        onKeyPress={handleFormulaKeyPress}
+                                        variables={getAvailableVariables('intermediate', index)}
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="form-group">
+                                  <label>Формула расчета</label>
+                                  <div className="formula-input-container">
+                                    <input
+                                      type="text"
+                                      value={range.formula}
+                                      onChange={e =>
+                                        handleIntermediateRangeChange(
+                                          index,
+                                          rangeIndex,
+                                          'formula',
+                                          e.target.value
+                                        )
+                                      }
+                                      onFocus={() =>
+                                        setActiveFormulaField(
+                                          `intermediate-${index}-${rangeIndex}-formula`
+                                        )
+                                      }
+                                      onKeyDown={e => {
+                                        if (
+                                          e.key === 'Backspace' ||
+                                          e.key === 'Delete' ||
+                                          e.key === 'ArrowLeft' ||
+                                          e.key === 'ArrowRight' ||
+                                          ((e.ctrlKey || e.metaKey) &&
+                                            ['c', 'v', 'a', 'x'].includes(e.key.toLowerCase()))
+                                        ) {
+                                          return;
+                                        }
+                                        e.preventDefault();
+                                      }}
+                                      ref={el => {
+                                        if (!formulaRefs.intermediate.current[index]) {
+                                          formulaRefs.intermediate.current[index] = {};
+                                        }
+                                        if (!formulaRefs.intermediate.current[index][rangeIndex]) {
+                                          formulaRefs.intermediate.current[index][rangeIndex] = {};
+                                        }
+                                        formulaRefs.intermediate.current[index][
+                                          rangeIndex
+                                        ].formula = el;
+                                      }}
+                                      placeholder="Введите формулу расчета"
+                                    />
+                                    {activeFormulaField ===
+                                      `intermediate-${index}-${rangeIndex}-formula` && (
+                                      <FormulaKeyboard
+                                        onKeyPress={handleFormulaKeyPress}
+                                        variables={getAvailableVariables('intermediate', index)}
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => addIntermediateRange(index)}
+                              className="add-range-btn"
+                            >
+                              + Добавить диапазон
+                            </button>
+                          </div>
                         )}
                       </div>
+
                       <div className="form-group">
                         <label>Описание</label>
                         <input
@@ -929,6 +1404,40 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
                           }
                           placeholder="Введите единицу измерения"
                         />
+                      </div>
+                      <div className="form-group">
+                        <label className="checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={field.use_multiple_rounding || false}
+                            onChange={e =>
+                              handleIntermediateDataChange(
+                                index,
+                                'use_multiple_rounding',
+                                e.target.checked
+                              )
+                            }
+                          />
+                          <span>Округлять до ближайшего кратного</span>
+                        </label>
+                        {field.use_multiple_rounding && (
+                          <div style={{ marginTop: '8px' }}>
+                            <input
+                              type="number"
+                              value={field.multiple_value || ''}
+                              onChange={e =>
+                                handleIntermediateDataChange(
+                                  index,
+                                  'multiple_value',
+                                  e.target.value
+                                )
+                              }
+                              placeholder="Введите число для округления (например: 10)"
+                              min="0"
+                              style={{ width: '100%' }}
+                            />
+                          </div>
+                        )}
                       </div>
                       <label className="checkbox-label">
                         <input
@@ -1061,7 +1570,6 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
                   >
                     <option value="fixed">Фиксированное значение</option>
                     <option value="formula">Формула</option>
-                    <option value="range">Диапазонное</option>
                   </select>
                 </div>
 
@@ -1163,6 +1671,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess }) => 
                     onChange={handleInputChange}
                     required
                     min="0"
+                    placeholder="Количество знаков"
                   />
                 </div>
               </>

@@ -51,6 +51,14 @@ def calculate_result(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Проверяем тип округления
+        if research_method["rounding_type"] not in ["decimal", "significant"]:
+            logger.error(f"Неверный тип округления: {research_method['rounding_type']}")
+            return Response(
+                {"error": "Неверный тип округления"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Сначала вычисляем промежуточные результаты
         logger.info("Начало вычисления промежуточных результатов")
         intermediate_results = {}
@@ -66,7 +74,27 @@ def calculate_result(request):
                 logger.info(
                     f"Вычисление промежуточного результата: {field['name']}, формула: {field['formula']}"
                 )
-                intermediate_value = evaluate_formula(field["formula"], variables)
+
+                # Подготавливаем параметры округления
+                rounding_params = None
+                if field.get("use_multiple_rounding"):
+                    rounding_params = {
+                        "use_multiple_rounding": True,
+                        "rounding_type": field.get("rounding_type"),
+                        "rounding_decimal": field.get("rounding_decimal"),
+                        "multiple_value": field.get("multiple_value"),
+                    }
+
+                # Проверяем наличие диапазонного расчета
+                range_calculation = field.get("range_calculation")
+
+                intermediate_value = evaluate_formula(
+                    field["formula"],
+                    variables,
+                    range_calculation=range_calculation,
+                    rounding_params=rounding_params,
+                )
+
                 logger.info(
                     f"Промежуточный результат {field['name']} = {intermediate_value}"
                 )
@@ -216,16 +244,9 @@ def calculate_result(request):
                     measurement_error = float(
                         evaluate_formula(error_config["value"], variables)
                     )
-                elif error_config["type"] == "range":
-                    for range_item in error_config["ranges"]:
-                        if evaluate_formula(
-                            range_item["formula"], variables, is_condition=True
-                        ):
-                            measurement_error = float(range_item["value"])
-                            break
-                    if measurement_error is None:
-                        logger.warning("Не найден подходящий диапазон для погрешности")
-                        measurement_error = 0
+                else:
+                    logger.warning("Неподдерживаемый тип погрешности")
+                    measurement_error = 0
 
                 # Округляем погрешность до того же количества знаков после запятой, что и результат
                 if measurement_error is not None:
@@ -269,13 +290,14 @@ def update_research_method_status(request, page_id, method_id):
     try:
         research_object = ResearchObject.objects.get(id=page_id)
         research_method = ResearchMethod.objects.get(id=method_id)
+        user = getattr(request, "decoded_token", {})
 
         research_object_method = ResearchObjectMethod.objects.get(
             research_object=research_object, research_method=research_method
         )
 
         research_object_method.is_active = request.data.get("is_active", True)
-        research_object_method.save()
+        research_object_method.save(user=user)
 
         return Response({"status": "success"})
     except (
@@ -300,6 +322,7 @@ def update_methods_order(request, page_id):
     try:
         research_object = ResearchObject.objects.get(id=page_id)
         methods_data = request.data.get("methods", [])
+        user = getattr(request, "decoded_token", {})
 
         # Проверяем, что все методы принадлежат этой странице
         method_ids = [item["id"] for item in methods_data]
@@ -316,9 +339,11 @@ def update_methods_order(request, page_id):
             )
 
         for item in methods_data:
-            ResearchObjectMethod.objects.filter(
+            method = ResearchObjectMethod.objects.get(
                 research_object=research_object, research_method_id=item["id"]
-            ).update(sort_order=item["sort_order"])
+            )
+            method.sort_order = item["sort_order"]
+            method.save(user=user)
 
         return Response({"status": "success"})
 

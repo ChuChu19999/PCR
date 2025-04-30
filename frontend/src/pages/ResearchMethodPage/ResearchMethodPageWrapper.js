@@ -1,6 +1,6 @@
 import styled from 'styled-components';
 
-const OilProductsPageWrapper = styled.div`
+const ResearchMethodPageWrapper = styled.div`
   flex: 1;
   font-family: 'HeliosCondC';
   max-width: 100%;
@@ -26,12 +26,11 @@ const OilProductsPageWrapper = styled.div`
 
   .calculation-form {
     max-width: 600px;
-    margin: 0;
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
     padding: 0 12px;
-    padding-left: 0;
 
     .ant-form-item-label {
       padding: 0;
@@ -208,7 +207,6 @@ const OilProductsPageWrapper = styled.div`
     font-family: 'HeliosCondC';
     max-width: 100%;
     font-size: 13px;
-    align-items: flex-start;
   }
 
   .development-message {
@@ -266,4 +264,4 @@ const OilProductsPageWrapper = styled.div`
   }
 `;
 
-export default OilProductsPageWrapper;
+export default ResearchMethodPageWrapper;

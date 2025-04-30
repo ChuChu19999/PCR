@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Input, DatePicker, Select, message, Switch, Table } from 'antd';
+import { useNavigate } from 'react-router-dom';
+import { Input, DatePicker, Select, message, Switch, Table, Button } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
@@ -68,6 +69,11 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
   const [showCalculations, setShowCalculations] = useState(false);
   const [calculations, setCalculations] = useState([]);
   const [calculationsLoading, setCalculationsLoading] = useState(false);
+  const [availableMethodsLoading, setAvailableMethodsLoading] = useState(false);
+  const [isConfirmModalVisible, setIsConfirmModalVisible] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (protocol) {
@@ -307,6 +313,53 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     }
   };
 
+  const handleAddCalculation = async () => {
+    try {
+      setAvailableMethodsLoading(true);
+      // Сначала получаем страницу исследований для данного протокола
+      const researchPageResponse = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/research-pages/`,
+        {
+          params: {
+            laboratory_id: protocol.laboratory,
+            department_id: protocol.department || null,
+            type: 'oil_products',
+          },
+        }
+      );
+
+      const researchPage = researchPageResponse.data.find(page => page.type === 'oil_products');
+      if (!researchPage) {
+        throw new Error('Страница исследований не найдена');
+      }
+
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/research-methods/available-methods/`,
+        {
+          params: {
+            protocol_id: protocol.id,
+            research_page_id: researchPage.id,
+          },
+        }
+      );
+
+      // Сохраняем методы в sessionStorage перед редиректом
+      sessionStorage.setItem('available_methods', JSON.stringify(response.data));
+
+      // Выполняем редирект на страницу методов исследования
+      navigate(
+        `/research-method?protocol_id=${protocol.id}&laboratory=${protocol.laboratory}${protocol.department ? `&department=${protocol.department}` : ''}`
+      );
+
+      onClose();
+    } catch (error) {
+      console.error('Ошибка при загрузке доступных методов:', error);
+      message.error('Не удалось загрузить список доступных методов');
+    } finally {
+      setAvailableMethodsLoading(false);
+    }
+  };
+
   const calculationColumns = [
     {
       title: 'Метод',
@@ -366,12 +419,44 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     }
   };
 
+  const handleGenerateProtocol = async () => {
+    try {
+      setIsGenerating(true);
+      setError(null);
+
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/generate-protocol-excel/?registration_number=${protocol.registration_number}`,
+        { responseType: 'blob' }
+      );
+
+      // Создаем ссылку для скачивания файла
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Протокол_${protocol.registration_number}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      message.success('Протокол успешно сформирован');
+      setIsConfirmModalVisible(false);
+    } catch (error) {
+      console.error('Ошибка при формировании протокола:', error);
+      setError('Произошла ошибка при формировании протокола');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
     <Modal
       header="Детали протокола"
       onClose={onClose}
       onSave={activeTab === 'edit' ? handleSave : null}
       loading={loading}
+      onGenerate={() => setIsConfirmModalVisible(true)}
+      generateLoading={isGenerating}
       style={{ width: activeTab === 'calculations' ? '900px' : '600px' }}
     >
       <div className="edit-protocol-form">
@@ -395,6 +480,15 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
         <div className={`tab-content ${isAnimating ? 'entering' : ''}`}>
           {activeTab === 'calculations' ? (
             <div className="calculations-table">
+              <div style={{ marginBottom: '16px', display: 'flex', gap: '8px' }}>
+                <Button
+                  type="primary"
+                  onClick={handleAddCalculation}
+                  loading={availableMethodsLoading}
+                >
+                  Добавить расчет
+                </Button>
+              </div>
               <Table
                 columns={calculationColumns}
                 dataSource={calculations}
@@ -680,6 +774,21 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
           )}
         </div>
       </div>
+
+      {isConfirmModalVisible && (
+        <Modal
+          header="Подтверждение формирования"
+          onClose={() => setIsConfirmModalVisible(false)}
+          onSave={handleGenerateProtocol}
+          style={{ width: '500px', margin: '0 auto', left: '50%' }}
+          loading={isGenerating}
+        >
+          <div className="save-protocol-calculation-form">
+            <p className="confirmation-message">Вы уверены, что хотите сформировать протокол?</p>
+            {error && <p className="error-message">{error}</p>}
+          </div>
+        </Modal>
+      )}
     </Modal>
   );
 };

@@ -1,10 +1,9 @@
 {
     "name": "Массовая доля серы",
-    "formula": "Xср",
+    "formula": "1*Xср",
     "measurement_error": {
         "type": "formula",
-        "value": "(1.96*0.1215*(Xср+0.05555))/2.77",
-        "ranges": []
+        "value": "(1.96*0.1215*(Xср+0.05555))/2.77"
     },
     "unit": "%",
     "measurement_method": "ГОСТ Р 51947",
@@ -33,14 +32,18 @@
                 "unit": "%",
                 "formula": "(X₁+X₂)/2",
                 "description": "Среднее значение массовой доли серы",
-                "show_calculation": false
+                "show_calculation": false,
+                "range_calculation": null,
+                "use_multiple_rounding": false
             },
             {
                 "name": "r",
                 "unit": "",
                 "formula": "0.02894*(Xср+0.1691)",
                 "description": "Сходимость",
-                "show_calculation": false
+                "show_calculation": false,
+                "range_calculation": null,
+                "use_multiple_rounding": false
             }
         ]
     },
@@ -60,5 +63,6 @@
     "rounding_type": "significant",
     "rounding_decimal": 3,
     "is_active": true,
-    "is_group_member": false
+    "is_group_member": false,
+    "group_name": ""
 }

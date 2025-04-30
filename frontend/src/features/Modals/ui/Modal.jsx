@@ -18,6 +18,9 @@ const Modal = ({
   style,
   saveButtonText = 'Сохранить',
   saveButtonColor,
+  onGenerate,
+  generateButtonText = 'Сформировать протокол',
+  generateLoading = false,
 }) => {
   const [isLoading, setLoading] = useState({
     loading: false,
@@ -98,6 +101,16 @@ const Modal = ({
               onClick={() => handleClick('save')}
             >
               {saveButtonText}
+            </Button>
+          )}
+          {onGenerate && (
+            <Button
+              loading={generateLoading}
+              title={generateButtonText}
+              type="primary"
+              onClick={onGenerate}
+            >
+              {generateButtonText}
             </Button>
           )}
         </div>

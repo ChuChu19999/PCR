@@ -40,13 +40,24 @@ class LaboratoryViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Laboratory.objects.filter(is_deleted=False)
 
+    def perform_create(self, serializer):
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
+
+    def perform_update(self, serializer):
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
+
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
+        user = getattr(request, "decoded_token", {})
         # Помечаем как удаленные все связанные research-pages
         ResearchObject.objects.filter(laboratory=instance).update(
-            is_deleted=True, deleted_at=timezone.now()
+            is_deleted=True,
+            deleted_at=timezone.now(),
+            deleted_by=user.get("preferred_username") if user else None,
         )
-        instance.mark_as_deleted()
+        instance.mark_as_deleted(user=user)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -57,15 +68,24 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Department.objects.filter(is_deleted=False).select_related("laboratory")
 
+    def perform_create(self, serializer):
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
+
+    def perform_update(self, serializer):
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
+
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
+        user = getattr(request, "decoded_token", {})
         # Помечаем как удаленные все связанные research-pages
         ResearchObject.objects.filter(department=instance).update(
-            is_deleted=True, deleted_at=timezone.now()
+            is_deleted=True,
+            deleted_at=timezone.now(),
+            deleted_by=user.get("preferred_username") if user else None,
         )
-        instance.is_deleted = True
-        instance.deleted_at = timezone.now()
-        instance.save()
+        instance.mark_as_deleted(user=user)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def create(self, request, *args, **kwargs):
@@ -101,7 +121,8 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
         return queryset.order_by("name")
 
     def perform_create(self, serializer):
-        serializer.save()
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -121,7 +142,8 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def perform_update(self, serializer):
-        serializer.save()
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
 
     @action(detail=True, methods=["post"])
     def toggle_active(self, request, pk=None):
@@ -134,10 +156,8 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def mark_deleted(self, request, pk=None):
         research_method = self.get_object()
-        research_method.is_deleted = True
-        research_method.deleted_at = timezone.now()
-        research_method.save()
-
+        user = getattr(request, "decoded_token", {})
+        research_method.mark_as_deleted(user=user)
         return Response(
             {"status": "success", "message": "Метод исследования помечен как удаленный"}
         )
@@ -153,6 +173,67 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
         queryset = self.get_queryset().filter(is_deleted=True)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="available-methods")
+    def available_methods(self, request):
+        """
+        Получает список активных и неудаленных методов исследования из ResearchObjectMethod.
+        Если указан protocol_id, исключает методы, уже привязанные к этому протоколу.
+        """
+        protocol_id = request.query_params.get("protocol_id")
+        research_page_id = request.query_params.get("research_page_id")
+
+        if not research_page_id:
+            return Response(
+                {"error": "Не указан ID страницы исследований"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Получаем активные методы для конкретной страницы
+        active_method_ids = (
+            ResearchObjectMethod.objects.filter(
+                research_object_id=research_page_id, is_active=True, is_deleted=False
+            )
+            .values_list("research_method_id", flat=True)
+            .distinct()
+        )
+
+        queryset = ResearchMethod.objects.filter(
+            id__in=active_method_ids, is_deleted=False
+        )
+
+        # Если указан protocol_id, исключаем методы, уже привязанные к этому протоколу
+        if protocol_id:
+            used_methods = Calculation.objects.filter(
+                protocol_id=protocol_id, is_deleted=False
+            ).values_list("research_method_id", flat=True)
+            queryset = queryset.exclude(id__in=used_methods)
+
+        groups = ResearchMethodGroup.objects.filter(
+            is_active=True, is_deleted=False
+        ).prefetch_related("methods")
+
+        result = {"individual_methods": [], "groups": []}
+
+        # Добавляем негруппированные методы
+        individual_methods = queryset.filter(is_group_member=False)
+        result["individual_methods"] = self.get_serializer(
+            individual_methods, many=True
+        ).data
+
+        # Добавляем группы с их методами
+        for group in groups:
+            group_methods = group.methods.filter(id__in=queryset, is_group_member=True)
+            if group_methods.exists():
+                result["groups"].append(
+                    {
+                        "id": group.id,
+                        "name": group.name,
+                        "methods": self.get_serializer(group_methods, many=True).data,
+                    }
+                )
+
+        return Response(result)
 
 
 @permission_classes([AllowAny])
@@ -339,9 +420,8 @@ class ResearchObjectViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        instance.is_deleted = True
-        instance.deleted_at = timezone.now()
-        instance.save()
+        user = getattr(request, "decoded_token", {})
+        instance.mark_as_deleted(user=user)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -364,7 +444,12 @@ class ResearchMethodGroupViewSet(viewsets.ModelViewSet):
         return queryset.order_by("name")
 
     def perform_create(self, serializer):
-        serializer.save()
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
+
+    def perform_update(self, serializer):
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
 
     @action(detail=True, methods=["post"])
     def toggle_active(self, request, pk=None):
@@ -376,9 +461,8 @@ class ResearchMethodGroupViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def mark_deleted(self, request, pk=None):
         group = self.get_object()
-        group.is_deleted = True
-        group.deleted_at = timezone.now()
-        group.save()
+        user = getattr(request, "decoded_token", {})
+        group.mark_as_deleted(user=user)
         return Response(
             {"status": "success", "message": "Группа помечена как удаленная"}
         )
@@ -472,10 +556,19 @@ class ProtocolViewSet(viewsets.ModelViewSet):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    def perform_create(self, serializer):
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
+
+    def perform_update(self, serializer):
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
+
     @action(detail=True, methods=["post"])
     def mark_deleted(self, request, pk=None):
         protocol = self.get_object()
-        protocol.mark_as_deleted()
+        user = getattr(request, "decoded_token", {})
+        protocol.mark_as_deleted(user=user)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -499,6 +592,14 @@ class CalculationViewSet(viewsets.ModelViewSet):
         queryset = queryset.filter(is_deleted=is_deleted)
 
         return queryset
+
+    def perform_create(self, serializer):
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
+
+    def perform_update(self, serializer):
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
 
 
 @api_view(["GET"])

@@ -3,8 +3,7 @@
     "formula": "Mср",
     "measurement_error": {
         "type": "formula",
-        "value": "Mср*3.5/100",
-        "ranges": []
+        "value": "Mср*3.5/100"
     },
     "unit": "у.е.",
     "measurement_method": "СТО 05751745-199-2015",
@@ -16,49 +15,49 @@
                 "name": "a₁",
                 "unit": "г",
                 "card_index": 1,
-                "description": "Первая навеска вещества"
+                "description": "Навеска вещества для первой параллели"
             },
             {
                 "name": "B₁",
                 "unit": "г",
                 "card_index": 1,
-                "description": "Первая навеска бензола"
+                "description": "Навеска бензола для первой параллели"
             },
             {
                 "name": "Tб₁",
                 "unit": "°C",
                 "card_index": 1,
-                "description": "Первая температура застывания чистого бензола"
+                "description": "Температура застывания чистого бензола для первой параллели"
             },
             {
                 "name": "Tр₁",
                 "unit": "°C",
                 "card_index": 1,
-                "description": "Первая температура застывания раствора"
+                "description": "Температура застывания раствора для первой параллели"
             },
             {
                 "name": "a₂",
                 "unit": "г",
                 "card_index": 2,
-                "description": "Вторая навеска вещества"
+                "description": "Навеска вещества для второй параллели"
             },
             {
                 "name": "B₂",
                 "unit": "г",
                 "card_index": 2,
-                "description": "Вторая навеска бензола"
+                "description": "Навеска бензола для второй параллели"
             },
             {
                 "name": "Tб₂",
                 "unit": "°C",
                 "card_index": 2,
-                "description": "Вторая температура застывания чистого бензола"
+                "description": "Температура застывания чистого бензола для второй параллели"
             },
             {
                 "name": "Tр₂",
                 "unit": "°C",
                 "card_index": 2,
-                "description": "Вторая температура застывания раствора"
+                "description": "Температура застывания раствора для второй параллели"
             }
         ]
     },
@@ -68,22 +67,28 @@
                 "name": "M₁",
                 "unit": "у.е",
                 "formula": "(a₁*5.12*1000)/(B₁*(Tб₁-Tр₁))",
-                "description": "Первая молекулярная масса",
-                "show_calculation": true
+                "description": "Расчет молекулярной массы для первой параллели",
+                "show_calculation": true,
+                "range_calculation": null,
+                "use_multiple_rounding": false
             },
             {
                 "name": "M₂",
                 "unit": "у.е",
                 "formula": "(a₂*5.12*1000)/(B₂*(Tб₂-Tр₂))",
-                "description": "Вторая молекулярная масса",
-                "show_calculation": true
+                "description": "Расчет молекулярной массы для второй параллели",
+                "show_calculation": true,
+                "range_calculation": null,
+                "use_multiple_rounding": false
             },
             {
                 "name": "Mср",
                 "unit": "у.е",
                 "formula": "(M₁+M₂)/2",
                 "description": "Среднее значение молекулярной массы",
-                "show_calculation": false
+                "show_calculation": false,
+                "range_calculation": null,
+                "use_multiple_rounding": false
             }
         ]
     },
@@ -103,5 +108,6 @@
     "rounding_type": "decimal",
     "rounding_decimal": 1,
     "is_active": true,
-    "is_group_member": false
+    "is_group_member": false,
+    "group_name": "Молекулярная масса"
 }

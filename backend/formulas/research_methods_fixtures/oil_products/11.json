@@ -1,10 +1,9 @@
 {
     "name": "Массовая доля парафина",
-    "formula": "Xср",
+    "formula": "1*Xср",
     "measurement_error": {
         "type": "formula",
-        "value": "0.1*Xср",
-        "ranges": []
+        "value": "0.1*Xср"
     },
     "unit": "%",
     "measurement_method": "СТО 05751745-198-2014",
@@ -16,37 +15,37 @@
                 "name": "M₁₀",
                 "unit": "г",
                 "card_index": 1,
-                "description": "Первая масса пустого бюкса"
+                "description": "Масса пустого бюкса для первой параллели"
             },
             {
                 "name": "M₁₁",
                 "unit": "г",
                 "card_index": 1,
-                "description": "Первая масса бюкса с парафином"
+                "description": "Масса бюкса с парафином для первой параллели"
             },
             {
                 "name": "M₁",
                 "unit": "г",
                 "card_index": 1,
-                "description": "Первая масса навески"
+                "description": "Масса навески для первой параллели"
             },
             {
                 "name": "M₂₀",
                 "unit": "г",
                 "card_index": 2,
-                "description": "Вторая масса пустого бюкса"
+                "description": "Масса пустого бюкса для второй параллели"
             },
             {
                 "name": "M₂₁",
                 "unit": "г",
                 "card_index": 2,
-                "description": "Вторая масса бюкса с парафином"
+                "description": "Масса бюкса с парафином для второй параллели"
             },
             {
                 "name": "M₂",
                 "unit": "г",
                 "card_index": 2,
-                "description": "Вторая масса навески"
+                "description": "Масса навески для второй параллели"
             }
         ]
     },
@@ -57,21 +56,27 @@
                 "unit": "%",
                 "formula": "(M₁₁-M₁₀)/M₁*100",
                 "description": "Первый расчет массовой доли парафина",
-                "show_calculation": true
+                "show_calculation": true,
+                "range_calculation": null,
+                "use_multiple_rounding": false
             },
             {
                 "name": "X₂",
                 "unit": "%",
                 "formula": "(M₂₁-M₂₀)/M₂*100",
                 "description": "Второй расчет массовой доли парафина",
-                "show_calculation": true
+                "show_calculation": true,
+                "range_calculation": null,
+                "use_multiple_rounding": false
             },
             {
                 "name": "Xср",
                 "unit": "%",
                 "formula": "((X₁+X₂)/2)",
                 "description": "Среднее значение массовой доли парафина",
-                "show_calculation": false
+                "show_calculation": false,
+                "range_calculation": null,
+                "use_multiple_rounding": false
             }
         ]
     },
@@ -91,5 +96,6 @@
     "rounding_type": "decimal",
     "rounding_decimal": 2,
     "is_active": true,
-    "is_group_member": false
+    "is_group_member": false,
+    "group_name": ""
 }

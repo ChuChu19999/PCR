@@ -521,10 +521,10 @@ const OilProductsPage = () => {
           style={{
             display: 'flex',
             flexDirection: 'row',
-            width: 'calc(100% + 20px)',
+            width: '163%',
             gap: '16px',
             marginBottom: '10px',
-            justifyContent: 'center',
+            justifyContent: 'left',
             flexWrap: 'wrap',
           }}
         >
@@ -536,7 +536,8 @@ const OilProductsPage = () => {
               <div
                 key={cardIndex}
                 style={{
-                  padding: '24px',
+                  padding: '20px',
+                  paddingBottom: '12px',
                   background: '#f5f8ff',
                   borderRadius: '16px',
                   boxShadow: 'rgba(17, 12, 46, 0.05) 0px 48px 100px 0px',
@@ -1379,8 +1380,8 @@ const OilProductsPage = () => {
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    alignItems: 'left',
+                    justifyContent: 'left',
                     height: '100%',
                     color: '#4a5568',
                     textAlign: 'center',
@@ -1506,7 +1507,7 @@ const OilProductsPage = () => {
                                 color: '#2c5282',
                                 fontSize: '20px',
                                 fontWeight: 600,
-                                textAlign: 'center',
+                                textAlign: 'left',
                                 marginBottom: '20px',
                               }}
                             >
@@ -1517,8 +1518,8 @@ const OilProductsPage = () => {
                               <div
                                 style={{
                                   display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
+                                  alignItems: 'left',
+                                  justifyContent: 'left',
                                   marginBottom: '12px',
                                   gap: '8px',
                                 }}
@@ -1559,7 +1560,7 @@ const OilProductsPage = () => {
                                 flexDirection: 'row',
                                 gap: '16px',
                                 marginBottom: '0',
-                                justifyContent: 'center',
+                                justifyContent: 'left',
                               }}
                             >
                               {calculationResults[currentMethod?.id]?.map((result, index) => (
@@ -1652,10 +1653,20 @@ const OilProductsPage = () => {
                                               }}
                                             >
                                               {condition.calculation_steps?.step2
-                                                .replace(/\*/g, '×')
-                                                .replace(/<=/g, '≤')
-                                                .replace(/>=/g, '≥')
-                                                .replace(/\./g, ',')}
+                                                ? condition.calculation_steps.step2
+                                                    .replace(/\*/g, '×')
+                                                    .replace(/<=/g, '≤')
+                                                    .replace(/>=/g, '≥')
+                                                    .replace(/\./g, ',')
+                                                    .replace(/or/g, 'или')
+                                                    .replace(/and/g, 'и')
+                                                : condition.formula
+                                                    .replace(/\*/g, '×')
+                                                    .replace(/<=/g, '≤')
+                                                    .replace(/>=/g, '≥')
+                                                    .replace(/\./g, ',')
+                                                    .replace(/or/g, 'или')
+                                                    .replace(/and/g, 'и')}
                                             </div>
 
                                             {/* Результат */}
@@ -1774,7 +1785,7 @@ const OilProductsPage = () => {
                             <div
                               style={{
                                 display: 'flex',
-                                justifyContent: 'center',
+                                justifyContent: 'left',
                                 width: '100%',
                                 gap: '16px',
                               }}
@@ -1835,6 +1846,7 @@ const OilProductsPage = () => {
             onClose={handleCloseAddModal}
             researchPageId={researchPageId}
             onSuccess={handleMethodAdded}
+            objectType="oil_products"
           />
 
           <GenerateProtocolModal

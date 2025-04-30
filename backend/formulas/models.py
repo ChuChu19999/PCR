@@ -4,6 +4,44 @@ from django.contrib.auth.models import AbstractUser
 from django.utils import timezone, formats
 
 
+class BaseModel(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
+    is_deleted = models.BooleanField(
+        default=False, verbose_name="Удалено", db_index=True
+    )
+    deleted_at = models.DateTimeField(
+        null=True, blank=True, verbose_name="Дата удаления"
+    )
+    created_by = models.CharField(
+        max_length=120, verbose_name="Создал", null=True, blank=True
+    )
+    updated_by = models.CharField(
+        max_length=120, verbose_name="Изменил", null=True, blank=True
+    )
+    deleted_by = models.CharField(
+        max_length=120, verbose_name="Удалил", null=True, blank=True
+    )
+
+    class Meta:
+        abstract = True
+
+    def mark_as_deleted(self, user=None):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        if user:
+            self.deleted_by = user.preferred_username
+        self.save()
+
+    def save(self, *args, **kwargs):
+        user = kwargs.pop("user", None)
+        if user:
+            if not self.pk:
+                self.created_by = user.preferred_username
+            self.updated_by = user.preferred_username
+        super().save(*args, **kwargs)
+
+
 class CustomUser(AbstractUser):
     fullName = models.CharField(
         verbose_name="ФИО", max_length=120, null=True, blank=True
@@ -31,7 +69,7 @@ class CustomUser(AbstractUser):
         return self.username
 
 
-class Laboratory(models.Model):
+class Laboratory(BaseModel):
     name = models.CharField(
         max_length=100,
         verbose_name="Аббревиатура",
@@ -42,12 +80,6 @@ class Laboratory(models.Model):
         max_length=255,
         verbose_name="Полное название",
         help_text="Полное название лаборатории",
-    )
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
-    is_deleted = models.BooleanField(default=False, verbose_name="Удалено")
-    deleted_at = models.DateTimeField(
-        null=True, blank=True, verbose_name="Дата удаления"
     )
 
     class Meta:
@@ -73,15 +105,16 @@ class Laboratory(models.Model):
         self.clean()
         super().save(*args, **kwargs)
 
-    def mark_as_deleted(self):
-        now = timezone.now()
-        self.is_deleted = True
-        self.deleted_at = now
-        self.departments.all().update(is_deleted=True, deleted_at=now)
-        self.save()
+    def mark_as_deleted(self, user=None):
+        super().mark_as_deleted(user=user)
+        self.departments.all().update(
+            is_deleted=True,
+            deleted_at=timezone.now(),
+            deleted_by=user.preferred_username if user else None,
+        )
 
 
-class Department(models.Model):
+class Department(BaseModel):
     laboratory = models.ForeignKey(
         Laboratory,
         on_delete=models.CASCADE,
@@ -94,12 +127,6 @@ class Department(models.Model):
         max_length=100,
         verbose_name="Название",
         help_text="Название подразделения",
-    )
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
-    is_deleted = models.BooleanField(default=False, verbose_name="Удалено")
-    deleted_at = models.DateTimeField(
-        null=True, blank=True, verbose_name="Дата удаления"
     )
 
     class Meta:
@@ -131,7 +158,7 @@ class Department(models.Model):
         super().save(*args, **kwargs)
 
 
-class ResearchObject(models.Model):
+class ResearchObject(BaseModel):
     class ObjectType(models.TextChoices):
         OIL_PRODUCTS = "oil_products", "Нефтепродукты"
         CONDENSATE = "condensate", "Конденсат"
@@ -143,8 +170,6 @@ class ResearchObject(models.Model):
         help_text="Выберите тип объекта исследования",
         db_index=True,
     )
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
     laboratory = models.ForeignKey(
         Laboratory,
         on_delete=models.CASCADE,
@@ -168,10 +193,6 @@ class ResearchObject(models.Model):
         help_text="Методы исследования, привязанные к объекту",
         through="ResearchObjectMethod",
     )
-    is_deleted = models.BooleanField(default=False, verbose_name="Удалено")
-    deleted_at = models.DateTimeField(
-        null=True, blank=True, verbose_name="Дата удаления"
-    )
 
     class Meta:
         verbose_name = "Объект исследования"
@@ -182,6 +203,7 @@ class ResearchObject(models.Model):
             models.Index(fields=["laboratory"]),
             models.Index(fields=["department"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["updated_at"]),
         ]
 
     def __str__(self):
@@ -200,13 +222,8 @@ class ResearchObject(models.Model):
         self.clean()
         super().save(*args, **kwargs)
 
-    def mark_as_deleted(self):
-        self.is_deleted = True
-        self.deleted_at = timezone.now()
-        self.save()
 
-
-class ResearchObjectMethod(models.Model):
+class ResearchObjectMethod(BaseModel):
     research_object = models.ForeignKey(
         ResearchObject,
         on_delete=models.CASCADE,
@@ -228,14 +245,6 @@ class ResearchObjectMethod(models.Model):
         help_text="Определяет порядок отображения метода в списке",
         db_index=True,
     )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Дата создания",
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Дата обновления",
-    )
 
     class Meta:
         verbose_name = "Связь объекта исследования с методом"
@@ -248,11 +257,10 @@ def get_default_convergence_conditions():
     return {"formulas": [{"formula": "", "convergence_value": "satisfactory"}]}
 
 
-class ResearchMethod(models.Model):
+class ResearchMethod(BaseModel):
     class RoundingType(models.TextChoices):
         DECIMAL = "decimal", "До десятичного знака"
         SIGNIFICANT = "significant", "До значащей цифры"
-        RANGE = "range", "Диапазонная"
 
     name = models.CharField(
         max_length=255,
@@ -305,24 +313,6 @@ class ResearchMethod(models.Model):
         help_text="Формулы и значения для проверки условий сходимости",
         default=get_default_convergence_conditions,
     )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Дата создания",
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Дата обновления",
-    )
-    is_deleted = models.BooleanField(
-        default=False,
-        verbose_name="Удалено",
-        db_index=True,
-    )
-    deleted_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name="Дата удаления",
-    )
     rounding_type = models.CharField(
         max_length=20,
         choices=RoundingType.choices,
@@ -352,18 +342,15 @@ class ResearchMethod(models.Model):
         ordering = ("name",)
         indexes = [
             models.Index(fields=["name"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["updated_at"]),
         ]
 
     def __str__(self):
         return f"{self.name} ({self.nd_code})"
 
-    def mark_as_deleted(self):
-        self.is_deleted = True
-        self.deleted_at = timezone.now()
-        self.save()
 
-
-class ResearchMethodGroup(models.Model):
+class ResearchMethodGroup(BaseModel):
     name = models.CharField(
         max_length=255,
         verbose_name="Наименование группы",
@@ -375,24 +362,6 @@ class ResearchMethodGroup(models.Model):
         related_name="groups",
         verbose_name="Методы исследования",
         help_text="Методы исследования в группе",
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Дата создания",
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Дата обновления",
-    )
-    is_deleted = models.BooleanField(
-        default=False,
-        verbose_name="Удалено",
-        db_index=True,
-    )
-    deleted_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name="Дата удаления",
     )
     is_active = models.BooleanField(
         default=True,
@@ -407,18 +376,15 @@ class ResearchMethodGroup(models.Model):
         ordering = ("name",)
         indexes = [
             models.Index(fields=["name"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["updated_at"]),
         ]
 
     def __str__(self):
         return self.name
 
-    def mark_as_deleted(self):
-        self.is_deleted = True
-        self.deleted_at = timezone.now()
-        self.save()
 
-
-class ProtocolDetails(models.Model):
+class ProtocolDetails(BaseModel):
     branch = models.CharField(max_length=20, verbose_name="Филиал", help_text="Филиал")
     sampling_location_detail = models.CharField(
         max_length=255,
@@ -426,18 +392,6 @@ class ProtocolDetails(models.Model):
         help_text="Место отбора пробы",
     )
     phone = models.CharField(max_length=20, verbose_name="Телефон", help_text="Телефон")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
-    is_deleted = models.BooleanField(
-        default=False,
-        verbose_name="Удалено",
-        db_index=True,
-    )
-    deleted_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name="Дата удаления",
-    )
 
     class Meta:
         verbose_name = "Детали протокола"
@@ -445,19 +399,14 @@ class ProtocolDetails(models.Model):
         ordering = ("-created_at",)
         indexes = [
             models.Index(fields=["created_at"]),
-            models.Index(fields=["is_deleted"]),
+            models.Index(fields=["updated_at"]),
         ]
 
     def __str__(self):
         return f"Детали протокола {self.id}"
 
-    def mark_as_deleted(self):
-        self.is_deleted = True
-        self.deleted_at = timezone.now()
-        self.save()
 
-
-class Protocol(models.Model):
+class Protocol(BaseModel):
     test_protocol_number = models.CharField(
         max_length=100,
         verbose_name="Номер протокола испытаний",
@@ -540,18 +489,6 @@ class Protocol(models.Model):
         null=True,
         blank=True,
     )
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
-    is_deleted = models.BooleanField(
-        default=False,
-        verbose_name="Удалено",
-        db_index=True,
-    )
-    deleted_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name="Дата удаления",
-    )
 
     class Meta:
         verbose_name = "Протокол"
@@ -561,6 +498,7 @@ class Protocol(models.Model):
             models.Index(fields=["test_protocol_number"]),
             models.Index(fields=["registration_number"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["updated_at"]),
             models.Index(fields=["laboratory"]),
             models.Index(fields=["department"]),
         ]
@@ -575,13 +513,8 @@ class Protocol(models.Model):
     def __str__(self):
         return f"Протокол {self.test_protocol_number} ({self.registration_number})"
 
-    def mark_as_deleted(self):
-        self.is_deleted = True
-        self.deleted_at = timezone.now()
-        self.save()
 
-
-class Calculation(models.Model):
+class Calculation(BaseModel):
     input_data = models.JSONField(
         verbose_name="Входные данные",
         help_text="Входные данные для расчета",
@@ -642,18 +575,6 @@ class Calculation(models.Model):
         verbose_name="Метод исследования",
         help_text="Метод исследования, используемый для расчета",
     )
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
-    is_deleted = models.BooleanField(
-        default=False,
-        verbose_name="Удалено",
-        db_index=True,
-    )
-    deleted_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name="Дата удаления",
-    )
 
     class Meta:
         verbose_name = "Расчет"
@@ -661,6 +582,7 @@ class Calculation(models.Model):
         ordering = ("-created_at",)
         indexes = [
             models.Index(fields=["created_at"]),
+            models.Index(fields=["updated_at"]),
             models.Index(fields=["laboratory"]),
             models.Index(fields=["department"]),
             models.Index(fields=["research_method"]),
@@ -689,13 +611,8 @@ class Calculation(models.Model):
         self.clean()
         super().save(*args, **kwargs)
 
-    def mark_as_deleted(self):
-        self.is_deleted = True
-        self.deleted_at = timezone.now()
-        self.save()
 
-
-class ExcelTemplate(models.Model):
+class ExcelTemplate(BaseModel):
     name = models.CharField(
         max_length=100,
         verbose_name="Название шаблона",
@@ -737,14 +654,6 @@ class ExcelTemplate(models.Model):
         null=True,
         blank=True,
     )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Дата создания",
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Дата обновления",
-    )
 
     class Meta:
         verbose_name = "Шаблон Excel"
@@ -752,6 +661,8 @@ class ExcelTemplate(models.Model):
         ordering = ("-created_at",)
         indexes = [
             models.Index(fields=["name"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["updated_at"]),
         ]
 
     def __str__(self):

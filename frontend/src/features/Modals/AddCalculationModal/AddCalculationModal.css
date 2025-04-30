@@ -3,6 +3,8 @@
   padding-right: 15px;
   min-height: 300px;
   transition: min-height 0.3s ease;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .form-group {
@@ -52,6 +54,8 @@
 .form-section {
   margin-bottom: 20px;
   border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .form-section h3 {
@@ -64,13 +68,14 @@
 .field-group {
   position: relative;
   padding: 12px;
-  padding-right: 12px;
   margin-bottom: 12px;
   background-color: #f8f9fa;
   border: 1px solid #e9ecef;
   border-radius: 6px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease-in-out;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .field-group:hover {
@@ -428,4 +433,119 @@
   width: 14px;
   height: 14px;
   margin: 0;
+}
+
+.range-calculation-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed #d9d9d9;
+}
+
+.range-header {
+  margin-bottom: 12px;
+}
+
+.ranges-container {
+  background-color: #fafafa;
+  padding: 12px;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.range-item {
+  position: relative;
+  background-color: #fff;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.range-item:last-child {
+  margin-bottom: 8px;
+}
+
+.delete-range-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: none;
+  border: none;
+  color: #ff4d4f;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 14px;
+  line-height: 1;
+  transition: all 0.3s ease;
+  border-radius: 4px;
+}
+
+.delete-range-btn:hover {
+  background-color: rgba(255, 77, 79, 0.1);
+}
+
+.add-range-btn {
+  background: none;
+  border: 1px dashed #1890ff;
+  color: #1890ff;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  width: 100%;
+  margin-top: 8px;
+  height: 32px;
+}
+
+.add-range-btn:hover {
+  background-color: rgba(24, 144, 255, 0.1);
+}
+
+.fixtures-section {
+  margin-bottom: 20px;
+  padding: 16px;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+}
+
+.fixtures-controls {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.loading-text {
+  color: #666;
+  font-size: 14px;
+  padding: 6px 0;
+}
+
+.fixtures-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+  height: 38px;
+  color: rgba(0, 0, 0, 0.85);
+  background-color: #fff;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.fixtures-select:hover {
+  border-color: #40a9ff;
+}
+
+.fixtures-select:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.fixtures-select option {
+  padding: 8px;
 }

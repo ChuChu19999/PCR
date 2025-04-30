@@ -17,3 +17,14 @@
   color: #333;
   line-height: 1.5;
 }
+
+.modal-footer {
+  position: sticky;
+  bottom: 0;
+  background-color: #fff;
+  padding: 16px 24px;
+  border-top: 1px solid #f0f0f0;
+  margin: 0 -24px -24px;
+  z-index: 10;
+  font-size: 14px;
+}

@@ -336,15 +336,23 @@ def generate_protocol_excel(request):
                     f"Группа: {group_data['name']}, методов в группе: {len(group_data['calculations'])}"
                 )
 
-                # Получаем общий метод измерения, если он одинаковый
+                # Получаем общий метод измерения и единицу измерения для группы
                 measurement_methods = set(
                     method.measurement_method for method in group_data["methods"]
                 )
+                units = set(calc.unit for calc in group_data["calculations"])
+
                 common_measurement_method = (
                     next(iter(measurement_methods))
                     if len(measurement_methods) == 1
                     else None
                 )
+                common_unit = next(iter(units)) if len(units) == 1 else None
+
+                logger.info(
+                    f"Общий метод измерения для группы: {common_measurement_method}"
+                )
+                logger.info(f"Общая единица измерения для группы: {common_unit}")
 
                 # Находим объединенные ячейки в шаблонной строке
                 template_merged_cells = []
@@ -363,10 +371,9 @@ def generate_protocol_excel(request):
                             f"Найдены объединенные ячейки в шаблоне: колонки {merge_range.min_col}-{merge_range.max_col}"
                         )
 
-                # В первой строке выводим название группы
+                # В первой строке выводим название группы и общие данные
                 for col in range(1, worksheet.max_column + 1):
                     cell = worksheet.cell(row=current_row, column=col)
-
                     # Убираем нижнюю границу у ячеек в строке с названием группы
                     if cell.border:
                         new_border = copy(cell.border)
@@ -378,13 +385,22 @@ def generate_protocol_excel(request):
                             cell.value = cell.value.replace("{id_method}", "1")
                         elif "{name_method}" in cell.value:
                             cell.value = f"{group_data['name']}:"
+                        elif "{unit}" in cell.value:
+                            # Выводим единицу измерения на уровне группы
+                            cell.value = cell.value.replace(
+                                "{unit}", common_unit or "не указано"
+                            )
+                        elif "{measurement_method}" in cell.value:
+                            # Выводим метод измерения на уровне группы
+                            cell.value = cell.value.replace(
+                                "{measurement_method}",
+                                common_measurement_method or "не указано",
+                            )
                         else:
                             # Для остальных полей в первой строке ставим пустые значения
                             for placeholder in [
                                 "{result}",
                                 "{measurement_error}",
-                                "{unit}",
-                                "{measurement_method}",
                                 "{nd_code1}",
                                 "{nd_name1}",
                             ]:
@@ -464,7 +480,10 @@ def generate_protocol_excel(request):
                                     method_name = (
                                         method_name[0].lower() + method_name[1:]
                                     )
-                                cell.value = method_name
+                                    cell.value = method_name
+                                logger.info(
+                                    f"Установлено название метода в группе: {method_name}"
+                                )
                             elif "{result}" in cell.value:
                                 cell.value = cell.value.replace(
                                     "{result}", format_result(calc.result)
@@ -483,22 +502,12 @@ def generate_protocol_excel(request):
                                 )
                             elif "{unit}" in cell.value:
                                 cell.value = cell.value.replace(
-                                    "{unit}", calc.unit or "не указано"
-                                )
+                                    "{unit}", ""
+                                )  # Пустая единица измерения для методов в группе
                             elif "{measurement_method}" in cell.value:
-                                if common_measurement_method:
-                                    # Выводим метод измерения только для первого метода в группе
-                                    cell.value = cell.value.replace(
-                                        "{measurement_method}",
-                                        common_measurement_method if i == 0 else "",
-                                    )
-                                else:
-                                    # Если методы разные, выводим для каждого свой
-                                    cell.value = cell.value.replace(
-                                        "{measurement_method}",
-                                        calc.research_method.measurement_method
-                                        or "не указано",
-                                    )
+                                cell.value = cell.value.replace(
+                                    "{measurement_method}", ""
+                                )  # Пустой метод измерения для методов в группе
                             elif "{nd_code1}" in cell.value:
                                 cell.value = cell.value.replace(
                                     "{nd_code1}",
@@ -542,19 +551,23 @@ def generate_protocol_excel(request):
                         f"Обработка группы: {group_data['name']}, методов в группе: {len(group_data['calculations'])}"
                     )
 
-                    # Получаем общий метод измерения, если он одинаковый
+                    # Получаем общий метод измерения и единицу измерения для группы
                     measurement_methods = set(
                         method.measurement_method for method in group_data["methods"]
                     )
+                    units = set(calc.unit for calc in group_data["calculations"])
+
                     common_measurement_method = (
                         next(iter(measurement_methods))
                         if len(measurement_methods) == 1
                         else None
                     )
+                    common_unit = next(iter(units)) if len(units) == 1 else None
 
                     logger.info(
                         f"Общий метод измерения для группы: {common_measurement_method}"
                     )
+                    logger.info(f"Общая единица измерения для группы: {common_unit}")
 
                     # В первой строке выводим только название группы
                     for col in range(1, worksheet.max_column + 1):
@@ -576,13 +589,22 @@ def generate_protocol_excel(request):
                                 logger.info(
                                     f"Установлено название группы: {group_data['name']}"
                                 )
+                            elif "{unit}" in cell.value:
+                                # Выводим единицу измерения на уровне группы
+                                cell.value = cell.value.replace(
+                                    "{unit}", common_unit or "не указано"
+                                )
+                            elif "{measurement_method}" in cell.value:
+                                # Выводим метод измерения на уровне группы
+                                cell.value = cell.value.replace(
+                                    "{measurement_method}",
+                                    common_measurement_method or "не указано",
+                                )
                             else:
                                 # Для остальных полей в первой строке ставим пустые значения
                                 for placeholder in [
                                     "{result}",
                                     "{measurement_error}",
-                                    "{unit}",
-                                    "{measurement_method}",
                                     "{nd_code1}",
                                     "{nd_name1}",
                                 ]:
@@ -685,22 +707,12 @@ def generate_protocol_excel(request):
                                     )
                                 elif "{unit}" in cell.value:
                                     cell.value = cell.value.replace(
-                                        "{unit}", calc.unit or "не указано"
-                                    )
+                                        "{unit}", ""
+                                    )  # Пустая единица измерения для методов в группе
                                 elif "{measurement_method}" in cell.value:
-                                    if common_measurement_method:
-                                        # Выводим метод измерения только для первого метода в группе
-                                        cell.value = cell.value.replace(
-                                            "{measurement_method}",
-                                            common_measurement_method if i == 0 else "",
-                                        )
-                                    else:
-                                        # Если методы разные, выводим для каждого свой
-                                        cell.value = cell.value.replace(
-                                            "{measurement_method}",
-                                            calc.research_method.measurement_method
-                                            or "не указано",
-                                        )
+                                    cell.value = cell.value.replace(
+                                        "{measurement_method}", ""
+                                    )  # Пустой метод измерения для методов в группе
                                 elif "{nd_code1}" in cell.value:
                                     cell.value = cell.value.replace(
                                         "{nd_code1}",
