@@ -30,15 +30,27 @@ class BaseModel(models.Model):
         self.is_deleted = True
         self.deleted_at = timezone.now()
         if user:
-            self.deleted_by = user.preferred_username
+            self.deleted_by = (
+                user.get("preferred_username")
+                if isinstance(user, dict)
+                else user.preferred_username
+            )
         self.save()
 
     def save(self, *args, **kwargs):
         user = kwargs.pop("user", None)
         if user:
             if not self.pk:
-                self.created_by = user.preferred_username
-            self.updated_by = user.preferred_username
+                self.created_by = (
+                    user.get("preferred_username")
+                    if isinstance(user, dict)
+                    else user.preferred_username
+                )
+            self.updated_by = (
+                user.get("preferred_username")
+                if isinstance(user, dict)
+                else user.preferred_username
+            )
         super().save(*args, **kwargs)
 
 

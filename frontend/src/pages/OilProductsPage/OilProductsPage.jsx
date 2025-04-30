@@ -25,8 +25,19 @@ const { Option } = Select;
 
 const TabPanel = ({ children, value, index }) => {
   return (
-    <div role="tabpanel" hidden={value !== index}>
-      {value === index && <div className="tab-content">{children}</div>}
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      style={{
+        width: '100%',
+        maxWidth: '100%',
+      }}
+    >
+      {value === index && (
+        <div className="tab-content" style={{ width: '100%', maxWidth: '100%' }}>
+          {children}
+        </div>
+      )}
     </div>
   );
 };
@@ -521,7 +532,7 @@ const OilProductsPage = () => {
           style={{
             display: 'flex',
             flexDirection: 'row',
-            width: '163%',
+            width: '100%',
             gap: '16px',
             marginBottom: '10px',
             justifyContent: 'left',
@@ -1374,7 +1385,16 @@ const OilProductsPage = () => {
             </div>
 
             {/* Основной контент */}
-            <div style={{ flex: 1, padding: '16px', overflowY: 'auto', position: 'relative' }}>
+            <div
+              style={{
+                flex: 1,
+                padding: '16px',
+                overflowY: 'auto',
+                position: 'relative',
+                width: '100%',
+                maxWidth: '100%',
+              }}
+            >
               {hasNoMethods ? (
                 <div
                   style={{
@@ -1426,6 +1446,8 @@ const OilProductsPage = () => {
                       justifyContent: 'space-between',
                       marginBottom: '16px',
                       alignItems: 'center',
+                      width: '100%',
+                      maxWidth: '100%',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -1500,7 +1522,10 @@ const OilProductsPage = () => {
                     .map((method, index) => (
                       <TabPanel key={`panel-${method.uniqueId}`} value={selectedTab} index={index}>
                         {currentMethod && (
-                          <div className="calculation-form">
+                          <div
+                            className="calculation-form"
+                            style={{ width: '100%', maxWidth: '100%' }}
+                          >
                             <Typography
                               variant="h5"
                               style={{

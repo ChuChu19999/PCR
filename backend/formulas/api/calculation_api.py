@@ -319,18 +319,28 @@ def update_methods_order(request, page_id):
     """
     Обновляет порядок сортировки методов исследования для указанной страницы.
     """
+    logger.info(f"Начало обновления порядка методов для страницы {page_id}")
     try:
         research_object = ResearchObject.objects.get(id=page_id)
         methods_data = request.data.get("methods", [])
         user = getattr(request, "decoded_token", {})
 
+        logger.info(f"Полученные данные о методах: {methods_data}")
+        logger.info(f"Данные пользователя: {user}")
+
         # Проверяем, что все методы принадлежат этой странице
         method_ids = [item["id"] for item in methods_data]
+        logger.info(f"ID методов для обновления: {method_ids}")
+
         existing_methods = ResearchObjectMethod.objects.filter(
             research_object=research_object, research_method_id__in=method_ids
         )
+        logger.info(f"Найдено существующих методов: {existing_methods.count()}")
 
         if len(existing_methods) != len(method_ids):
+            logger.error(
+                f"Несоответствие количества методов: найдено {len(existing_methods)}, ожидалось {len(method_ids)}"
+            )
             return Response(
                 {
                     "error": "Некоторые методы не найдены или не принадлежат этой странице"
@@ -339,20 +349,35 @@ def update_methods_order(request, page_id):
             )
 
         for item in methods_data:
-            method = ResearchObjectMethod.objects.get(
-                research_object=research_object, research_method_id=item["id"]
-            )
-            method.sort_order = item["sort_order"]
-            method.save(user=user)
+            try:
+                method = ResearchObjectMethod.objects.get(
+                    research_object=research_object, research_method_id=item["id"]
+                )
+                logger.info(
+                    f"Обновление sort_order для метода {item['id']}: {item['sort_order']}"
+                )
+                method.sort_order = item["sort_order"]
+                method.save(user={"preferred_username": user.get("preferred_username")})
+            except Exception as method_error:
+                logger.error(
+                    f"Ошибка при сохранении метода {item['id']}: {str(method_error)}"
+                )
+                raise
 
+        logger.info("Успешное обновление порядка методов")
         return Response({"status": "success"})
 
     except ResearchObject.DoesNotExist:
+        logger.error(f"Страница исследований не найдена: {page_id}")
         return Response(
             {"error": "Страница исследований не найдена"},
             status=status.HTTP_404_NOT_FOUND,
         )
     except Exception as e:
+        logger.error(
+            f"Необработанная ошибка при обновлении порядка методов: {str(e)}",
+            exc_info=True,
+        )
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
