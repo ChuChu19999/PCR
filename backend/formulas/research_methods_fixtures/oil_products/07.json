@@ -71,11 +71,11 @@
     "convergence_conditions": {
         "formulas": [
             {
-                "formula": "abs(ν₁-ν₂)<=νср*0.51/100",
+                "formula": "abs(ν₁-ν₂)<=νср*0.35/100",
                 "convergence_value": "satisfactory"
             },
             {
-                "formula": "abs(ν₁-ν₂)>νср*0.51/100",
+                "formula": "abs(ν₁-ν₂)>νср*0.35/100",
                 "convergence_value": "unsatisfactory"
             }
         ]

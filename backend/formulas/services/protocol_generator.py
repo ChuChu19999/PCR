@@ -952,6 +952,7 @@ def generate_protocol_excel(request):
         # Создаем новый файл
         target_workbook = Workbook()
         target_worksheet = target_workbook.active
+        target_worksheet.title = "Лист1"
 
         # Копируем размеры столбцов
         for column in source_worksheet.column_dimensions:

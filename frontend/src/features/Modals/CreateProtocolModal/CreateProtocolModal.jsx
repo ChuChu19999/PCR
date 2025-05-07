@@ -39,13 +39,7 @@ const isValidDate = dateString => {
   );
 };
 
-const CreateProtocolModal = ({
-  isOpen,
-  onClose,
-  onSuccess,
-  selectedLaboratory,
-  selectedDepartment,
-}) => {
+const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     test_protocol_number: '',
     test_object: 'дегазированный конденсат',
@@ -59,6 +53,8 @@ const CreateProtocolModal = ({
     protocol_details_id: null,
     selectedBranch: '',
     phone: '',
+    laboratory: null,
+    department: null,
   });
 
   const [loading, setLoading] = useState(false);
@@ -68,11 +64,25 @@ const CreateProtocolModal = ({
   const [samplingLocations, setSamplingLocations] = useState([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [customTestObject, setCustomTestObject] = useState(false);
+  const [laboratories, setLaboratories] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [laboratoriesLoading, setLaboratoriesLoading] = useState(false);
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
 
   useEffect(() => {
     fetchTemplates();
     fetchBranches();
+    fetchLaboratories();
   }, []);
+
+  useEffect(() => {
+    if (formData.laboratory) {
+      fetchDepartments(formData.laboratory);
+    } else {
+      setDepartments([]);
+      setFormData(prev => ({ ...prev, department: null }));
+    }
+  }, [formData.laboratory]);
 
   useEffect(() => {
     if (formData.selectedBranch) {
@@ -112,6 +122,35 @@ const CreateProtocolModal = ({
     } catch (error) {
       console.error('Ошибка при загрузке мест отбора:', error);
       message.error('Не удалось загрузить список мест отбора проб');
+    }
+  };
+
+  const fetchLaboratories = async () => {
+    try {
+      setLaboratoriesLoading(true);
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
+      setLaboratories(response.data);
+    } catch (error) {
+      console.error('Ошибка при загрузке лабораторий:', error);
+      message.error('Не удалось загрузить список лабораторий');
+    } finally {
+      setLaboratoriesLoading(false);
+    }
+  };
+
+  const fetchDepartments = async laboratoryId => {
+    try {
+      setDepartmentsLoading(true);
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/departments/by_laboratory/?laboratory_id=${laboratoryId}`
+      );
+      setDepartments(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Ошибка при загрузке подразделений:', error);
+      message.error('Не удалось загрузить список подразделений');
+      setDepartments([]);
+    } finally {
+      setDepartmentsLoading(false);
     }
   };
 
@@ -158,6 +197,7 @@ const CreateProtocolModal = ({
       'protocol_details_id',
       'test_object',
       'excel_template',
+      'laboratory',
     ];
 
     requiredFields.forEach(field => {
@@ -187,8 +227,8 @@ const CreateProtocolModal = ({
           branch: formData.selectedBranch,
           phone: formData.phone,
         },
-        laboratory: selectedLaboratory,
-        department: selectedDepartment || null,
+        laboratory: formData.laboratory,
+        department: formData.department || null,
       };
 
       await axios.post(`${import.meta.env.VITE_API_URL}/api/protocols/`, createData);
@@ -464,6 +504,48 @@ const CreateProtocolModal = ({
             ))}
           </Select>
           {errors.excel_template && <div className="error-message">{errors.excel_template}</div>}
+        </div>
+
+        <div className="form-group">
+          <label>
+            Лаборатория <span className="required">*</span>
+          </label>
+          <Select
+            value={formData.laboratory}
+            onChange={value => handleInputChange('laboratory')(value)}
+            placeholder="Выберите лабораторию"
+            loading={laboratoriesLoading}
+            status={errors.laboratory ? 'error' : ''}
+            style={{ width: '100%' }}
+          >
+            {laboratories.map(lab => (
+              <Option key={lab.id} value={lab.id}>
+                {lab.name}
+              </Option>
+            ))}
+          </Select>
+          {errors.laboratory && <div className="error-message">{errors.laboratory}</div>}
+        </div>
+
+        <div className="form-group">
+          <label>Подразделение</label>
+          <Select
+            value={formData.department}
+            onChange={value => handleInputChange('department')(value)}
+            placeholder="Выберите подразделение"
+            loading={departmentsLoading}
+            disabled={!formData.laboratory}
+            status={errors.department ? 'error' : ''}
+            style={{ width: '100%' }}
+          >
+            {Array.isArray(departments) &&
+              departments.map(dept => (
+                <Option key={dept.id} value={dept.id}>
+                  {dept.name}
+                </Option>
+              ))}
+          </Select>
+          {errors.department && <div className="error-message">{errors.department}</div>}
         </div>
       </div>
     </Modal>

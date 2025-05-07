@@ -90,9 +90,12 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
 
   const loadDepartments = async laboratoryId => {
     try {
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/departments/`, {
-        params: { laboratory: laboratoryId },
-      });
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/departments/by_laboratory/`,
+        {
+          params: { laboratory_id: laboratoryId },
+        }
+      );
       setDepartments(response.data);
     } catch (error) {
       console.error('Ошибка при загрузке списка подразделений:', error);
@@ -425,170 +428,181 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
       onSave={handleSave}
       style={{ width: '1025px' }}
     >
-      <div className="template-select">
-        <Select
-          placeholder="Выберите тип шаблона"
-          onChange={handleTypeChange}
-          value={selectedType}
-          style={{ width: '100%', marginBottom: 24 }}
-          open={isSelectOpen}
-          onDropdownVisibleChange={setIsSelectOpen}
-          dropdownRender={menu => (
-            <>
-              {menu}
-              <div className="select-dropdown-divider" />
-              <div
-                className="select-dropdown-item"
-                onClick={() => {
-                  handleTypeChange('new');
-                  setIsSelectOpen(false);
-                }}
-              >
-                <PlusOutlined /> Создать новый шаблон
-              </div>
-            </>
-          )}
-        >
-          {templates.map(template => (
-            <Option key={template.id} value={template.id}>
-              {template.name} - {template.version}
-            </Option>
-          ))}
-        </Select>
-      </div>
+      <div className="template-modal-content">
+        <div className="template-select">
+          <Select
+            placeholder="Выберите тип шаблона"
+            onChange={handleTypeChange}
+            value={selectedType}
+            style={{ width: '100%', marginBottom: 24 }}
+            open={isSelectOpen}
+            onDropdownVisibleChange={setIsSelectOpen}
+            dropdownRender={menu => (
+              <>
+                {menu}
+                <div className="select-dropdown-divider" />
+                <div
+                  className="select-dropdown-item"
+                  onClick={() => {
+                    handleTypeChange('new');
+                    setIsSelectOpen(false);
+                  }}
+                >
+                  <PlusOutlined /> Создать новый шаблон
+                </div>
+              </>
+            )}
+          >
+            {templates.map(template => (
+              <Option key={template.id} value={template.id}>
+                {template.name} - {template.version}
+              </Option>
+            ))}
+          </Select>
+        </div>
 
-      {isCreatingNew ? (
-        <div className="new-template-form">
-          <div className="form-section">
-            <div className="form-group">
-              <label className="form-label">Название шаблона</label>
-              <Input
-                placeholder="Введите название шаблона"
-                value={newTemplateName}
-                onChange={e => setNewTemplateName(e.target.value)}
-                className="template-name-input"
-                size="large"
-                style={{ height: '40px' }}
+        {isCreatingNew ? (
+          <div className="new-template-form">
+            <div className="form-section">
+              <div className="form-group">
+                <label className="form-label">Название шаблона</label>
+                <Input
+                  placeholder="Введите название шаблона"
+                  value={newTemplateName}
+                  onChange={e => setNewTemplateName(e.target.value)}
+                  className="template-name-input"
+                  size="large"
+                  style={{ height: '40px' }}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Лаборатория</label>
+                <Select
+                  placeholder="Выберите лабораторию"
+                  value={selectedLaboratory}
+                  onChange={value => {
+                    setSelectedLaboratory(value);
+                    setSelectedDepartment(null);
+                    if (value) {
+                      loadDepartments(value);
+                    } else {
+                      setDepartments([]);
+                    }
+                  }}
+                  className="template-select-input"
+                  style={{ width: '100%' }}
+                >
+                  {laboratories.map(lab => (
+                    <Option key={lab.id} value={lab.id}>
+                      {lab.name}
+                    </Option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Подразделение (необязательно)</label>
+                <Select
+                  placeholder="Выберите подразделение"
+                  value={selectedDepartment}
+                  onChange={value => setSelectedDepartment(value)}
+                  className="template-select-input"
+                  style={{ width: '100%' }}
+                  disabled={!selectedLaboratory}
+                >
+                  {departments.map(dept => (
+                    <Option key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </Option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Файл шаблона</label>
+                <div className="upload-container">
+                  {selectedFile ? (
+                    <div className="selected-file">
+                      <div className="file-info">
+                        <FileExcelOutlined className="file-icon" />
+                        <span className="file-name">{selectedFile.name}</span>
+                      </div>
+                      <Button
+                        type="text"
+                        icon={<DeleteOutlined />}
+                        onClick={() => setSelectedFile(null)}
+                        className="delete-file-btn"
+                      />
+                    </div>
+                  ) : (
+                    <Dragger
+                      {...uploadProps}
+                      beforeUpload={handleFileSelect}
+                      showUploadList={false}
+                    >
+                      <p className="ant-upload-drag-icon">
+                        <InboxOutlined />
+                      </p>
+                      <p className="ant-upload-text">Нажмите или перетащите файл для загрузки</p>
+                      <p className="ant-upload-hint">Поддерживаются только файлы формата .xlsx</p>
+                    </Dragger>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : !selectedType ? (
+          <div className="select-type-message"></div>
+        ) : loading ? (
+          <div className="loading-state">
+            <Spin size="large" />
+            <p>Загрузка...</p>
+          </div>
+        ) : !activeTemplate ? (
+          <div className="upload-container">
+            <Dragger {...uploadProps}>
+              <p className="ant-upload-drag-icon">
+                <InboxOutlined />
+              </p>
+              <p className="ant-upload-text">Нажмите или перетащите файл для загрузки</p>
+              <p className="ant-upload-hint">Поддерживаются только файлы формата .xlsx</p>
+            </Dragger>
+          </div>
+        ) : !selectedSection ? (
+          <div className="sections-list">
+            {SECTIONS.map(section => (
+              <div
+                key={section.id}
+                className="section-item"
+                onClick={() => handleSectionSelect(section)}
+              >
+                <span className="section-icon">{section.icon}</span>
+                <div className="section-info">
+                  <div className="section-name">{section.name}</div>
+                  <div className="section-description">{section.description}</div>
+                </div>
+                <span className="section-arrow">→</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="editor-container">
+            <div className="editor-header">
+              <Button title="Назад к разделам" onClick={handleBackToSections} type="default">
+                Назад к разделам
+              </Button>
+            </div>
+            <div className="editor-content">
+              <ExcelEditor
+                templateId={activeTemplate.id}
+                section={selectedSection.id}
+                onDataChange={handleDataChange}
               />
             </div>
-
-            <div className="form-group">
-              <label className="form-label">Лаборатория</label>
-              <Select
-                placeholder="Выберите лабораторию"
-                value={selectedLaboratory}
-                onChange={value => {
-                  setSelectedLaboratory(value);
-                  setSelectedDepartment(null);
-                }}
-                className="template-select-input"
-                style={{ width: '100%' }}
-              >
-                {laboratories.map(lab => (
-                  <Option key={lab.id} value={lab.id}>
-                    {lab.name}
-                  </Option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Подразделение (необязательно)</label>
-              <Select
-                placeholder="Выберите подразделение"
-                value={selectedDepartment}
-                onChange={value => setSelectedDepartment(value)}
-                className="template-select-input"
-                style={{ width: '100%' }}
-                disabled={!selectedLaboratory}
-              >
-                {departments.map(dept => (
-                  <Option key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </Option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Файл шаблона</label>
-              <div className="upload-container">
-                {selectedFile ? (
-                  <div className="selected-file">
-                    <div className="file-info">
-                      <FileExcelOutlined className="file-icon" />
-                      <span className="file-name">{selectedFile.name}</span>
-                    </div>
-                    <Button
-                      type="text"
-                      icon={<DeleteOutlined />}
-                      onClick={() => setSelectedFile(null)}
-                      className="delete-file-btn"
-                    />
-                  </div>
-                ) : (
-                  <Dragger {...uploadProps} beforeUpload={handleFileSelect} showUploadList={false}>
-                    <p className="ant-upload-drag-icon">
-                      <InboxOutlined />
-                    </p>
-                    <p className="ant-upload-text">Нажмите или перетащите файл для загрузки</p>
-                    <p className="ant-upload-hint">Поддерживаются только файлы формата .xlsx</p>
-                  </Dragger>
-                )}
-              </div>
-            </div>
           </div>
-        </div>
-      ) : !selectedType ? (
-        <div className="select-type-message"></div>
-      ) : loading ? (
-        <div className="loading-state">
-          <Spin size="large" />
-          <p>Загрузка...</p>
-        </div>
-      ) : !activeTemplate ? (
-        <div className="upload-container">
-          <Dragger {...uploadProps}>
-            <p className="ant-upload-drag-icon">
-              <InboxOutlined />
-            </p>
-            <p className="ant-upload-text">Нажмите или перетащите файл для загрузки</p>
-            <p className="ant-upload-hint">Поддерживаются только файлы формата .xlsx</p>
-          </Dragger>
-        </div>
-      ) : !selectedSection ? (
-        <div className="sections-list">
-          {SECTIONS.map(section => (
-            <div
-              key={section.id}
-              className="section-item"
-              onClick={() => handleSectionSelect(section)}
-            >
-              <span className="section-icon">{section.icon}</span>
-              <div className="section-info">
-                <div className="section-name">{section.name}</div>
-                <div className="section-description">{section.description}</div>
-              </div>
-              <span className="section-arrow">→</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="editor-container">
-          <div className="editor-header">
-            <Button title="Назад к разделам" onClick={handleBackToSections} type="default">
-              Назад к разделам
-            </Button>
-          </div>
-          <div className="editor-content">
-            <ExcelEditor
-              templateId={activeTemplate.id}
-              section={selectedSection.id}
-              onDataChange={handleDataChange}
-            />
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </Modal>
   );
 };

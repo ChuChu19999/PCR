@@ -19,6 +19,7 @@
     "@ag-grid-enterprise/row-grouping": "^32.3.3",
     "@ag-grid-enterprise/set-filter": "^32.3.3",
     "@ag-grid-enterprise/sparklines": "^32.3.3",
+    "@ant-design/icons": "^6.0.0",
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.0",
     "@fullcalendar/core": "^6.1.15",
@@ -33,7 +34,7 @@
     "@mui/x-date-pickers": "^6.19.7",
     "ag-grid-enterprise": "32.3.3",
     "ag-grid-react": "32.3.3",
-
+    "antd": "^5.24.9",
     "axios": "^1.7.9",
     "color-convert": "^2.0.1",
     "dayjs": "^1.11.13",
@@ -48,6 +49,7 @@
     "react-dom": "^18.3.1",
     "react-helmet": "^6.1.0",
     "react-icons": "^5.3.0",
+    "react-resizable": "^3.0.5",
     "react-router-dom": "^6.26.2",
     "styled-components": "^6.1.13",
     "xlsx": "^0.18.5"

@@ -2,12 +2,47 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Select, Form, Button, Table, Input, Space } from 'antd';
 import { SearchOutlined, PlusOutlined } from '@ant-design/icons';
+import { Resizable } from 'react-resizable';
 import Layout from '../../shared/ui/Layout/Layout';
 import ProtocolsPageWrapper from './ProtocolsPageWrapper';
 import EditProtocolModal from '../../features/Modals/EditProtocolModal/EditProtocolModal';
 import CreateProtocolModal from '../../features/Modals/CreateProtocolModal/CreateProtocolModal';
 
 const { Option } = Select;
+
+const ResizableTitle = props => {
+  const { onResize, width, ...restProps } = props;
+
+  if (!width) {
+    return <th {...restProps} />;
+  }
+
+  return (
+    <Resizable
+      width={width}
+      height={0}
+      handle={
+        <span
+          className="react-resizable-handle"
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'absolute',
+            right: -5,
+            bottom: 0,
+            zIndex: 1,
+            width: 10,
+            height: '100%',
+            cursor: 'col-resize',
+          }}
+        />
+      }
+      onResize={onResize}
+      draggableOpts={{ enableUserSelectHack: false }}
+    >
+      <th {...restProps} />
+    </Resizable>
+  );
+};
 
 const ProtocolsPage = () => {
   const [laboratories, setLaboratories] = useState([]);
@@ -22,6 +57,14 @@ const ProtocolsPage = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedProtocol, setSelectedProtocol] = useState(null);
   const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [columnsState, setColumnsState] = useState({
+    test_protocol_number: { width: 150 },
+    registration_number: { width: 150 },
+    test_object: { width: 200 },
+    sampling_date: { width: 150 },
+    receiving_date: { width: 150 },
+    executor: { width: 150 },
+  });
 
   const formatDate = dateString => {
     if (!dateString) return '-';
@@ -108,11 +151,25 @@ const ProtocolsPage = () => {
     await handleShowProtocols();
   };
 
+  const handleResize =
+    index =>
+    (e, { size }) => {
+      const newColumns = [...columns];
+      newColumns[index] = {
+        ...newColumns[index],
+        width: size.width,
+      };
+      const newColumnsState = { ...columnsState };
+      newColumnsState[newColumns[index].dataIndex] = { width: size.width };
+      setColumnsState(newColumnsState);
+    };
+
   const columns = [
     {
       title: '№ протокола',
       dataIndex: 'test_protocol_number',
       key: 'test_protocol_number',
+      width: columnsState.test_protocol_number.width,
       sorter: (a, b) => a.test_protocol_number.localeCompare(b.test_protocol_number),
       ...getColumnSearchProps('test_protocol_number', '№ протокола'),
     },
@@ -120,6 +177,7 @@ const ProtocolsPage = () => {
       title: 'Рег. номер',
       dataIndex: 'registration_number',
       key: 'registration_number',
+      width: columnsState.registration_number.width,
       sorter: (a, b) => a.registration_number.localeCompare(b.registration_number),
       ...getColumnSearchProps('registration_number', 'Рег. номеру'),
     },
@@ -127,6 +185,7 @@ const ProtocolsPage = () => {
       title: 'Объект испытаний',
       dataIndex: 'test_object',
       key: 'test_object',
+      width: columnsState.test_object.width,
       sorter: (a, b) => a.test_object.localeCompare(b.test_object),
       ...getColumnSearchProps('test_object', 'Объекту испытаний'),
     },
@@ -134,6 +193,7 @@ const ProtocolsPage = () => {
       title: 'Дата отбора',
       dataIndex: 'sampling_date',
       key: 'sampling_date',
+      width: columnsState.sampling_date.width,
       sorter: (a, b) => new Date(a.sampling_date) - new Date(b.sampling_date),
       ...getColumnSearchProps('sampling_date', 'Дате отбора'),
     },
@@ -141,6 +201,7 @@ const ProtocolsPage = () => {
       title: 'Дата получения',
       dataIndex: 'receiving_date',
       key: 'receiving_date',
+      width: columnsState.receiving_date.width,
       sorter: (a, b) => new Date(a.receiving_date) - new Date(b.receiving_date),
       ...getColumnSearchProps('receiving_date', 'Дате получения'),
     },
@@ -148,10 +209,17 @@ const ProtocolsPage = () => {
       title: 'Исполнитель',
       dataIndex: 'executor',
       key: 'executor',
+      width: columnsState.executor.width,
       sorter: (a, b) => a.executor.localeCompare(b.executor),
       ...getColumnSearchProps('executor', 'Исполнителю'),
     },
-  ];
+  ].map((col, index) => ({
+    ...col,
+    onHeaderCell: column => ({
+      width: column.width,
+      onResize: handleResize(index),
+    }),
+  }));
 
   // Загрузка списка лабораторий
   useEffect(() => {
@@ -224,9 +292,26 @@ const ProtocolsPage = () => {
   return (
     <Layout title="Протоколы">
       <ProtocolsPageWrapper>
+        <style>
+          {`
+            .react-resizable {
+              position: relative;
+              background-clip: padding-box;
+            }
+            .react-resizable-handle {
+              position: absolute;
+              right: -5px;
+              bottom: 0;
+              z-index: 1;
+              width: 10px;
+              height: 100%;
+              cursor: col-resize;
+            }
+          `}
+        </style>
         <div className="form">
           <Form form={form} layout="vertical">
-            <Form.Item label="Лаборатория" required name="laboratory">
+            <Form.Item label="Лаборатория" name="laboratory">
               <Select
                 placeholder="Выберите лабораторию"
                 value={selectedLaboratory}
@@ -273,7 +358,6 @@ const ProtocolsPage = () => {
                   type="primary"
                   icon={<PlusOutlined />}
                   onClick={() => setCreateModalVisible(true)}
-                  disabled={!selectedLaboratory}
                 >
                   Создать
                 </Button>
@@ -304,7 +388,11 @@ const ProtocolsPage = () => {
                 triggerAsc: 'Сортировать по возрастанию',
                 cancelSort: 'Отменить сортировку',
               }}
-              scroll={{ x: 'max-content' }}
+              components={{
+                header: {
+                  cell: ResizableTitle,
+                },
+              }}
             />
           </div>
 

@@ -508,23 +508,43 @@ const OilProductsPage = () => {
     );
   };
 
+  const handleKeyDown = (e, currentFieldIndex, cardFields) => {
+    // Сначала проверяем Enter для сохранения существующей функциональности
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const nextFieldIndex = (currentFieldIndex + 1) % cardFields.length;
+      const nextField = cardFields[nextFieldIndex];
+      const nextFieldName = `${methodId}_${nextField.name}`;
+      if (inputRefs.current[nextFieldName]) {
+        inputRefs.current[nextFieldName].focus();
+      }
+      return;
+    }
+
+    // Разрешаем: backspace, delete, tab, escape, запятая, минус
+    if (
+      e.key === 'Backspace' ||
+      e.key === 'Delete' ||
+      e.key === 'Tab' ||
+      e.key === 'Escape' ||
+      e.key === ',' ||
+      e.key === '-' ||
+      // Разрешаем: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+      ((e.ctrlKey || e.metaKey) &&
+        (e.key === 'a' || e.key === 'c' || e.key === 'v' || e.key === 'x')) ||
+      // Разрешаем: цифры
+      /[0-9]/.test(e.key)
+    ) {
+      return;
+    }
+    e.preventDefault();
+  };
+
   const renderInputFields = methodId => {
     if (!currentMethod) return null;
 
     const fields = currentMethod.input_data.fields;
     const cardIndices = [...new Set(fields.map(field => field.card_index))].sort();
-
-    const handleKeyDown = (e, currentFieldIndex, cardFields) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const nextFieldIndex = (currentFieldIndex + 1) % cardFields.length; // Используем остаток от деления для циклического перехода
-        const nextField = cardFields[nextFieldIndex];
-        const nextFieldName = `${methodId}_${nextField.name}`;
-        if (inputRefs.current[nextFieldName]) {
-          inputRefs.current[nextFieldName].focus();
-        }
-      }
-    };
 
     return (
       <>
@@ -643,11 +663,7 @@ const OilProductsPage = () => {
 
   const handleOpenSaveModal = () => {
     if (!laboratoryActivityDate) {
-      setSnackbar({
-        open: true,
-        message: 'Необходимо указать дату лабораторной деятельности',
-        severity: 'error',
-      });
+      setDateError('Укажите дату лабораторной деятельности');
       return;
     }
     setDateError('');
@@ -1130,9 +1146,9 @@ const OilProductsPage = () => {
                 borderRight: '1px solid #e2e8f0',
                 overflowY: 'auto',
                 padding: '12px',
-                paddingTop: '12px',
+                paddingBottom: '0px',
                 backgroundColor: '#f8fafc',
-                height: 'calc(100% + 9px)',
+                height: 'calc(100% + 21px)',
                 position: 'sticky',
                 top: 0,
                 borderBottomLeftRadius: '20px',
@@ -1154,7 +1170,7 @@ const OilProductsPage = () => {
                 }}
               >
                 <Typography
-                  variant="h6"
+                  variant="h5"
                   style={{
                     fontSize: '16px',
                     color: '#2c5282',
@@ -1393,6 +1409,7 @@ const OilProductsPage = () => {
                 position: 'relative',
                 width: '100%',
                 maxWidth: '100%',
+                height: 'calc(100% + 21px)',
               }}
             >
               {hasNoMethods ? (
@@ -1468,45 +1485,45 @@ const OilProductsPage = () => {
                           Показать
                         </Button>
                       </div>
-                      <div
-                        style={{
-                          width: '195px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          fontFamily: 'HeliosCondC',
-                        }}
-                      >
-                        <DatePicker
-                          locale={locale}
-                          format="DD.MM.YYYY"
-                          value={laboratoryActivityDate}
-                          onChange={date => {
-                            setLaboratoryActivityDate(date);
-                            setDateError('');
-                          }}
-                          placeholder="Дата лабораторной деятельности"
-                          style={{ width: '100%' }}
-                          status={dateError ? 'error' : ''}
-                          required
-                          showToday
-                          allowClear={false}
-                          popupStyle={{ zIndex: 1001 }}
-                          disabled={currentMethod && lockedMethods[currentMethod.id]}
-                        />
-                      </div>
-                      {dateError && (
-                        <div
-                          style={{
-                            color: '#ff4d4f',
-                            fontSize: '14px',
-                            position: 'absolute',
-                            top: '45px',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {dateError}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ position: 'relative', width: '195px' }}>
+                          <DatePicker
+                            locale={locale}
+                            format="DD.MM.YYYY"
+                            value={laboratoryActivityDate}
+                            onChange={date => {
+                              setLaboratoryActivityDate(date);
+                              setDateError('');
+                            }}
+                            placeholder="Дата лабораторной деятельности"
+                            style={{
+                              width: '100%',
+                              borderColor: dateError ? '#ff4d4f' : undefined,
+                            }}
+                            status={dateError ? 'error' : ''}
+                            required
+                            showToday
+                            allowClear={false}
+                            popupStyle={{ zIndex: 1001 }}
+                            disabled={currentMethod && lockedMethods[currentMethod.id]}
+                          />
+                          {dateError && (
+                            <div
+                              style={{
+                                color: '#ff4d4f',
+                                fontSize: '12px',
+                                position: 'absolute',
+                                top: '100%',
+                                left: 0,
+                                marginTop: '4px',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {dateError}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </div>
                     <Button
                       type="primary"
@@ -1678,14 +1695,14 @@ const OilProductsPage = () => {
                                               }}
                                             >
                                               {condition.calculation_steps?.step2
-                                                ? condition.calculation_steps.step2
+                                                ? processAbs(condition.calculation_steps.step2)
                                                     .replace(/\*/g, '×')
                                                     .replace(/<=/g, '≤')
                                                     .replace(/>=/g, '≥')
                                                     .replace(/\./g, ',')
                                                     .replace(/or/g, 'или')
                                                     .replace(/and/g, 'и')
-                                                : condition.formula
+                                                : processAbs(condition.formula)
                                                     .replace(/\*/g, '×')
                                                     .replace(/<=/g, '≤')
                                                     .replace(/>=/g, '≥')

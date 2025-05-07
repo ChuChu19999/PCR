@@ -352,3 +352,20 @@
 .ant-picker-time-panel-column > li {
   font-family: 'HeliosCondC' !important;
 }
+
+/* Стили для состояния ошибки DatePicker */
+.ant-picker-status-error {
+  border-color: #ff4d4f !important;
+  background-color: #fff2f0 !important;
+}
+
+.ant-picker-status-error:hover {
+  border-color: #ff7875 !important;
+}
+
+.ant-picker-status-error:focus,
+.ant-picker-status-error-focused {
+  border-color: #ff7875 !important;
+  box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.2) !important;
+  outline: 0;
+}

@@ -424,11 +424,7 @@ const ResearchMethodPage = () => {
 
   const handleOpenSaveModal = () => {
     if (!laboratoryActivityDate) {
-      setSnackbar({
-        open: true,
-        message: 'Необходимо указать дату лабораторной деятельности',
-        severity: 'error',
-      });
+      setDateError('Укажите дату лабораторной деятельности');
       return;
     }
     setDateError('');
@@ -529,9 +525,9 @@ const ResearchMethodPage = () => {
                 borderRight: '1px solid #e2e8f0',
                 overflowY: 'auto',
                 padding: '12px',
-                paddingTop: '12px',
+                paddingBottom: '0px',
                 backgroundColor: '#f8fafc',
-                height: 'calc(100% + 9px)',
+                height: 'calc(100% + 21px)',
                 position: 'sticky',
                 top: 0,
                 borderBottomLeftRadius: '20px',
@@ -554,7 +550,7 @@ const ResearchMethodPage = () => {
                 }}
               >
                 <Typography
-                  variant="h6"
+                  variant="h5"
                   style={{
                     fontSize: '16px',
                     color: '#2c5282',
@@ -706,7 +702,15 @@ const ResearchMethodPage = () => {
             </div>
 
             {/* Основной контент */}
-            <div style={{ flex: 1, padding: '16px', overflowY: 'auto', position: 'relative' }}>
+            <div
+              style={{
+                flex: 1,
+                padding: '16px',
+                overflowY: 'auto',
+                position: 'relative',
+                height: 'calc(100% + 21px)',
+              }}
+            >
               {hasNoMethods ? (
                 <div
                   style={{
@@ -753,14 +757,7 @@ const ResearchMethodPage = () => {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <div
-                        style={{
-                          width: '195px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          fontFamily: 'HeliosCondC',
-                        }}
-                      >
+                      <div style={{ position: 'relative', width: '195px' }}>
                         <DatePicker
                           locale={locale}
                           format="DD.MM.YYYY"
@@ -770,7 +767,10 @@ const ResearchMethodPage = () => {
                             setDateError('');
                           }}
                           placeholder="Дата лабораторной деятельности"
-                          style={{ width: '100%' }}
+                          style={{
+                            width: '100%',
+                            borderColor: dateError ? '#ff4d4f' : undefined,
+                          }}
                           status={dateError ? 'error' : ''}
                           required
                           showToday
@@ -778,20 +778,22 @@ const ResearchMethodPage = () => {
                           popupStyle={{ zIndex: 1001 }}
                           disabled={currentMethod && lockedMethods[currentMethod.id]}
                         />
+                        {dateError && (
+                          <div
+                            style={{
+                              color: '#ff4d4f',
+                              fontSize: '12px',
+                              position: 'absolute',
+                              top: '100%',
+                              left: 0,
+                              marginTop: '4px',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {dateError}
+                          </div>
+                        )}
                       </div>
-                      {dateError && (
-                        <div
-                          style={{
-                            color: '#ff4d4f',
-                            fontSize: '14px',
-                            position: 'absolute',
-                            top: '45px',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {dateError}
-                        </div>
-                      )}
                     </div>
                   </div>
 

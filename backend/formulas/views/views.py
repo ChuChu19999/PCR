@@ -93,6 +93,23 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         get_object_or_404(Laboratory, id=laboratory_id)
         return super().create(request, *args, **kwargs)
 
+    @action(detail=False, methods=["get"])
+    def by_laboratory(self, request):
+        """
+        Получает список подразделений для конкретной лаборатории.
+        URL: /api/departments/by_laboratory/?laboratory_id={id}
+        """
+        laboratory_id = request.query_params.get("laboratory_id")
+        if not laboratory_id:
+            return Response(
+                {"error": "Не указан ID лаборатории"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        queryset = self.get_queryset().filter(laboratory_id=laboratory_id)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
 
 @permission_classes([AllowAny])
 class ResearchMethodViewSet(viewsets.ModelViewSet):
