@@ -51,6 +51,17 @@ def calculate_result(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Заменяем пустые значения на '0'
+        processed_input_data = {}
+        for key, value in input_data.items():
+            if value is None or value.strip() == "":
+                processed_input_data[key] = "0"
+                logger.info(f"Пустое значение в поле {key} заменено на '0'")
+            else:
+                processed_input_data[key] = value
+
+        input_data = processed_input_data
+
         # Проверяем тип округления
         if research_method["rounding_type"] not in ["decimal", "significant"]:
             logger.error(f"Неверный тип округления: {research_method['rounding_type']}")
@@ -114,7 +125,7 @@ def calculate_result(request):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        logger.info("Начало проверки условий сходимости")
+        logger.info("Начало проверки условий повторяемости")
         satisfied_conditions = []
 
         for condition in research_method["convergence_conditions"]["formulas"]:
@@ -133,54 +144,58 @@ def calculate_result(request):
                         f"Условие {condition['formula']} выполнено, тип: {condition['convergence_value']}"
                     )
             except Exception as e:
-                logger.error(f"Ошибка при проверке условия сходимости: {str(e)}")
+                logger.error(f"Ошибка при проверке условия повторяемости: {str(e)}")
                 return Response(
-                    {"error": f"Ошибка при проверке условия сходимости: {str(e)}"},
+                    {"error": f"Ошибка при проверке условия повторяемости: {str(e)}"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
         logger.info(f"Все выполненные условия: {satisfied_conditions}")
 
-        # Проверяем наличие особых условий
-        special_conditions = [
-            cond
-            for cond in satisfied_conditions
-            if cond in ["traces", "unsatisfactory", "absence"]
-        ]
+        # Проверяем условия в порядке приоритета
+        convergence_result = "satisfactory"
+        if "absence" in satisfied_conditions:
+            convergence_result = "absence"
+        elif "traces" in satisfied_conditions:
+            convergence_result = "traces"
+        elif "unsatisfactory" in satisfied_conditions:
+            convergence_result = "unsatisfactory"
 
-        # Сохраняем информацию о выполненных условиях
+        # Сохраняем информацию только о выбранном условии
         conditions_info = []
         for condition in research_method["convergence_conditions"]["formulas"]:
-            try:
-                condition_result = evaluate_formula(
-                    condition["formula"], variables, is_condition=True
-                )
-                conditions_info.append(
-                    {
-                        "formula": condition["formula"],
-                        "satisfied": condition_result,
-                        "convergence_value": condition["convergence_value"],
-                        "calculation_steps": calculate_convergence_steps(
-                            condition["formula"], variables
-                        ),
-                    }
-                )
-            except Exception as e:
-                logger.error(f"Ошибка при проверке условия сходимости: {str(e)}")
-                return Response(
-                    {"error": f"Ошибка при проверке условия сходимости: {str(e)}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            if condition["convergence_value"] == convergence_result:
+                try:
+                    condition_result = evaluate_formula(
+                        condition["formula"], variables, is_condition=True
+                    )
+                    conditions_info.append(
+                        {
+                            "formula": condition["formula"],
+                            "satisfied": condition_result,
+                            "convergence_value": condition["convergence_value"],
+                            "calculation_steps": calculate_convergence_steps(
+                                condition["formula"], variables
+                            ),
+                        }
+                    )
+                except Exception as e:
+                    logger.error(f"Ошибка при проверке условия повторяемости: {str(e)}")
+                    return Response(
+                        {
+                            "error": f"Ошибка при проверке условия повторяемости: {str(e)}"
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
-        if special_conditions:
-            # Если есть особые условия, возвращаем их через запятую
-            convergence_result = ", ".join(special_conditions)
-            logger.info(f"Найдены особые условия: {convergence_result}")
+        # Если выбрано особое условие, возвращаем его
+        if convergence_result in ["absence", "traces", "unsatisfactory"]:
+            logger.info(f"Найдено особое условие: {convergence_result}")
 
             return Response(
                 {
                     "convergence": convergence_result,
-                    "intermediate_results": {},
+                    "intermediate_results": intermediate_results,
                     "result": None,
                     "measurement_error": None,
                     "unit": research_method["unit"],
@@ -190,10 +205,9 @@ def calculate_result(request):
             )
 
         # Если особых условий нет, считаем результат удовлетворительным
-        convergence_result = "satisfactory"
-        logger.info("Условия сходимости удовлетворительны, продолжаем расчет")
+        logger.info("Условия повторяемости удовлетворительны, продолжаем расчет")
 
-        # Если сходимость удовлетворительная, вычисляем результат
+        # Если повторяемость удовлетворительная, вычисляем результат
         result = None
         measurement_error = None
 
@@ -392,6 +406,9 @@ def save_calculation(request):
         protocol_data = None
         calculation_data = None
 
+        logger.info(f"Получены данные для сохранения расчета: {data}")
+        logger.info(f"Значение поля executor: {data.get('executor')}")
+
         if "protocol_id" in data:
             existing_calculation = Calculation.objects.filter(
                 protocol_id=data["protocol_id"],
@@ -417,6 +434,7 @@ def save_calculation(request):
                 "research_method_id": data.get("research_method"),
                 "protocol_id": data["protocol_id"],
                 "laboratory_activity_date": data.get("laboratory_activity_date"),
+                "executor": data.get("executor"),
             }
         else:
             # Создаем новый протокол
@@ -461,6 +479,7 @@ def save_calculation(request):
                     "research_method_id": data.get("research_method"),
                     "protocol_id": protocol.id,
                     "laboratory_activity_date": data.get("laboratory_activity_date"),
+                    "executor": data.get("executor"),
                 }
             else:
                 return Response(
@@ -468,6 +487,7 @@ def save_calculation(request):
                 )
 
         calculation_serializer = CalculationSerializer(data=calculation_data)
+        logger.info(f"Данные для сериализатора: {calculation_data}")
         if calculation_serializer.is_valid():
             try:
                 calculation = calculation_serializer.save()

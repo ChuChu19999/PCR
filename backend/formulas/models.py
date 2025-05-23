@@ -274,10 +274,23 @@ class ResearchMethod(BaseModel):
         DECIMAL = "decimal", "До десятичного знака"
         SIGNIFICANT = "significant", "До значащей цифры"
 
+    class SampleType(models.TextChoices):
+        ANY = "any", "Любой"
+        OIL = "oil", "Нефть"
+        CONDENSATE = "condensate", "Конденсат"
+
     name = models.CharField(
         max_length=255,
         verbose_name="Наименование",
         help_text="Наименование метода исследования",
+        db_index=True,
+    )
+    sample_type = models.CharField(
+        max_length=50,
+        choices=SampleType.choices,
+        default=SampleType.CONDENSATE,
+        verbose_name="Тип пробы",
+        help_text="Тип исследуемой пробы",
         db_index=True,
     )
     formula = models.CharField(
@@ -321,8 +334,8 @@ class ResearchMethod(BaseModel):
         default=dict,
     )
     convergence_conditions = models.JSONField(
-        verbose_name="Условия сходимости",
-        help_text="Формулы и значения для проверки условий сходимости",
+        verbose_name="Условия повторяемости",
+        help_text="Формулы и значения для проверки условий повторяемости",
         default=get_default_convergence_conditions,
     )
     rounding_type = models.CharField(
@@ -396,28 +409,6 @@ class ResearchMethodGroup(BaseModel):
         return self.name
 
 
-class ProtocolDetails(BaseModel):
-    branch = models.CharField(max_length=20, verbose_name="Филиал", help_text="Филиал")
-    sampling_location_detail = models.CharField(
-        max_length=255,
-        verbose_name="Место отбора пробы",
-        help_text="Место отбора пробы",
-    )
-    phone = models.CharField(max_length=20, verbose_name="Телефон", help_text="Телефон")
-
-    class Meta:
-        verbose_name = "Детали протокола"
-        verbose_name_plural = "Детали протоколов"
-        ordering = ("-created_at",)
-        indexes = [
-            models.Index(fields=["created_at"]),
-            models.Index(fields=["updated_at"]),
-        ]
-
-    def __str__(self):
-        return f"Детали протокола {self.id}"
-
-
 class Protocol(BaseModel):
     test_protocol_number = models.CharField(
         max_length=100,
@@ -438,14 +429,20 @@ class Protocol(BaseModel):
         null=True,
         blank=True,
     )
-    protocol_details = models.ForeignKey(
-        ProtocolDetails,
-        on_delete=models.CASCADE,
-        related_name="protocols",
-        verbose_name="Детали протокола",
-        help_text="Связанные детали протокола",
-        null=True,
-        blank=True,
+    branch = models.CharField(
+        max_length=20,
+        verbose_name="Филиал",
+        help_text="Филиал",
+    )
+    sampling_location_detail = models.CharField(
+        max_length=255,
+        verbose_name="Место отбора пробы",
+        help_text="Место отбора пробы",
+    )
+    phone = models.CharField(
+        max_length=20,
+        verbose_name="Телефон",
+        help_text="Телефон",
     )
     sampling_act_number = models.CharField(
         max_length=50,
@@ -466,13 +463,6 @@ class Protocol(BaseModel):
     receiving_date = models.DateField(
         verbose_name="Дата получения пробы",
         help_text="Дата получения пробы в лабораторию",
-        null=True,
-        blank=True,
-    )
-    executor = models.CharField(
-        max_length=150,
-        verbose_name="Исполнитель",
-        help_text="ФИО исполнителя",
         null=True,
         blank=True,
     )
@@ -513,13 +503,15 @@ class Protocol(BaseModel):
             models.Index(fields=["updated_at"]),
             models.Index(fields=["laboratory"]),
             models.Index(fields=["department"]),
+            models.Index(fields=["branch"]),
+            models.Index(fields=["sampling_location_detail"]),
         ]
         constraints = [
             models.UniqueConstraint(
                 fields=["registration_number", "laboratory", "department"],
                 condition=models.Q(is_deleted=False),
                 name="unique_registration_number_per_lab_dept",
-            )
+            ),
         ]
 
     def __str__(self):
@@ -536,6 +528,13 @@ class Calculation(BaseModel):
         max_length=255,
         verbose_name="Результат",
         help_text="Итоговый результат расчета (число или текстовое значение)",
+    )
+    executor = models.CharField(
+        max_length=150,
+        verbose_name="Исполнитель",
+        help_text="ФИО исполнителя, производившего расчет",
+        null=False,
+        blank=False,
     )
     measurement_error = models.CharField(
         max_length=20,

@@ -51,10 +51,9 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     registration_number: '',
     sampling_date: null,
     receiving_date: null,
-    executor: '',
     excel_template: undefined,
-    protocol_details_id: null,
-    selectedBranch: '',
+    branch: '',
+    sampling_location_detail: '',
     phone: '',
     laboratory: '',
   });
@@ -62,7 +61,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [templates, setTemplates] = useState([]);
-  const [customTestObject, setCustomTestObject] = useState(false);
   const [branches, setBranches] = useState([]);
   const [samplingLocations, setSamplingLocations] = useState([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
@@ -76,33 +74,16 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    fetchTemplates();
     if (protocol) {
       setFormData({
         ...protocol,
         sampling_date: protocol.sampling_date ? dayjs(protocol.sampling_date) : null,
         receiving_date: protocol.receiving_date ? dayjs(protocol.receiving_date) : null,
-        selectedBranch: protocol.protocol_details?.branch || '',
-        protocol_details_id: protocol.protocol_details?.id,
-        phone: protocol.protocol_details?.phone || '',
-        laboratory: protocol.laboratory,
       });
-      setCustomTestObject(protocol.test_object !== 'дегазированный конденсат');
-
-      // Если есть филиал, загружаем места отбора
-      if (protocol.protocol_details?.branch) {
-        fetchSamplingLocations(protocol.protocol_details.branch);
-      }
       fetchCalculations(protocol.id);
     }
-    fetchTemplates();
-    fetchBranches();
   }, [protocol]);
-
-  useEffect(() => {
-    if (formData.selectedBranch) {
-      fetchSamplingLocations(formData.selectedBranch);
-    }
-  }, [formData.selectedBranch]);
 
   const fetchTemplates = async () => {
     try {
@@ -136,31 +117,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     }
   };
 
-  const fetchBranches = async () => {
-    try {
-      setBranchesLoading(true);
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/get-branches/`);
-      setBranches(response.data);
-    } catch (error) {
-      console.error('Ошибка при загрузке филиалов:', error);
-      message.error('Не удалось загрузить список филиалов');
-    } finally {
-      setBranchesLoading(false);
-    }
-  };
-
-  const fetchSamplingLocations = async branch => {
-    try {
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/get-sampling-locations/?branch=${branch}`
-      );
-      setSamplingLocations(response.data);
-    } catch (error) {
-      console.error('Ошибка при загрузке мест отбора:', error);
-      message.error('Не удалось загрузить список мест отбора проб');
-    }
-  };
-
   const handleInputChange = field => e => {
     const value = e?.target ? e.target.value : e;
     setFormData(prev => ({
@@ -176,11 +132,10 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     if (field === 'branch') {
       setFormData(prev => ({
         ...prev,
-        selectedBranch: value,
-        protocol_details_id: null,
+        branch: value,
+        sampling_location_detail: '',
         phone: '',
       }));
-      fetchSamplingLocations(value);
     } else if (field === 'sampling_location_detail') {
       const selectedLocation = samplingLocations.find(
         loc => loc.sampling_location_detail === value
@@ -188,7 +143,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       if (selectedLocation) {
         setFormData(prev => ({
           ...prev,
-          protocol_details_id: selectedLocation.id,
+          sampling_location_detail: value,
           phone: selectedLocation.phone || '',
         }));
       }
@@ -204,7 +159,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
         laboratory_location: formData.laboratory_location,
         sampling_date: formData.sampling_date?.format('YYYY-MM-DD'),
         receiving_date: formData.receiving_date?.format('YYYY-MM-DD'),
-        executor: formData.executor,
         excel_template: formData.excel_template,
       };
 
@@ -212,7 +166,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       if (formData.protocol_details_id) {
         updateData.protocol_details = {
           id: formData.protocol_details_id,
-          branch: formData.selectedBranch,
+          branch: formData.branch,
           phone: formData.phone,
         };
       }
@@ -535,105 +489,52 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
 
               <div className="form-group">
                 <label>Филиал</label>
-                <Select
-                  value={formData.selectedBranch}
-                  onChange={handleProtocolDetailsChange('branch')}
-                  placeholder="Выберите филиал"
-                  status={errors.protocol_details?.branch ? 'error' : ''}
+                <Input
+                  value={formData.branch}
+                  onChange={handleInputChange('branch')}
                   style={{ width: '100%' }}
-                  loading={branchesLoading}
-                >
-                  {branches.map(branch => (
-                    <Option key={branch} value={branch}>
-                      {branch}
-                    </Option>
-                  ))}
-                </Select>
-                {errors.protocol_details?.branch && (
-                  <div className="error-message">{errors.protocol_details.branch}</div>
-                )}
+                />
               </div>
 
               <div className="form-group">
                 <label>Место отбора пробы</label>
-                <Select
-                  value={
-                    samplingLocations.find(l => l.id === formData.protocol_details_id)
-                      ?.sampling_location_detail
-                  }
-                  onChange={handleProtocolDetailsChange('sampling_location_detail')}
-                  placeholder="Выберите место отбора пробы"
-                  status={errors.protocol_details?.sampling_location_detail ? 'error' : ''}
+                <Input
+                  value={formData.sampling_location_detail}
+                  onChange={handleInputChange('sampling_location_detail')}
                   style={{ width: '100%' }}
-                  disabled={!formData.selectedBranch}
-                >
-                  {samplingLocations.map(location => (
-                    <Option key={location.id} value={location.sampling_location_detail}>
-                      {location.sampling_location_detail}
-                    </Option>
-                  ))}
-                </Select>
-                {errors.protocol_details?.sampling_location_detail && (
-                  <div className="error-message">
-                    {errors.protocol_details.sampling_location_detail}
-                  </div>
-                )}
+                />
               </div>
 
               <div className="form-group">
                 <label>Телефон</label>
                 <Input
                   value={formData.phone}
-                  disabled
-                  style={{ width: '100%', background: '#f5f5f5' }}
+                  onChange={handleInputChange('phone')}
+                  style={{ width: '100%' }}
                 />
               </div>
 
               <div className="form-group">
-                <label style={{ fontWeight: 'normal' }}>
-                  Место осуществления лабораторной деятельности
-                </label>
+                <label>Место осуществления лабораторной деятельности</label>
                 <Input
                   value={formData.laboratory_location}
                   onChange={handleInputChange('laboratory_location')}
-                  placeholder="Введите место осуществления лабораторной деятельности"
-                  status={errors.laboratory_location ? 'error' : ''}
                   style={{ width: '100%' }}
                 />
-                {errors.laboratory_location && (
-                  <div className="error-message">{errors.laboratory_location}</div>
-                )}
               </div>
 
               <div className="form-group">
                 <label>Объект испытаний</label>
-                <div style={{ marginBottom: '8px' }}>
-                  <Switch
-                    checked={customTestObject}
-                    onChange={checked => {
-                      setCustomTestObject(checked);
-                      if (!checked) {
-                        handleInputChange('test_object')('дегазированный конденсат');
-                      }
-                    }}
-                  />
-                  <span style={{ marginLeft: '8px' }}>Ввести свой текст</span>
-                </div>
-                {customTestObject ? (
-                  <Input
-                    value={formData.test_object}
-                    onChange={handleInputChange('test_object')}
-                    placeholder="Введите объект испытаний"
-                    status={errors.test_object ? 'error' : ''}
-                    style={{ width: '100%' }}
-                  />
-                ) : (
-                  <Input
-                    value={formData.test_object}
-                    disabled
-                    style={{ width: '100%', background: '#f5f5f5' }}
-                  />
-                )}
+                <Select
+                  value={formData.test_object}
+                  onChange={value => handleInputChange('test_object')(value)}
+                  placeholder="Выберите объект испытаний"
+                  status={errors.test_object ? 'error' : ''}
+                  style={{ width: '100%' }}
+                >
+                  <Option value="дегазированный конденсат">дегазированный конденсат</Option>
+                  <Option value="нефть">нефть</Option>
+                </Select>
                 {errors.test_object && <div className="error-message">{errors.test_object}</div>}
               </div>
 
@@ -653,6 +554,8 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                   inputReadOnly={false}
                   showToday={false}
                   allowClear={true}
+                  superNextIcon={null}
+                  superPrevIcon={null}
                   onKeyDown={e => {
                     // Разрешаем цифры, точки, backspace и delete
                     if (!/[\d\.]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete') {
@@ -700,6 +603,8 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                   inputReadOnly={false}
                   showToday={false}
                   allowClear={true}
+                  superNextIcon={null}
+                  superPrevIcon={null}
                   onKeyDown={e => {
                     // Разрешаем цифры, точки, backspace и delete
                     if (!/[\d\.]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete') {
@@ -729,18 +634,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                 {errors.receiving_date && (
                   <div className="error-message">{errors.receiving_date}</div>
                 )}
-              </div>
-
-              <div className="form-group">
-                <label>Исполнитель</label>
-                <Input
-                  value={formData.executor}
-                  onChange={handleInputChange('executor')}
-                  placeholder="Введите ФИО исполнителя"
-                  status={errors.executor ? 'error' : ''}
-                  style={{ width: '100%' }}
-                />
-                {errors.executor && <div className="error-message">{errors.executor}</div>}
               </div>
 
               <div className="form-group">

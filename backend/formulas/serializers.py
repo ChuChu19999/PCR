@@ -9,7 +9,6 @@ from .models import (
     Calculation,
     ExcelTemplate,
     Protocol,
-    ProtocolDetails,
 )
 
 
@@ -132,6 +131,7 @@ class ResearchMethodSerializer(BaseModelSerializer):
         fields = (
             "id",
             "name",
+            "sample_type",
             "formula",
             "measurement_error",
             "unit",
@@ -293,16 +293,18 @@ class ResearchMethodSerializer(BaseModelSerializer):
 
     def validate_convergence_conditions(self, value):
         if not isinstance(value, dict):
-            raise serializers.ValidationError("Условия сходимости должны быть словарем")
+            raise serializers.ValidationError(
+                "Условия повторяемости должны быть словарем"
+            )
 
         if "formulas" not in value:
             raise serializers.ValidationError(
-                "Условия сходимости должны содержать ключ 'formulas'"
+                "Условия повторяемости должны содержать ключ 'formulas'"
             )
 
         if not isinstance(value["formulas"], list):
             raise serializers.ValidationError(
-                "Формулы условий сходимости должны быть списком"
+                "Формулы условий повторяемости должны быть списком"
             )
 
         valid_convergence_values = [
@@ -315,7 +317,7 @@ class ResearchMethodSerializer(BaseModelSerializer):
         for formula_data in value["formulas"]:
             if not isinstance(formula_data, dict):
                 raise serializers.ValidationError(
-                    "Каждое условие сходимости должно быть словарем"
+                    "Каждое условие повторяемости должно быть словарем"
                 )
 
             if "formula" not in formula_data:
@@ -330,7 +332,7 @@ class ResearchMethodSerializer(BaseModelSerializer):
 
             if formula_data["convergence_value"] not in valid_convergence_values:
                 raise serializers.ValidationError(
-                    f"Значение сходимости должно быть одним из: {', '.join(valid_convergence_values)}"
+                    f"Значение повторяемости должно быть одним из: {', '.join(valid_convergence_values)}"
                 )
 
             # Проверяем структуру формулы на наличие операторов И/ИЛИ
@@ -621,52 +623,7 @@ class ExcelTemplateSerializer(BaseModelSerializer):
         return data
 
 
-class ProtocolDetailsSerializer(BaseModelSerializer):
-    class Meta:
-        model = ProtocolDetails
-        fields = (
-            "id",
-            "branch",
-            "sampling_location_detail",
-            "phone",
-            "created_at",
-            "updated_at",
-            "is_deleted",
-            "deleted_at",
-        )
-        read_only_fields = ("created_at", "updated_at", "is_deleted", "deleted_at")
-
-    def validate_unique_together(self, attrs):
-        branch = attrs.get("branch")
-        sampling_location_detail = attrs.get("sampling_location_detail")
-
-        if branch and sampling_location_detail:
-            if ProtocolDetails.objects.filter(
-                branch=branch,
-                sampling_location_detail=sampling_location_detail,
-                is_deleted=False,
-            ).exists():
-                raise serializers.ValidationError(
-                    "Комбинация филиала и места отбора пробы должна быть уникальной"
-                )
-        return attrs
-
-    def create(self, validated_data):
-        self.validate_unique_together(validated_data)
-        return super().create(validated_data)
-
-    def update(self, instance, validated_data):
-        self.validate_unique_together(validated_data)
-        return super().update(instance, validated_data)
-
-
 class ProtocolSerializer(BaseModelSerializer):
-    protocol_details = ProtocolDetailsSerializer(read_only=True)
-    protocol_details_id = serializers.PrimaryKeyRelatedField(
-        source="protocol_details",
-        queryset=ProtocolDetails.objects.filter(is_deleted=False),
-        write_only=True,
-    )
     laboratory_name = serializers.CharField(source="laboratory.name", read_only=True)
     department_name = serializers.CharField(source="department.name", read_only=True)
 
@@ -677,13 +634,13 @@ class ProtocolSerializer(BaseModelSerializer):
             "test_protocol_number",
             "test_object",
             "laboratory_location",
-            "protocol_details",
-            "protocol_details_id",
+            "branch",
+            "sampling_location_detail",
+            "phone",
             "sampling_act_number",
             "registration_number",
             "sampling_date",
             "receiving_date",
-            "executor",
             "excel_template",
             "laboratory",
             "laboratory_name",
@@ -765,6 +722,16 @@ class CalculationSerializer(BaseModelSerializer):
         queryset=ResearchMethod.objects.filter(is_deleted=False),
         write_only=True,
     )
+    executor = serializers.CharField(required=True, allow_blank=False, min_length=2)
+
+    def validate_executor(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Необходимо указать исполнителя")
+        if len(value.strip()) < 2:
+            raise serializers.ValidationError(
+                "ФИО исполнителя должно содержать не менее 2 символов"
+            )
+        return value.strip()
 
     class Meta:
         model = Calculation
@@ -781,6 +748,7 @@ class CalculationSerializer(BaseModelSerializer):
             "research_method",
             "research_method_id",
             "laboratory_activity_date",
+            "executor",
             "created_at",
             "updated_at",
             "is_deleted",

@@ -1,5 +1,6 @@
 {
     "name": "При 20℃",
+    "sample_type": "any",
     "formula": "νср",
     "measurement_error": {
         "type": "formula",

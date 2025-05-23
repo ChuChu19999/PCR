@@ -42,16 +42,16 @@ const isValidDate = dateString => {
 const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     test_protocol_number: '',
-    test_object: 'дегазированный конденсат',
+    test_object: '',
     laboratory_location: '',
     sampling_act_number: '',
     registration_number: '',
     sampling_date: null,
     receiving_date: null,
-    executor: '',
     excel_template: undefined,
     protocol_details_id: null,
-    selectedBranch: '',
+    branch: '',
+    sampling_location_detail: '',
     phone: '',
     laboratory: null,
     department: null,
@@ -63,16 +63,14 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
   const [branches, setBranches] = useState([]);
   const [samplingLocations, setSamplingLocations] = useState([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
-  const [customTestObject, setCustomTestObject] = useState(false);
   const [laboratories, setLaboratories] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [laboratoriesLoading, setLaboratoriesLoading] = useState(false);
   const [departmentsLoading, setDepartmentsLoading] = useState(false);
 
   useEffect(() => {
-    fetchTemplates();
-    fetchBranches();
     fetchLaboratories();
+    fetchTemplates();
   }, []);
 
   useEffect(() => {
@@ -84,12 +82,6 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
     }
   }, [formData.laboratory]);
 
-  useEffect(() => {
-    if (formData.selectedBranch) {
-      fetchSamplingLocations(formData.selectedBranch);
-    }
-  }, [formData.selectedBranch]);
-
   const fetchTemplates = async () => {
     try {
       const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/excel-templates/`);
@@ -97,31 +89,6 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
     } catch (error) {
       console.error('Ошибка при загрузке шаблонов:', error);
       message.error('Не удалось загрузить список шаблонов');
-    }
-  };
-
-  const fetchBranches = async () => {
-    try {
-      setBranchesLoading(true);
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/get-branches/`);
-      setBranches(response.data);
-    } catch (error) {
-      console.error('Ошибка при загрузке филиалов:', error);
-      message.error('Не удалось загрузить список филиалов');
-    } finally {
-      setBranchesLoading(false);
-    }
-  };
-
-  const fetchSamplingLocations = async branch => {
-    try {
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/get-sampling-locations/?branch=${branch}`
-      );
-      setSamplingLocations(response.data);
-    } catch (error) {
-      console.error('Ошибка при загрузке мест отбора:', error);
-      message.error('Не удалось загрузить список мест отбора проб');
     }
   };
 
@@ -173,7 +140,6 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
         protocol_details_id: null,
         phone: '',
       }));
-      fetchSamplingLocations(value);
     } else if (field === 'sampling_location_detail') {
       const selectedLocation = samplingLocations.find(
         loc => loc.sampling_location_detail === value
@@ -193,8 +159,8 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
     const requiredFields = [
       'sampling_act_number',
       'registration_number',
-      'selectedBranch',
-      'protocol_details_id',
+      'branch',
+      'sampling_location_detail',
       'test_object',
       'excel_template',
       'laboratory',
@@ -211,27 +177,36 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
   };
 
   const handleSave = async () => {
-    if (!validateForm()) {
-      message.error('Пожалуйста, заполните все обязательные поля');
-      return;
-    }
-
     try {
+      if (!validateForm()) {
+        return;
+      }
+
       setLoading(true);
-      const createData = {
-        ...formData,
+
+      const protocolData = {
+        test_protocol_number: formData.test_protocol_number,
+        test_object: formData.test_object || 'дегазированный конденсат',
+        laboratory_location: formData.laboratory_location,
+        sampling_act_number: formData.sampling_act_number,
+        registration_number: formData.registration_number,
         sampling_date: formData.sampling_date?.format('YYYY-MM-DD'),
         receiving_date: formData.receiving_date?.format('YYYY-MM-DD'),
-        protocol_details: {
-          id: formData.protocol_details_id,
-          branch: formData.selectedBranch,
-          phone: formData.phone,
-        },
+        excel_template: formData.excel_template,
         laboratory: formData.laboratory,
-        department: formData.department || null,
+        department: formData.department,
+        branch: formData.branch,
+        sampling_location_detail: formData.sampling_location_detail,
+        phone: formData.phone || '',
       };
 
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/protocols/`, createData);
+      console.log('Отправляемые данные:', protocolData);
+      console.log('Исходный formData:', formData);
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/protocols/`,
+        protocolData
+      );
 
       message.success('Протокол успешно создан');
       onSuccess();
@@ -303,88 +278,55 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
         </div>
 
         <div className="form-group">
-          <label>
-            Филиал <span className="required">*</span>
-          </label>
-          <Select
-            value={formData.selectedBranch}
-            onChange={handleProtocolDetailsChange('branch')}
-            placeholder="Выберите филиал"
-            loading={branchesLoading}
-            status={errors.selectedBranch ? 'error' : ''}
+          <label>Филиал</label>
+          <Input
+            value={formData.branch}
+            onChange={handleInputChange('branch')}
             style={{ width: '100%' }}
-          >
-            {branches.map(branch => (
-              <Option key={branch} value={branch}>
-                {branch}
-              </Option>
-            ))}
-          </Select>
-          {errors.selectedBranch && <div className="error-message">{errors.selectedBranch}</div>}
+          />
         </div>
 
         <div className="form-group">
-          <label>
-            Место отбора пробы <span className="required">*</span>
-          </label>
-          <Select
-            value={
-              samplingLocations.find(l => l.id === formData.protocol_details_id)
-                ?.sampling_location_detail
-            }
-            onChange={handleProtocolDetailsChange('sampling_location_detail')}
-            placeholder="Выберите место отбора пробы"
-            disabled={!formData.selectedBranch}
-            status={errors.protocol_details_id ? 'error' : ''}
+          <label>Место отбора пробы</label>
+          <Input
+            value={formData.sampling_location_detail}
+            onChange={handleInputChange('sampling_location_detail')}
             style={{ width: '100%' }}
-          >
-            {samplingLocations.map(location => (
-              <Option key={location.id} value={location.sampling_location_detail}>
-                {location.sampling_location_detail}
-              </Option>
-            ))}
-          </Select>
-          {errors.protocol_details_id && (
-            <div className="error-message">{errors.protocol_details_id}</div>
-          )}
+          />
         </div>
 
         <div className="form-group">
           <label>Телефон</label>
-          <Input value={formData.phone} disabled style={{ width: '100%', background: '#f5f5f5' }} />
+          <Input
+            value={formData.phone}
+            onChange={handleInputChange('phone')}
+            style={{ width: '100%' }}
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Место осуществления лабораторной деятельности</label>
+          <Input
+            value={formData.laboratory_location}
+            onChange={handleInputChange('laboratory_location')}
+            style={{ width: '100%' }}
+          />
         </div>
 
         <div className="form-group">
           <label>
             Объект испытаний <span className="required">*</span>
           </label>
-          <div style={{ marginBottom: '8px' }}>
-            <Switch
-              checked={customTestObject}
-              onChange={checked => {
-                setCustomTestObject(checked);
-                if (!checked) {
-                  handleInputChange('test_object')('дегазированный конденсат');
-                }
-              }}
-            />
-            <span style={{ marginLeft: '8px' }}>Ввести свой текст</span>
-          </div>
-          {customTestObject ? (
-            <Input
-              value={formData.test_object}
-              onChange={handleInputChange('test_object')}
-              placeholder="Введите объект испытаний"
-              status={errors.test_object ? 'error' : ''}
-              style={{ width: '100%' }}
-            />
-          ) : (
-            <Input
-              value={formData.test_object}
-              disabled
-              style={{ width: '100%', background: '#f5f5f5' }}
-            />
-          )}
+          <Select
+            value={formData.test_object}
+            onChange={value => handleInputChange('test_object')(value)}
+            placeholder="Выберите объект испытаний"
+            status={errors.test_object ? 'error' : ''}
+            style={{ width: '100%' }}
+          >
+            <Option value="дегазированный конденсат">дегазированный конденсат</Option>
+            <Option value="нефть">нефть</Option>
+          </Select>
           {errors.test_object && <div className="error-message">{errors.test_object}</div>}
         </div>
 
@@ -404,6 +346,8 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
             inputReadOnly={false}
             showToday={false}
             allowClear={true}
+            superNextIcon={null}
+            superPrevIcon={null}
             onKeyDown={e => {
               // Разрешаем цифры, точки, backspace и delete
               if (!/[\d\.]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete') {
@@ -447,6 +391,8 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
             inputReadOnly={false}
             showToday={false}
             allowClear={true}
+            superNextIcon={null}
+            superPrevIcon={null}
             onKeyDown={e => {
               // Разрешаем цифры, точки, backspace и delete
               if (!/[\d\.]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete') {
@@ -472,18 +418,6 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
             }}
           />
           {errors.receiving_date && <div className="error-message">{errors.receiving_date}</div>}
-        </div>
-
-        <div className="form-group">
-          <label>Исполнитель</label>
-          <Input
-            value={formData.executor}
-            onChange={handleInputChange('executor')}
-            placeholder="Введите ФИО исполнителя"
-            status={errors.executor ? 'error' : ''}
-            style={{ width: '100%' }}
-          />
-          {errors.executor && <div className="error-message">{errors.executor}</div>}
         </div>
 
         <div className="form-group">

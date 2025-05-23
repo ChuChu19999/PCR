@@ -1,5 +1,6 @@
 {
     "name": "Температура плавления парафина",
+    "sample_type": "any",
     "formula": "(T₁+T₂)/2",
     "measurement_error": {
         "type": "fixed",

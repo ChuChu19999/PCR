@@ -63,7 +63,6 @@ const ProtocolsPage = () => {
     test_object: { width: 200 },
     sampling_date: { width: 150 },
     receiving_date: { width: 150 },
-    executor: { width: 150 },
   });
 
   const formatDate = dateString => {
@@ -204,14 +203,6 @@ const ProtocolsPage = () => {
       width: columnsState.receiving_date.width,
       sorter: (a, b) => new Date(a.receiving_date) - new Date(b.receiving_date),
       ...getColumnSearchProps('receiving_date', 'Дате получения'),
-    },
-    {
-      title: 'Исполнитель',
-      dataIndex: 'executor',
-      key: 'executor',
-      width: columnsState.executor.width,
-      sorter: (a, b) => a.executor.localeCompare(b.executor),
-      ...getColumnSearchProps('executor', 'Исполнителю'),
     },
   ].map((col, index) => ({
     ...col,

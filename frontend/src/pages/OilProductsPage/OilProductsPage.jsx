@@ -741,24 +741,9 @@ const OilProductsPage = () => {
       const inputData = {};
       methodDetails.input_data.fields.forEach(field => {
         const value = form.getFieldValue(`${methodId}_${field.name}`);
-        if (value) {
-          const cleanedValue = value.toString().trim().replace(',', '.');
-          inputData[field.name] = cleanedValue;
-        }
+        const cleanedValue = value ? value.toString().trim().replace(',', '.') : '';
+        inputData[field.name] = cleanedValue;
       });
-
-      const emptyFields = methodDetails.input_data.fields
-        .filter(field => !inputData[field.name] || inputData[field.name].length === 0)
-        .map(field => field.name);
-
-      if (emptyFields.length > 0) {
-        setSnackbar({
-          open: true,
-          message: `Необходимо заполнить следующие поля:\n${emptyFields.join(', ')}`,
-          severity: 'warning',
-        });
-        return;
-      }
 
       setIsCalculating(true);
 
@@ -1409,7 +1394,7 @@ const OilProductsPage = () => {
                 position: 'relative',
                 width: '100%',
                 maxWidth: '100%',
-                height: 'calc(100% + 21px)',
+                height: 'calc(100% - 10px)',
               }}
             >
               {hasNoMethods ? (
@@ -1506,6 +1491,8 @@ const OilProductsPage = () => {
                             allowClear={false}
                             popupStyle={{ zIndex: 1001 }}
                             disabled={currentMethod && lockedMethods[currentMethod.id]}
+                            superNextIcon={null}
+                            superPrevIcon={null}
                           />
                           {dateError && (
                             <div
@@ -1641,7 +1628,7 @@ const OilProductsPage = () => {
                                           : ' Неудовлетворительно'}
                                   </Typography>
 
-                                  {/* Отображение информации о сходимости */}
+                                  {/* Отображение информации о повторяемости */}
                                   <Typography
                                     variant="h6"
                                     style={{
@@ -1654,7 +1641,7 @@ const OilProductsPage = () => {
                                       borderTop: '1px solid rgba(64, 150, 255, 0.15)',
                                     }}
                                   >
-                                    Проверка сходимости:
+                                    Проверка повторяемости:
                                   </Typography>
                                   {result.conditions_info &&
                                     result.conditions_info.map(
@@ -1665,6 +1652,7 @@ const OilProductsPage = () => {
                                             style={{
                                               margin: '8px 0',
                                               color: '#2c5282',
+                                              fontFamily: 'HeliosCondC',
                                               fontSize: '14px',
                                               background: 'rgba(255, 255, 255, 0.5)',
                                               padding: '8px',
@@ -1686,7 +1674,7 @@ const OilProductsPage = () => {
                                             {/* Исходная формула */}
                                             <div
                                               style={{
-                                                fontFamily: 'monospace',
+                                                fontFamily: 'HeliosCondC',
                                                 marginBottom: '12px',
                                                 fontSize: '14px',
                                                 color: '#1a365d',
@@ -1725,101 +1713,99 @@ const OilProductsPage = () => {
                                         )
                                     )}
 
-                                  {result.convergence === 'satisfactory' &&
-                                    Object.keys(result.intermediate_results).length > 0 && (
-                                      <>
-                                        <Typography
-                                          variant="h6"
-                                          style={{
-                                            color: '#2c5282',
-                                            fontSize: '15px',
-                                            fontWeight: 600,
-                                            marginBottom: '6px',
-                                            marginTop: '8px',
-                                            paddingTop: '8px',
-                                            borderTop: '1px solid rgba(64, 150, 255, 0.15)',
-                                          }}
-                                        >
-                                          Промежуточные результаты:
-                                        </Typography>
-                                        {Object.entries(result.intermediate_results).map(
-                                          ([name, value]) => (
+                                  {Object.keys(result.intermediate_results).length > 0 && (
+                                    <>
+                                      <Typography
+                                        variant="h6"
+                                        style={{
+                                          color: '#2c5282',
+                                          fontSize: '15px',
+                                          fontWeight: 600,
+                                          marginBottom: '6px',
+                                          marginTop: '8px',
+                                          paddingTop: '8px',
+                                          borderTop: '1px solid rgba(64, 150, 255, 0.15)',
+                                        }}
+                                      >
+                                        Промежуточные результаты:
+                                      </Typography>
+                                      {Object.entries(result.intermediate_results).map(
+                                        ([name, value]) => (
+                                          <div
+                                            key={name}
+                                            style={{
+                                              color: '#4a5568',
+                                              margin: '3px 0',
+                                              fontSize: '14px',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                            }}
+                                          >
                                             <div
-                                              key={name}
                                               style={{
-                                                color: '#4a5568',
-                                                margin: '3px 0',
-                                                fontSize: '14px',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 gap: '4px',
                                               }}
                                             >
-                                              <div
-                                                style={{
-                                                  display: 'flex',
-                                                  alignItems: 'center',
-                                                  gap: '4px',
-                                                }}
-                                              >
-                                                {name}
-                                                {currentMethod.intermediate_data.fields.map(
-                                                  field =>
-                                                    field.name === name && (
-                                                      <Tooltip
-                                                        key={field.name}
-                                                        title={
-                                                          field.description ||
-                                                          'Описание отсутствует'
-                                                        }
-                                                        placement="right"
+                                              {name}
+                                              {currentMethod.intermediate_data.fields.map(
+                                                field =>
+                                                  field.name === name && (
+                                                    <Tooltip
+                                                      key={field.name}
+                                                      title={
+                                                        field.description || 'Описание отсутствует'
+                                                      }
+                                                      placement="right"
+                                                    >
+                                                      <IconButton
+                                                        size="small"
+                                                        style={{ padding: '0px' }}
                                                       >
-                                                        <IconButton
-                                                          size="small"
-                                                          style={{ padding: '0px' }}
-                                                        >
-                                                          <HelpOutlineIcon
-                                                            style={{
-                                                              fontSize: '16px',
-                                                              color: '#718096',
-                                                            }}
-                                                          />
-                                                        </IconButton>
-                                                      </Tooltip>
-                                                    )
-                                                )}
-                                              </div>
-                                              <span
-                                                style={{
-                                                  color: '#2d3748',
-                                                  fontWeight: 500,
-                                                  marginLeft: '4px',
-                                                }}
-                                              >
-                                                {roundValue(value, result.result)}
-                                                {currentMethod.intermediate_data.fields.find(
-                                                  f => f.name === name
-                                                )?.unit && (
-                                                  <span
-                                                    style={{
-                                                      marginLeft: '4px',
-                                                      color: '#666',
-                                                      fontWeight: 'normal',
-                                                    }}
-                                                  >
-                                                    {
-                                                      currentMethod.intermediate_data.fields.find(
-                                                        f => f.name === name
-                                                      ).unit
-                                                    }
-                                                  </span>
-                                                )}
-                                              </span>
+                                                        <HelpOutlineIcon
+                                                          style={{
+                                                            fontSize: '16px',
+                                                            color: '#718096',
+                                                          }}
+                                                        />
+                                                      </IconButton>
+                                                    </Tooltip>
+                                                  )
+                                              )}
                                             </div>
-                                          )
-                                        )}
-                                      </>
-                                    )}
+                                            <span
+                                              style={{
+                                                color: '#2d3748',
+                                                fontWeight: 500,
+                                                marginLeft: '4px',
+                                              }}
+                                            >
+                                              {roundValue(value, result.result)}
+                                              {currentMethod.intermediate_data.fields.find(
+                                                f => f.name === name
+                                              )?.unit && (
+                                                <span
+                                                  style={{
+                                                    marginLeft: '4px',
+                                                    color: '#666',
+                                                    fontWeight: 'normal',
+                                                  }}
+                                                >
+                                                  {
+                                                    currentMethod.intermediate_data.fields.find(
+                                                      f => f.name === name
+                                                    ).unit
+                                                  }
+                                                </span>
+                                              )}
+                                            </span>
+                                          </div>
+                                        )
+                                      )}
+                                    </>
+                                  )}
                                 </div>
                               ))}
                             </div>

@@ -23,6 +23,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
 
   const [formData, setFormData] = useState({
     name: '',
+    sample_type: 'any',
     formula: '',
     measurement_error: {
       type: 'fixed',
@@ -118,6 +119,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
     const fixtureData = fixtures[fixtureName];
     setFormData({
       name: fixtureData.name || '',
+      sample_type: fixtureData.sample_type || 'condensate',
       formula: fixtureData.formula || '',
       measurement_error: fixtureData.measurement_error || {
         type: 'fixed',
@@ -646,7 +648,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
       .map(field => field.name)
       .filter(name => name.trim() !== '');
 
-    // Для основной формулы и условий сходимости доступны все переменные
+    // Для основной формулы и условий повторяемости доступны все переменные
     if (type === 'main' || type === 'convergence' || type === 'error' || type === 'range') {
       return [...inputVariables, ...intermediateVariables];
     }
@@ -811,6 +813,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
         // Создание обычного метода
         const dataToSend = {
           name: formData.name || '',
+          sample_type: formData.sample_type || 'condensate',
           formula: formData.formula || '',
           measurement_error: {
             type: formData.measurement_error.type,
@@ -1124,6 +1127,20 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
                     value={formData.name}
                     onChange={handleInputChange}
                   />
+                </div>
+
+                <div className="form-group">
+                  <label>Тип пробы</label>
+                  <select
+                    name="sample_type"
+                    value={formData.sample_type}
+                    onChange={handleInputChange}
+                    required
+                  >
+                    <option value="any">Любой</option>
+                    <option value="condensate">Конденсат</option>
+                    <option value="oil">Нефть</option>
+                  </select>
                 </div>
 
                 <div className="form-section">
@@ -1516,7 +1533,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
                 </div>
 
                 <div className="form-section">
-                  <h3>Условия сходимости</h3>
+                  <h3>Условия повторяемости</h3>
                   {formData.convergence_conditions.formulas.map((condition, index) => (
                     <div key={index} className="field-group">
                       {formData.convergence_conditions.formulas.length > 1 && (
@@ -1539,7 +1556,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
                         )}
                       </div>
                       <div className="form-group">
-                        <label>Значение сходимости</label>
+                        <label>Значение повторяемости</label>
                         <select
                           value={condition.convergence_value}
                           onChange={e =>
@@ -1557,7 +1574,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
                     </div>
                   ))}
                   <button type="button" onClick={addConvergenceCondition} className="add-field-btn">
-                    + Добавить условие сходимости
+                    + Добавить условие повторяемости
                   </button>
                 </div>
 

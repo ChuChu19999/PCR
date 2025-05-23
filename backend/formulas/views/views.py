@@ -148,7 +148,7 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
             conditions = request.data.get("convergence_conditions")
             if not isinstance(conditions, dict) or "formulas" not in conditions:
                 return Response(
-                    {"error": "Неверный формат условий сходимости"},
+                    {"error": "Неверный формат условий повторяемости"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -490,9 +490,7 @@ class ProtocolViewSet(viewsets.ModelViewSet):
     serializer_class = ProtocolSerializer
 
     def get_queryset(self):
-        queryset = Protocol.objects.select_related(
-            "protocol_details", "laboratory", "department"
-        )
+        queryset = Protocol.objects.select_related("laboratory", "department")
 
         is_deleted = self.request.query_params.get("is_deleted")
         laboratory_id = self.request.query_params.get("laboratory")
@@ -520,11 +518,16 @@ class ProtocolViewSet(viewsets.ModelViewSet):
                 )
 
             return super().create(request, *args, **kwargs)
-        except IntegrityError:
+        except IntegrityError as e:
+            if "unique_registration_number_per_lab_dept" in str(e):
+                return Response(
+                    {
+                        "error": "Протокол с таким регистрационным номером уже существует для данной лаборатории"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             return Response(
-                {
-                    "error": "Протокол с таким регистрационным номером уже существует для данной лаборатории"
-                },
+                {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

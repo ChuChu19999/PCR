@@ -12,7 +12,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from ..models import ExcelTemplate, Protocol, ProtocolDetails, Calculation
+from ..models import ExcelTemplate, Protocol, Calculation
 from ..serializers import ExcelTemplateSerializer
 from ..utils.excel_utils import (
     A4_HEIGHT_POINTS,
@@ -486,9 +486,9 @@ def generate_protocol_excel(request):
             "{test_protocol_number}": protocol.test_protocol_number,
             "{res_object}": protocol.test_object,
             "{lab_location}": protocol.laboratory_location or "",
-            "{subd}": protocol.protocol_details.branch,
-            "{sampling_location}": protocol.protocol_details.sampling_location_detail,
-            "{tel}": protocol.protocol_details.phone,
+            "{subd}": protocol.branch,
+            "{sampling_location}": protocol.sampling_location_detail,
+            "{tel}": protocol.phone,
             "{sampling_act_number}": protocol.sampling_act_number,
             "{registration_number}": protocol.registration_number,
             "{sampling_date}": (
@@ -1617,7 +1617,7 @@ def get_sampling_locations(request):
         )
 
     locations = (
-        ProtocolDetails.objects.filter(branch=branch, is_deleted=False)
+        Protocol.objects.filter(branch=branch, is_deleted=False)
         .values("id", "sampling_location_detail", "phone")
         .distinct()
     )
@@ -1632,7 +1632,7 @@ def get_branches(request):
     Получает список уникальных филиалов
     """
     branches = (
-        ProtocolDetails.objects.filter(is_deleted=False)
+        Protocol.objects.filter(is_deleted=False)
         .values_list("branch", flat=True)
         .distinct()
         .order_by("branch")

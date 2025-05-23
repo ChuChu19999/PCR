@@ -1,5 +1,6 @@
 {
     "name": "Массовая доля воды",
+    "sample_type": "any",
     "formula": "1*Xср",
     "measurement_error": {
         "type": "fixed",
@@ -85,7 +86,7 @@
     "convergence_conditions": {
         "formulas": [
             {
-                "formula": "V₀₁>0.03 or V₀₂>0.03",
+                "formula": "abs(X₁-X₂)<=0.1",
                 "convergence_value": "satisfactory"
             },
             {

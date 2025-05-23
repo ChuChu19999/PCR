@@ -1,5 +1,6 @@
 {
     "name": "Конденсат",
+    "sample_type": "condensate",
     "formula": "Mср",
     "measurement_error": {
         "type": "formula",

@@ -1,5 +1,6 @@
 {
     "name": "Массовая доля механических примесей",
+    "sample_type": "any",
     "formula": "1*Xср",
     "measurement_error": {
         "type": "formula",
@@ -110,7 +111,7 @@
                 "name": "r",
                 "unit": "%",
                 "formula": "0",
-                "description": "Сходимость",
+                "description": "Повторяемость",
                 "show_calculation": true,
                 "range_calculation": {
                     "ranges": [

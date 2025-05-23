@@ -1,5 +1,6 @@
 {
     "name": "Массовая доля серы",
+    "sample_type": "any",
     "formula": "1*Xср",
     "measurement_error": {
         "type": "formula",
@@ -40,7 +41,7 @@
                 "name": "r",
                 "unit": "",
                 "formula": "0.02894*(Xср+0.1691)",
-                "description": "Сходимость",
+                "description": "Повторяемость",
                 "show_calculation": false,
                 "range_calculation": null,
                 "use_multiple_rounding": false

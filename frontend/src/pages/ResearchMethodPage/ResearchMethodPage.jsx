@@ -16,6 +16,53 @@ import SaveProtocolCalculationModal from '../../features/Modals/SaveProtocolCalc
 
 const { Option } = Select;
 
+const CONVERGENCE_LABELS = {
+  satisfactory: 'Удовлетворительно',
+  unsatisfactory: 'Неудовлетворительно',
+  absence: 'Отсутствие',
+  traces: 'Следы',
+};
+
+// Функция для обработки модуля с учетом вложенных скобок
+const processAbs = formula => {
+  let result = formula;
+  let startIndex;
+  while ((startIndex = result.indexOf('abs(')) !== -1) {
+    let openBrackets = 1;
+    let currentIndex = startIndex + 4;
+
+    // Ищем закрывающую скобку с учетом вложенности
+    while (openBrackets > 0 && currentIndex < result.length) {
+      if (result[currentIndex] === '(') openBrackets++;
+      if (result[currentIndex] === ')') openBrackets--;
+      currentIndex++;
+    }
+
+    if (openBrackets === 0) {
+      const content = result.substring(startIndex + 4, currentIndex - 1);
+      result =
+        result.substring(0, startIndex) + '|' + content + '|' + result.substring(currentIndex);
+    } else {
+      break;
+    }
+  }
+  return result;
+};
+
+// Функция для определения количества знаков после запятой
+const getDecimalPlaces = numStr => {
+  if (!numStr) return 0;
+  const parts = numStr.toString().split(',');
+  return parts.length > 1 ? parts[1].length : 0;
+};
+
+// Функция округления
+const roundValue = (value, mainResult) => {
+  const decimalPlaces = getDecimalPlaces(mainResult) + 1;
+  const numValue = parseFloat(value.replace(',', '.'));
+  return numValue.toFixed(decimalPlaces).replace('.', ',');
+};
+
 const TabPanel = ({ children, value, index }) => {
   return (
     <div
@@ -159,20 +206,9 @@ const ResearchMethodPage = () => {
       const inputData = {};
       methodDetails.input_data.fields.forEach(field => {
         const value = form.getFieldValue(`${methodId}_${field.name}`);
-        if (value) {
-          const cleanedValue = value.toString().trim().replace(',', '.');
-          inputData[field.name] = cleanedValue;
-        }
+        const cleanedValue = value ? value.toString().trim().replace(',', '.') : '';
+        inputData[field.name] = cleanedValue;
       });
-
-      const emptyFields = methodDetails.input_data.fields
-        .filter(field => !inputData[field.name] || inputData[field.name].length === 0)
-        .map(field => field.name);
-
-      if (emptyFields.length > 0) {
-        message.warning(`Необходимо заполнить следующие поля:\n${emptyFields.join(', ')}`);
-        return;
-      }
 
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/calculate/`, {
         input_data: inputData,
@@ -708,7 +744,7 @@ const ResearchMethodPage = () => {
                 padding: '16px',
                 overflowY: 'auto',
                 position: 'relative',
-                height: 'calc(100% + 21px)',
+                height: 'calc(100% - 10px)',
               }}
             >
               {hasNoMethods ? (
@@ -874,8 +910,9 @@ const ResearchMethodPage = () => {
                               flexWrap: 'wrap',
                             }}
                           >
-                            {lastCalculationResult[currentMethod.id] && (
+                            {calculationResults[currentMethod?.id]?.map((result, index) => (
                               <div
+                                key={`result-${index}`}
                                 className="calculation-results"
                                 style={{
                                   border: '1px solid rgba(64, 150, 255, 0.3)',
@@ -900,21 +937,16 @@ const ResearchMethodPage = () => {
                                   }}
                                 >
                                   Результат:
-                                  {lastCalculationResult[currentMethod.id].convergence ===
-                                  'satisfactory'
-                                    ? ` ${lastCalculationResult[currentMethod.id].result} ± ${
-                                        lastCalculationResult[currentMethod.id].measurement_error
-                                      } ${lastCalculationResult[currentMethod.id].unit}`
-                                    : lastCalculationResult[currentMethod.id].convergence ===
-                                        'absence'
+                                  {result.convergence === 'satisfactory'
+                                    ? ` ${result.result} ± ${result.measurement_error} ${result.unit}`
+                                    : result.convergence === 'absence'
                                       ? ' Отсутствие'
-                                      : lastCalculationResult[currentMethod.id].convergence ===
-                                          'traces'
+                                      : result.convergence === 'traces'
                                         ? ' Следы'
                                         : ' Неудовлетворительно'}
                                 </Typography>
 
-                                {/* Отображение информации о сходимости */}
+                                {/* Отображение информации о повторяемости */}
                                 <Typography
                                   variant="h6"
                                   style={{
@@ -927,61 +959,95 @@ const ResearchMethodPage = () => {
                                     borderTop: '1px solid rgba(64, 150, 255, 0.15)',
                                   }}
                                 >
-                                  Сходимость:
+                                  Проверка повторяемости:
                                 </Typography>
-                                <div
-                                  style={{
-                                    margin: '8px 0',
-                                    color: '#2c5282',
-                                    fontSize: '14px',
-                                    background: 'rgba(255, 255, 255, 0.5)',
-                                    padding: '8px',
-                                    borderRadius: '8px',
-                                  }}
-                                >
-                                  <div
-                                    style={{
-                                      color: '#0066cc',
-                                      marginTop: '6px',
-                                      fontWeight: 500,
-                                    }}
-                                  >
-                                    {lastCalculationResult[currentMethod.id].convergence ===
-                                    'satisfactory'
-                                      ? 'Удовлетворительно'
-                                      : lastCalculationResult[currentMethod.id].convergence ===
-                                          'absence'
-                                        ? 'Отсутствие'
-                                        : lastCalculationResult[currentMethod.id].convergence ===
-                                            'traces'
-                                          ? 'Следы'
-                                          : 'Неудовлетворительно'}
-                                  </div>
-                                </div>
+                                {result.conditions_info &&
+                                  result.conditions_info.map(
+                                    (condition, condIndex) =>
+                                      condition.satisfied && (
+                                        <div
+                                          key={condIndex}
+                                          style={{
+                                            margin: '8px 0',
+                                            color: '#2c5282',
+                                            fontSize: '14px',
+                                            background: 'rgba(255, 255, 255, 0.5)',
+                                            padding: '8px',
+                                            borderRadius: '8px',
+                                            borderBottom:
+                                              condIndex < result.conditions_info.length - 1
+                                                ? '1px dashed rgba(64, 150, 255, 0.3)'
+                                                : 'none',
+                                            paddingBottom:
+                                              condIndex < result.conditions_info.length - 1
+                                                ? '16px'
+                                                : '8px',
+                                            marginBottom:
+                                              condIndex < result.conditions_info.length - 1
+                                                ? '16px'
+                                                : '8px',
+                                          }}
+                                        >
+                                          {/* Исходная формула */}
+                                          <div
+                                            style={{
+                                              fontFamily: 'monospace',
+                                              marginBottom: '12px',
+                                              fontSize: '14px',
+                                              color: '#1a365d',
+                                              paddingBottom: '12px',
+                                              borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
+                                            }}
+                                          >
+                                            {condition.calculation_steps?.step2
+                                              ? processAbs(condition.calculation_steps.step2)
+                                                  .replace(/\*/g, '×')
+                                                  .replace(/<=/g, '≤')
+                                                  .replace(/>=/g, '≥')
+                                                  .replace(/\./g, ',')
+                                                  .replace(/or/g, 'или')
+                                                  .replace(/and/g, 'и')
+                                              : processAbs(condition.formula)
+                                                  .replace(/\*/g, '×')
+                                                  .replace(/<=/g, '≤')
+                                                  .replace(/>=/g, '≥')
+                                                  .replace(/\./g, ',')
+                                                  .replace(/or/g, 'или')
+                                                  .replace(/and/g, 'и')}
+                                          </div>
 
-                                {/* Промежуточные результаты */}
-                                {lastCalculationResult[currentMethod.id].intermediate_results &&
-                                  Object.keys(
-                                    lastCalculationResult[currentMethod.id].intermediate_results
-                                  ).length > 0 && (
-                                    <>
-                                      <Typography
-                                        variant="h6"
-                                        style={{
-                                          color: '#2c5282',
-                                          fontSize: '15px',
-                                          fontWeight: 600,
-                                          marginBottom: '6px',
-                                          marginTop: '8px',
-                                          paddingTop: '8px',
-                                          borderTop: '1px solid rgba(64, 150, 255, 0.15)',
-                                        }}
-                                      >
-                                        Промежуточные результаты:
-                                      </Typography>
-                                      {Object.entries(
-                                        lastCalculationResult[currentMethod.id].intermediate_results
-                                      ).map(([name, value]) => (
+                                          {/* Результат */}
+                                          <div
+                                            style={{
+                                              color: '#0066cc',
+                                              marginTop: '6px',
+                                              fontWeight: 500,
+                                            }}
+                                          >
+                                            {CONVERGENCE_LABELS[condition.convergence_value]}
+                                          </div>
+                                        </div>
+                                      )
+                                  )}
+
+                                {Object.keys(result.intermediate_results).length > 0 && (
+                                  <>
+                                    <Typography
+                                      variant="h6"
+                                      style={{
+                                        color: '#2c5282',
+                                        fontSize: '15px',
+                                        fontWeight: 600,
+                                        marginBottom: '6px',
+                                        marginTop: '8px',
+                                        paddingTop: '8px',
+                                        borderTop: '1px solid rgba(64, 150, 255, 0.15)',
+                                      }}
+                                    >
+                                      Промежуточные результаты:
+                                    </Typography>
+                                    {Object.entries(result.intermediate_results).map(
+                                      ([name, value]) => (
                                         <div
                                           key={name}
                                           style={{
@@ -1001,19 +1067,30 @@ const ResearchMethodPage = () => {
                                             }}
                                           >
                                             {name}
-                                            <Tooltip
-                                              title={'Описание отсутствует'}
-                                              placement="right"
-                                            >
-                                              <IconButton size="small" style={{ padding: '0px' }}>
-                                                <HelpOutlineIcon
-                                                  style={{
-                                                    fontSize: '16px',
-                                                    color: '#718096',
-                                                  }}
-                                                />
-                                              </IconButton>
-                                            </Tooltip>
+                                            {currentMethod.intermediate_data.fields.map(
+                                              field =>
+                                                field.name === name && (
+                                                  <Tooltip
+                                                    key={field.name}
+                                                    title={
+                                                      field.description || 'Описание отсутствует'
+                                                    }
+                                                    placement="right"
+                                                  >
+                                                    <IconButton
+                                                      size="small"
+                                                      style={{ padding: '0px' }}
+                                                    >
+                                                      <HelpOutlineIcon
+                                                        style={{
+                                                          fontSize: '16px',
+                                                          color: '#718096',
+                                                        }}
+                                                      />
+                                                    </IconButton>
+                                                  </Tooltip>
+                                                )
+                                            )}
                                           </div>
                                           <span
                                             style={{
@@ -1022,14 +1099,32 @@ const ResearchMethodPage = () => {
                                               marginLeft: '4px',
                                             }}
                                           >
-                                            {value}
+                                            {roundValue(value, result.result)}
+                                            {currentMethod.intermediate_data.fields.find(
+                                              f => f.name === name
+                                            )?.unit && (
+                                              <span
+                                                style={{
+                                                  marginLeft: '4px',
+                                                  color: '#666',
+                                                  fontWeight: 'normal',
+                                                }}
+                                              >
+                                                {
+                                                  currentMethod.intermediate_data.fields.find(
+                                                    f => f.name === name
+                                                  ).unit
+                                                }
+                                              </span>
+                                            )}
                                           </span>
                                         </div>
-                                      ))}
-                                    </>
-                                  )}
+                                      )
+                                    )}
+                                  </>
+                                )}
                               </div>
-                            )}
+                            ))}
                           </div>
 
                           <div

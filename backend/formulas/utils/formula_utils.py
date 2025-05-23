@@ -305,7 +305,7 @@ def evaluate_formula(
 
 def calculate_convergence_steps(formula, variables):
     """
-    Вычисляет шаги расчета сходимости.
+    Вычисляет шаги расчета повторяемости.
     """
     try:
         # Заменяем переменные на их значения
@@ -363,7 +363,7 @@ def calculate_convergence_steps(formula, variables):
 
         return None
     except Exception as e:
-        logger.error(f"Ошибка при вычислении шагов сходимости: {str(e)}")
+        logger.error(f"Ошибка при вычислении шагов повторяемости: {str(e)}")
         return None
 
 

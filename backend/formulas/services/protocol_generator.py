@@ -85,16 +85,20 @@ def generate_protocol_excel(request):
         workbook = load_workbook(BytesIO(template_bytes))
         worksheet = workbook.active
 
-        # Заполняем данные протокола
+        # Получаем всех исполнителей из расчетов
+        executors = list(set([calc.executor for calc in calculations if calc.executor]))
+        executors_str = ", ".join(executors)
+
+        # Подготавливаем данные для замены в шаблоне
         replacements = {
-            "{test_protocol_number}": protocol.test_protocol_number,
-            "{res_object}": protocol.test_object,
-            "{lab_location}": protocol.laboratory_location or "",
-            "{subd}": protocol.protocol_details.branch,
-            "{sampling_location}": protocol.protocol_details.sampling_location_detail,
-            "{tel}": protocol.protocol_details.phone,
-            "{sampling_act_number}": protocol.sampling_act_number,
-            "{registration_number}": protocol.registration_number,
+            "{test_protocol_number}": protocol.test_protocol_number or "",
+            "{test_object}": protocol.test_object or "",
+            "{laboratory_location}": protocol.laboratory_location or "",
+            "{branch}": protocol.branch or "",
+            "{sampling_location_detail}": protocol.sampling_location_detail or "",
+            "{phone}": protocol.phone or "",
+            "{sampling_act_number}": protocol.sampling_act_number or "",
+            "{registration_number}": protocol.registration_number or "",
             "{sampling_date}": (
                 protocol.sampling_date.strftime("%d.%m.%Y")
                 if protocol.sampling_date
@@ -105,8 +109,13 @@ def generate_protocol_excel(request):
                 if protocol.receiving_date
                 else ""
             ),
+            "{executor}": executors_str,
+            "{lab_location}": protocol.laboratory_location or "",
+            "{subd}": protocol.branch,
+            "{sampling_location}": protocol.sampling_location_detail,
+            "{tel}": protocol.phone,
+            "{res_object}": protocol.test_object,
             "{laboratory_activity_dates}": laboratory_activity_dates,
-            "{executor}": protocol.executor,
         }
 
         # Заменяем метки в файле
@@ -492,9 +501,13 @@ def generate_protocol_excel(request):
                             elif "{measurement_error}" in cell.value:
                                 error_value = calc.measurement_error
                                 formatted_error = (
-                                    f"±{error_value}"
-                                    if error_value and error_value != "не указано"
-                                    else "не указано"
+                                    error_value
+                                    if error_value and error_value.startswith("-")
+                                    else (
+                                        f"±{error_value}"
+                                        if error_value and error_value != "не указано"
+                                        else "не указано"
+                                    )
                                 )
                                 cell.value = cell.value.replace(
                                     "{measurement_error}",
@@ -697,9 +710,14 @@ def generate_protocol_excel(request):
                                 elif "{measurement_error}" in cell.value:
                                     error_value = calc.measurement_error
                                     formatted_error = (
-                                        f"±{error_value}"
-                                        if error_value and error_value != "не указано"
-                                        else "не указано"
+                                        error_value
+                                        if error_value and error_value.startswith("-")
+                                        else (
+                                            f"±{error_value}"
+                                            if error_value
+                                            and error_value != "не указано"
+                                            else "не указано"
+                                        )
                                     )
                                     cell.value = cell.value.replace(
                                         "{measurement_error}",
@@ -761,9 +779,13 @@ def generate_protocol_excel(request):
                             # Форматируем погрешность с добавлением ±
                             error_value = calc.measurement_error
                             formatted_error = (
-                                f"±{error_value}"
-                                if error_value and error_value != "не указано"
-                                else "не указано"
+                                error_value
+                                if error_value and error_value.startswith("-")
+                                else (
+                                    f"±{error_value}"
+                                    if error_value and error_value != "не указано"
+                                    else "не указано"
+                                )
                             )
 
                             value = (

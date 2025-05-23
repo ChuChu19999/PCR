@@ -1,5 +1,6 @@
 {
     "name": "Нефть",
+    "sample_type": "oil",
     "formula": "Mср",
     "measurement_error": {
         "type": "formula",

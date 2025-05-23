@@ -1,5 +1,6 @@
 {
 	"name": "Массовая концентрация хлористых солей",
+	"sample_type": "any",
 	"formula": "1*Xср",
     "measurement_error": {
         "type": "formula",
