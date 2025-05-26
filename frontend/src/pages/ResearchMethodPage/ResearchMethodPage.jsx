@@ -95,12 +95,29 @@ const ResearchMethodPage = () => {
   const [lockedMethods, setLockedMethods] = useState({});
   const [laboratoryActivityDate, setLaboratoryActivityDate] = useState(null);
   const [dateError, setDateError] = useState('');
+  const [protocolData, setProtocolData] = useState(null);
   const inputRefs = React.useRef({});
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
     try {
+      // Получаем данные протокола
+      const fetchProtocolData = async () => {
+        try {
+          const response = await axios.get(
+            `${import.meta.env.VITE_API_URL}/api/protocols/${protocolId}/`
+          );
+          setProtocolData(response.data);
+        } catch (error) {
+          console.error('Ошибка при загрузке данных протокола:', error);
+        }
+      };
+
+      if (protocolId) {
+        fetchProtocolData();
+      }
+
       // Получаем данные из sessionStorage
       const methodsData = sessionStorage.getItem('available_methods');
       if (methodsData) {
@@ -297,6 +314,8 @@ const ResearchMethodPage = () => {
         if (inputRefs.current[nextFieldName]) {
           inputRefs.current[nextFieldName].focus();
         }
+      } else if (e.key === 'Tab') {
+        e.preventDefault(); // Просто блокируем стандартное поведение Tab
       }
     };
 
@@ -307,7 +326,7 @@ const ResearchMethodPage = () => {
           flexDirection: 'row',
           width: 'calc(100% + 20px)',
           gap: '16px',
-          justifyContent: 'center',
+          justifyContent: 'left',
           flexWrap: 'wrap',
         }}
       >
@@ -517,7 +536,13 @@ const ResearchMethodPage = () => {
   if (isLoading) {
     return (
       <ResearchMethodPageWrapper>
-        <Layout title="Загрузка...">
+        <Layout
+          title={
+            protocolData
+              ? `Акт отбора № ${protocolData.test_protocol_number || protocolData.registration_number}`
+              : 'Загрузка...'
+          }
+        >
           <div style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}>
             <LoadingCard />
           </div>
@@ -541,7 +566,13 @@ const ResearchMethodPage = () => {
 
   return (
     <ResearchMethodPageWrapper>
-      <Layout title="Доступные методы исследования">
+      <Layout
+        title={
+          protocolData
+            ? `Акт отбора № ${protocolData.test_protocol_number || protocolData.registration_number}`
+            : 'Загрузка...'
+        }
+      >
         <Form
           form={form}
           onFinish={onFinish}
@@ -744,6 +775,8 @@ const ResearchMethodPage = () => {
                 padding: '16px',
                 overflowY: 'auto',
                 position: 'relative',
+                width: '100%',
+                maxWidth: '100%',
                 height: 'calc(100% - 10px)',
               }}
             >
@@ -752,8 +785,8 @@ const ResearchMethodPage = () => {
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    alignItems: 'left',
+                    justifyContent: 'left',
                     height: '100%',
                     color: '#4a5568',
                     textAlign: 'center',
@@ -852,7 +885,7 @@ const ResearchMethodPage = () => {
                               color: '#2c5282',
                               fontSize: '20px',
                               fontWeight: 600,
-                              textAlign: 'center',
+                              textAlign: 'left',
                               marginBottom: '20px',
                               fontFamily: 'HeliosCondC',
                             }}
@@ -864,8 +897,8 @@ const ResearchMethodPage = () => {
                             <div
                               style={{
                                 display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
+                                alignItems: 'left',
+                                justifyContent: 'left',
                                 marginBottom: '12px',
                                 gap: '8px',
                               }}
@@ -906,7 +939,7 @@ const ResearchMethodPage = () => {
                               width: 'calc(100% + 20px)',
                               gap: '16px',
                               marginBottom: '10px',
-                              justifyContent: 'center',
+                              justifyContent: 'left',
                               flexWrap: 'wrap',
                             }}
                           >
@@ -991,7 +1024,7 @@ const ResearchMethodPage = () => {
                                           {/* Исходная формула */}
                                           <div
                                             style={{
-                                              fontFamily: 'monospace',
+                                              fontFamily: 'HeliosCondC',
                                               marginBottom: '12px',
                                               fontSize: '14px',
                                               color: '#1a365d',
@@ -1130,7 +1163,7 @@ const ResearchMethodPage = () => {
                           <div
                             style={{
                               display: 'flex',
-                              justifyContent: 'center',
+                              justifyContent: 'left',
                               width: '100%',
                               gap: '16px',
                             }}

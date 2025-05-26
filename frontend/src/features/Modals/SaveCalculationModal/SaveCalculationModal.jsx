@@ -437,7 +437,7 @@ const SaveCalculationModal = ({
 
         {useExistingProtocol ? (
           <div className="form-group">
-            <label>Регистрационный номер протокола</label>
+            <label>Регистрационный номер пробы</label>
             <div className="protocol-search-container">
               <Input
                 value={searchValue}

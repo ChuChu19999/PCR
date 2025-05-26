@@ -508,8 +508,8 @@ const OilProductsPage = () => {
     );
   };
 
-  const handleKeyDown = (e, currentFieldIndex, cardFields) => {
-    // Сначала проверяем Enter для сохранения существующей функциональности
+  const handleKeyDown = (e, currentFieldIndex, cardFields, methodId) => {
+    // Добавляем навигацию по Enter
     if (e.key === 'Enter') {
       e.preventDefault();
       const nextFieldIndex = (currentFieldIndex + 1) % cardFields.length;
@@ -521,11 +521,16 @@ const OilProductsPage = () => {
       return;
     }
 
-    // Разрешаем: backspace, delete, tab, escape, запятая, минус
+    // Отключаем Tab
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      return;
+    }
+
+    // Разрешаем: backspace, delete, escape, запятая, минус
     if (
       e.key === 'Backspace' ||
       e.key === 'Delete' ||
-      e.key === 'Tab' ||
       e.key === 'Escape' ||
       e.key === ',' ||
       e.key === '-' ||
@@ -624,7 +629,7 @@ const OilProductsPage = () => {
                                 [formFieldName]: value,
                               }));
                             }}
-                            onKeyDown={e => handleKeyDown(e, fieldIndex, cardFields)}
+                            onKeyDown={e => handleKeyDown(e, fieldIndex, cardFields, methodId)}
                             onPaste={e => {
                               e.preventDefault();
                               const pastedText = e.clipboardData.getData('text');
@@ -1512,13 +1517,6 @@ const OilProductsPage = () => {
                         </div>
                       </div>
                     </div>
-                    <Button
-                      type="primary"
-                      onClick={handleOpenGenerateProtocolModal}
-                      style={{ fontFamily: 'HeliosCondC' }}
-                    >
-                      Сформировать протокол
-                    </Button>
                   </div>
 
                   {researchMethods

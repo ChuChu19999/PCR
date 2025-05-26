@@ -23,6 +23,114 @@ from ..utils.formula_utils import (
 logger = logging.getLogger(__name__)
 
 
+def round_value(
+    value,
+    rounding_type=None,
+    rounding_decimal=None,
+    threshold_table_values=None,
+    variables=None,
+):
+    try:
+        if value is None:
+            return value
+
+        # Преобразуем value в число, если оно передано как строка
+        if isinstance(value, str):
+            value = float(value.replace(",", "."))
+        else:
+            value = float(value)
+
+        if rounding_type == "threshold_table":
+            logger.info(f"Начало табличного округления. Входные параметры:")
+            logger.info(f"value: {value}")
+            logger.info(f"threshold_table_values: {threshold_table_values}")
+            logger.info(f"variables: {variables}")
+
+            if (
+                not threshold_table_values
+                or not isinstance(threshold_table_values, dict)
+                or not variables
+            ):
+                logger.error(
+                    "Отсутствуют необходимые параметры для табличного округления"
+                )
+                return value
+
+            target_variable = threshold_table_values.get("target_variable")
+            higher_variable = threshold_table_values.get("higher_variable")
+            lower_variable = threshold_table_values.get("lower_variable")
+            formula = threshold_table_values.get("formula")
+
+            logger.info(f"Полученные переменные:")
+            logger.info(f"target_variable: {target_variable}")
+            logger.info(f"higher_variable: {higher_variable}")
+            logger.info(f"lower_variable: {lower_variable}")
+            logger.info(f"formula: {formula}")
+
+            if not all([target_variable, higher_variable, lower_variable, formula]):
+                logger.error("Не все необходимые переменные определены")
+                return value
+
+            # Получаем значения из variables
+            try:
+                target_value = float(
+                    str(variables.get(target_variable, "0")).replace(",", ".")
+                )
+                formula_value = float(
+                    str(variables.get(formula, "0")).replace(",", ".")
+                )
+                higher_value = float(
+                    str(variables.get(higher_variable, "0")).replace(",", ".")
+                )
+                lower_value = float(
+                    str(variables.get(lower_variable, "0")).replace(",", ".")
+                )
+
+                logger.info(f"Значения для сравнения:")
+                logger.info(f"{target_variable}: {target_value}")
+                logger.info(f"{formula}: {formula_value}")
+                logger.info(f"{higher_variable}: {higher_value}")
+                logger.info(f"{lower_variable}: {lower_value}")
+
+            except (ValueError, TypeError) as e:
+                logger.error(f"Ошибка преобразования значений: {str(e)}")
+                logger.error(f"target={variables.get(target_variable)}")
+                logger.error(f"formula={variables.get(formula)}")
+                logger.error(f"higher={variables.get(higher_variable)}")
+                logger.error(f"lower={variables.get(lower_variable)}")
+                return value
+
+            # Сравнение и выбор значения
+            if formula_value < target_value:
+                logger.info(
+                    f"formula_value ({formula_value}) < target_value ({target_value})"
+                )
+                logger.info(f"Выбрано верхнее значение: {higher_value}")
+                return higher_value
+            else:
+                logger.info(
+                    f"formula_value ({formula_value}) >= target_value ({target_value})"
+                )
+                logger.info(f"Выбрано нижнее значение: {lower_value}")
+                return lower_value
+
+        elif rounding_type == "multiple":
+            if not rounding_decimal:
+                return value
+            return round(value / rounding_decimal) * rounding_decimal
+
+        elif rounding_type == "decimal":
+            if rounding_decimal is None:
+                return value
+            return round(value, rounding_decimal)
+
+        return value
+
+    except (ValueError, TypeError) as e:
+        logger.error(f"Ошибка в round_value: {str(e)}")
+        return value
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def calculate_result(request):
@@ -86,25 +194,61 @@ def calculate_result(request):
                     f"Вычисление промежуточного результата: {field['name']}, формула: {field['formula']}"
                 )
 
-                # Подготавливаем параметры округления
-                rounding_params = None
-                if field.get("use_multiple_rounding"):
-                    rounding_params = {
-                        "use_multiple_rounding": True,
-                        "rounding_type": field.get("rounding_type"),
-                        "rounding_decimal": field.get("rounding_decimal"),
-                        "multiple_value": field.get("multiple_value"),
-                    }
+                # Если используется метод ближайших табличных значений
+                if field.get("use_threshold_table"):
+                    # Находим поле с формулой для target_variable
+                    target_field = next(
+                        (
+                            f
+                            for f in research_method["intermediate_data"]["fields"]
+                            if f["name"]
+                            == field["threshold_table_values"]["target_variable"]
+                        ),
+                        None,
+                    )
 
-                # Проверяем наличие диапазонного расчета
-                range_calculation = field.get("range_calculation")
+                    if target_field:
+                        formula = target_field["formula"]
+                    else:
+                        formula = field["formula"]
 
-                intermediate_value = evaluate_formula(
-                    field["formula"],
-                    variables,
-                    range_calculation=range_calculation,
-                    rounding_params=rounding_params,
-                )
+                    intermediate_value = round_value(
+                        value=0,
+                        rounding_type="threshold_table",
+                        threshold_table_values={
+                            "target_variable": field["threshold_table_values"][
+                                "target_variable"
+                            ],
+                            "higher_variable": field["threshold_table_values"][
+                                "higher_variable"
+                            ],
+                            "lower_variable": field["threshold_table_values"][
+                                "lower_variable"
+                            ],
+                            "formula": formula,
+                        },
+                        variables=variables,
+                    )
+                else:
+                    # Подготавливаем параметры округления
+                    rounding_params = None
+                    if field.get("use_multiple_rounding"):
+                        rounding_params = {
+                            "use_multiple_rounding": True,
+                            "rounding_type": field.get("rounding_type"),
+                            "rounding_decimal": field.get("rounding_decimal"),
+                            "multiple_value": field.get("multiple_value"),
+                        }
+
+                    # Проверяем наличие диапазонного расчета
+                    range_calculation = field.get("range_calculation")
+
+                    intermediate_value = evaluate_formula(
+                        field["formula"],
+                        variables,
+                        range_calculation=range_calculation,
+                        rounding_params=rounding_params,
+                    )
 
                 logger.info(
                     f"Промежуточный результат {field['name']} = {intermediate_value}"

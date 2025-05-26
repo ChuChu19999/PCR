@@ -492,6 +492,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                 <Input
                   value={formData.branch}
                   onChange={handleInputChange('branch')}
+                  placeholder="Введите название филиала"
                   style={{ width: '100%' }}
                 />
               </div>
@@ -501,6 +502,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                 <Input
                   value={formData.sampling_location_detail}
                   onChange={handleInputChange('sampling_location_detail')}
+                  placeholder="Введите место отбора пробы"
                   style={{ width: '100%' }}
                 />
               </div>
@@ -510,6 +512,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                 <Input
                   value={formData.phone}
                   onChange={handleInputChange('phone')}
+                  placeholder="Введите контактный телефон"
                   style={{ width: '100%' }}
                 />
               </div>
@@ -519,6 +522,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                 <Input
                   value={formData.laboratory_location}
                   onChange={handleInputChange('laboratory_location')}
+                  placeholder="Введите место осуществления лабораторной деятельности"
                   style={{ width: '100%' }}
                 />
               </div>

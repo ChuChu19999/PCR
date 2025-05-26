@@ -43,12 +43,6 @@
                 "description": "Табличная плотность при tнаиб для первой параллели"
             },
             {
-                "name": "ρтабл₁",
-                "unit": "кг/м³",
-                "card_index": 1,
-                "description": "Табличная плотность первой параллели"
-            },
-            {
                 "name": "t₂₁",
                 "unit": "℃",
                 "card_index": 2,
@@ -77,12 +71,6 @@
                 "unit": "кг/м³",
                 "card_index": 2,
                 "description": "Табличная плотность при tнаиб для второй параллели"
-            },
-            {
-                "name": "ρтабл₂",
-                "unit": "кг/м³",
-                "card_index": 2,
-                "description": "Табличная плотность второй параллели"
             }
         ]
     },
@@ -127,6 +115,7 @@
                 "rounding_decimal": 10,
                 "show_calculation": true,
                 "range_calculation": null,
+                "use_threshold_table": false,
                 "use_multiple_rounding": true
             },
             {
@@ -140,6 +129,23 @@
                 "show_calculation": true,
                 "range_calculation": null,
                 "use_multiple_rounding": true
+            },
+            {
+                "name": "ρтабл₁",
+                "unit": "кг/м³",
+                "formula": "0",
+                "description": "Табличное значение плотности для первой параллели",
+                "rounding_type": "threshold_table",
+                "multiple_value": "",
+                "show_calculation": true,
+                "range_calculation": null,
+                "use_threshold_table": true,
+                "use_multiple_rounding": false,
+                "threshold_table_values": {
+                    "lower_variable": "ρтабл_при_tнаим₁",
+                    "higher_variable": "ρтабл_при_tнаиб₁",
+                    "target_variable": "tокруг₁"
+                }
             },
             {
                 "name": "α₁",
@@ -215,15 +221,32 @@
             },
             {
                 "name": "tокруг₂",
-                "unit": "кг/м³",
+                "unit": "℃",
                 "formula": "tср₂",
                 "description": "Округленная температура для второй параллели",
                 "rounding_type": "multiple",
                 "multiple_value": "1",
-                "rounding_decimal": 10,
+                "rounding_decimal": 1,
                 "show_calculation": true,
                 "range_calculation": null,
                 "use_multiple_rounding": true
+            },
+            {
+                "name": "ρтабл₂",
+                "unit": "кг/м³",
+                "formula": "0",
+                "description": "Табличное значение плотности для второй параллели",
+                "rounding_type": "threshold_table",
+                "multiple_value": "",
+                "show_calculation": true,
+                "range_calculation": null,
+                "use_threshold_table": true,
+                "use_multiple_rounding": false,
+                "threshold_table_values": {
+                    "lower_variable": "ρтабл_при_tнаим₂",
+                    "higher_variable": "ρтабл_при_tнаиб₂",
+                    "target_variable": "tокруг₂"
+                }
             },
             {
                 "name": "α₂",
@@ -280,7 +303,6 @@
         ]
     },
     "is_deleted": false,
-    "deleted_at": null,
     "rounding_type": "decimal",
     "rounding_decimal": 1,
     "is_active": true,

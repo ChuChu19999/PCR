@@ -433,16 +433,22 @@ class Protocol(BaseModel):
         max_length=20,
         verbose_name="Филиал",
         help_text="Филиал",
+        null=True,
+        blank=True,
     )
     sampling_location_detail = models.CharField(
         max_length=255,
         verbose_name="Место отбора пробы",
         help_text="Место отбора пробы",
+        null=True,
+        blank=True,
     )
     phone = models.CharField(
         max_length=20,
         verbose_name="Телефон",
         help_text="Телефон",
+        null=True,
+        blank=True,
     )
     sampling_act_number = models.CharField(
         max_length=50,

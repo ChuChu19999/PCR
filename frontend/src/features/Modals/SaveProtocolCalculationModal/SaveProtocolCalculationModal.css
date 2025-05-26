@@ -28,3 +28,11 @@
   z-index: 10;
   font-size: 14px;
 }
+
+.save-protocol-calculation-form .ant-form-item-label > label {
+  font-family: 'HeliosCondC';
+}
+
+.save-protocol-calculation-form .ant-input {
+  font-family: 'HeliosCondC';
+}

@@ -80,7 +80,7 @@ const GenerateProtocolModal = ({ isOpen, onClose, laboratoryId, departmentId }) 
 
   const handleGenerateProtocol = async () => {
     if (!selectedProtocol) {
-      message.warning('Выберите регистрационный номер протокола');
+      message.warning('Выберите регистрационный номер пробы');
       return;
     }
 

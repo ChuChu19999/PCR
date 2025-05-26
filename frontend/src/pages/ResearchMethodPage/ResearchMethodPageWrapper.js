@@ -26,11 +26,12 @@ const ResearchMethodPageWrapper = styled.div`
 
   .calculation-form {
     max-width: 600px;
-    margin: 0 auto;
+    margin: 0;
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
     padding: 0 12px;
+    padding-left: 0;
 
     .ant-form-item-label {
       padding: 0;

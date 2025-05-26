@@ -159,8 +159,6 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
     const requiredFields = [
       'sampling_act_number',
       'registration_number',
-      'branch',
-      'sampling_location_detail',
       'test_object',
       'excel_template',
       'laboratory',
@@ -178,11 +176,7 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
 
   const handleSave = async () => {
     try {
-      if (!validateForm()) {
-        return;
-      }
-
-      setLoading(true);
+      console.log('Текущее состояние формы:', formData);
 
       const protocolData = {
         test_protocol_number: formData.test_protocol_number,
@@ -200,8 +194,14 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
         phone: formData.phone || '',
       };
 
-      console.log('Отправляемые данные:', protocolData);
-      console.log('Исходный formData:', formData);
+      console.log('Данные для отправки на сервер:', protocolData);
+
+      if (!validateForm()) {
+        console.log('Ошибки валидации:', errors);
+        return;
+      }
+
+      setLoading(true);
 
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/protocols/`,
@@ -212,8 +212,28 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
       onSuccess();
     } catch (error) {
       console.error('Ошибка при создании протокола:', error);
-      if (error.response?.data?.error) {
-        message.error(error.response.data.error);
+
+      // Обработка ошибок валидации с сервера
+      if (error.response?.data) {
+        const serverErrors = error.response.data;
+        const newErrors = {};
+
+        // Обрабатываем ошибки для каждого поля
+        Object.keys(serverErrors).forEach(field => {
+          if (Array.isArray(serverErrors[field])) {
+            newErrors[field] = serverErrors[field][0];
+          } else {
+            newErrors[field] = serverErrors[field];
+          }
+        });
+
+        // Устанавливаем ошибки в состояние формы
+        setErrors(prev => ({ ...prev, ...newErrors }));
+
+        // Если есть конкретная ошибка для поля, не показываем общее сообщение
+        if (Object.keys(newErrors).length === 0 && error.response?.data?.error) {
+          message.error(error.response.data.error);
+        }
       } else {
         message.error('Произошла ошибка при создании протокола');
       }
@@ -282,6 +302,7 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
           <Input
             value={formData.branch}
             onChange={handleInputChange('branch')}
+            placeholder="Введите название филиала"
             style={{ width: '100%' }}
           />
         </div>
@@ -291,6 +312,7 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
           <Input
             value={formData.sampling_location_detail}
             onChange={handleInputChange('sampling_location_detail')}
+            placeholder="Введите место отбора пробы"
             style={{ width: '100%' }}
           />
         </div>
@@ -300,6 +322,7 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
           <Input
             value={formData.phone}
             onChange={handleInputChange('phone')}
+            placeholder="Введите контактный телефон"
             style={{ width: '100%' }}
           />
         </div>
@@ -309,6 +332,7 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
           <Input
             value={formData.laboratory_location}
             onChange={handleInputChange('laboratory_location')}
+            placeholder="Введите место осуществления лабораторной деятельности"
             style={{ width: '100%' }}
           />
         </div>

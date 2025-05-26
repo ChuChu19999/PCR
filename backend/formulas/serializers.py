@@ -248,11 +248,13 @@ class ResearchMethodSerializer(BaseModelSerializer):
                     "decimal",
                     "significant",
                     "multiple",
+                    "threshold_table",
                     None,
                 ]:
                     raise serializers.ValidationError(
                         "Неверный тип округления для промежуточного значения"
                     )
+
                 if field["rounding_type"] == "multiple" and (
                     "rounding_decimal" not in field
                     or not isinstance(field["rounding_decimal"], (int, float))
@@ -261,6 +263,32 @@ class ResearchMethodSerializer(BaseModelSerializer):
                     raise serializers.ValidationError(
                         "Для округления до кратного необходимо указать положительное число"
                     )
+
+                if field["rounding_type"] == "threshold_table":
+                    if "threshold_table_values" not in field:
+                        raise serializers.ValidationError(
+                            "Для метода ближайших табличных значений необходимо указать threshold_table_values"
+                        )
+                    threshold_values = field["threshold_table_values"]
+                    required_threshold_keys = {
+                        "target_variable",
+                        "higher_variable",
+                        "lower_variable",
+                    }
+                    if not all(
+                        key in threshold_values for key in required_threshold_keys
+                    ):
+                        raise serializers.ValidationError(
+                            f"threshold_table_values должен содержать следующие ключи: {required_threshold_keys}"
+                        )
+                    for key in required_threshold_keys:
+                        if (
+                            not isinstance(threshold_values[key], str)
+                            or not threshold_values[key].strip()
+                        ):
+                            raise serializers.ValidationError(
+                                f"Поле {key} в threshold_table_values должно быть непустой строкой"
+                            )
 
             # Валидация диапазонного расчета
             if "range_calculation" in field and field["range_calculation"] is not None:

@@ -84,6 +84,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
     intermediate: useRef([]),
     error: useRef(null),
     range: useRef([]),
+    threshold: useRef({}),
   };
 
   const [isLoading, setIsLoading] = useState(false);
@@ -830,10 +831,25 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
           intermediate_data: {
             fields: formData.intermediate_data.fields.map(field => ({
               ...field,
-              formula: field.range_calculation ? '0' : field.formula,
-              rounding_type: field.use_multiple_rounding ? 'multiple' : undefined,
+              formula: field.use_threshold_table
+                ? '0' // Для метода ближайших табличных значений формула не нужна
+                : field.range_calculation
+                  ? '0'
+                  : field.formula,
+              rounding_type: field.use_multiple_rounding
+                ? 'multiple'
+                : field.use_threshold_table
+                  ? 'threshold_table'
+                  : undefined,
               rounding_decimal: field.use_multiple_rounding
                 ? parseInt(field.multiple_value)
+                : undefined,
+              threshold_table_values: field.use_threshold_table
+                ? {
+                    target_variable: field.threshold_table_values.target_variable,
+                    higher_variable: field.threshold_table_values.higher_variable,
+                    lower_variable: field.threshold_table_values.lower_variable,
+                  }
                 : undefined,
             })),
           },
@@ -1247,6 +1263,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
                                     ranges: [{ condition: '', formula: '' }],
                                   });
                                   handleIntermediateDataChange(index, 'formula', '');
+                                  handleIntermediateDataChange(index, 'use_threshold_table', false);
                                 } else {
                                   handleIntermediateDataChange(index, 'range_calculation', null);
                                 }
@@ -1256,7 +1273,7 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
                           </label>
                         </div>
 
-                        {!field.range_calculation && (
+                        {!field.range_calculation && !field.use_threshold_table && (
                           <div className="form-group">
                             <label>Формула</label>
                             {renderFormulaInput(
@@ -1453,6 +1470,345 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
                               min="0"
                               style={{ width: '100%' }}
                             />
+                          </div>
+                        )}
+                      </div>
+                      <div className="form-group">
+                        <label className="checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={field.use_threshold_table || false}
+                            onChange={e => {
+                              handleIntermediateDataChange(
+                                index,
+                                'use_threshold_table',
+                                e.target.checked
+                              );
+                              if (e.target.checked) {
+                                // При включении метода ближайших табличных значений
+                                handleIntermediateDataChange(index, 'formula', ''); // Очищаем формулу
+                                handleIntermediateDataChange(index, 'range_calculation', null); // Отключаем диапазонный расчет
+                                handleIntermediateDataChange(index, 'threshold_table_values', {
+                                  target_variable: '',
+                                  higher_variable: '',
+                                  lower_variable: '',
+                                });
+                              }
+                            }}
+                          />
+                          <span>Использовать метод ближайших табличных значений</span>
+                        </label>
+                        {field.use_threshold_table && (
+                          <div style={{ marginTop: '8px' }}>
+                            <div className="form-group">
+                              <label>Переменная для определения направления округления</label>
+                              <div className="formula-input-container">
+                                <input
+                                  type="text"
+                                  value={field.threshold_table_values?.target_variable || ''}
+                                  onChange={e =>
+                                    handleIntermediateDataChange(index, 'threshold_table_values', {
+                                      ...field.threshold_table_values,
+                                      target_variable: e.target.value,
+                                    })
+                                  }
+                                  onFocus={() => setActiveFormulaField(`threshold-target-${index}`)}
+                                  onKeyDown={e => {
+                                    if (
+                                      e.key === 'Backspace' ||
+                                      e.key === 'Delete' ||
+                                      e.key === 'ArrowLeft' ||
+                                      e.key === 'ArrowRight' ||
+                                      ((e.ctrlKey || e.metaKey) &&
+                                        ['c', 'v', 'a', 'x'].includes(e.key.toLowerCase()))
+                                    ) {
+                                      return;
+                                    }
+                                    e.preventDefault();
+                                  }}
+                                  ref={el => {
+                                    if (!formulaRefs.threshold) formulaRefs.threshold = {};
+                                    if (!formulaRefs.threshold[index])
+                                      formulaRefs.threshold[index] = {};
+                                    formulaRefs.threshold[index].target = el;
+                                  }}
+                                  placeholder="Введите название переменной (например: p)"
+                                  style={{ width: '100%' }}
+                                />
+                                {activeFormulaField === `threshold-target-${index}` && (
+                                  <FormulaKeyboard
+                                    onKeyPress={value => {
+                                      const input = formulaRefs.threshold[index].target;
+                                      if (!input) return;
+
+                                      const start = input.selectionStart;
+                                      const end = input.selectionEnd;
+
+                                      if (value === 'backspace') {
+                                        if (start !== end) {
+                                          const newValue =
+                                            input.value.substring(0, start) +
+                                            input.value.substring(end);
+                                          handleIntermediateDataChange(
+                                            index,
+                                            'threshold_table_values',
+                                            {
+                                              ...field.threshold_table_values,
+                                              target_variable: newValue,
+                                            }
+                                          );
+                                          setTimeout(() => {
+                                            input.selectionStart = input.selectionEnd = start;
+                                            input.focus();
+                                          }, 0);
+                                        } else if (start > 0) {
+                                          const newValue =
+                                            input.value.substring(0, start - 1) +
+                                            input.value.substring(end);
+                                          handleIntermediateDataChange(
+                                            index,
+                                            'threshold_table_values',
+                                            {
+                                              ...field.threshold_table_values,
+                                              target_variable: newValue,
+                                            }
+                                          );
+                                          setTimeout(() => {
+                                            input.selectionStart = input.selectionEnd = start - 1;
+                                            input.focus();
+                                          }, 0);
+                                        }
+                                      } else {
+                                        const newValue =
+                                          input.value.substring(0, start) +
+                                          value +
+                                          input.value.substring(end);
+                                        handleIntermediateDataChange(
+                                          index,
+                                          'threshold_table_values',
+                                          {
+                                            ...field.threshold_table_values,
+                                            target_variable: newValue,
+                                          }
+                                        );
+                                        setTimeout(() => {
+                                          input.selectionStart = input.selectionEnd =
+                                            start + value.length;
+                                          input.focus();
+                                        }, 0);
+                                      }
+                                    }}
+                                    variables={getAvailableVariables('intermediate', index)}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                            <div className="form-group">
+                              <label>Переменная для значения при округлении вверх</label>
+                              <div className="formula-input-container">
+                                <input
+                                  type="text"
+                                  value={field.threshold_table_values?.higher_variable || ''}
+                                  onChange={e =>
+                                    handleIntermediateDataChange(index, 'threshold_table_values', {
+                                      ...field.threshold_table_values,
+                                      higher_variable: e.target.value,
+                                    })
+                                  }
+                                  onFocus={() => setActiveFormulaField(`threshold-higher-${index}`)}
+                                  onKeyDown={e => {
+                                    if (
+                                      e.key === 'Backspace' ||
+                                      e.key === 'Delete' ||
+                                      e.key === 'ArrowLeft' ||
+                                      e.key === 'ArrowRight' ||
+                                      ((e.ctrlKey || e.metaKey) &&
+                                        ['c', 'v', 'a', 'x'].includes(e.key.toLowerCase()))
+                                    ) {
+                                      return;
+                                    }
+                                    e.preventDefault();
+                                  }}
+                                  ref={el => {
+                                    if (!formulaRefs.threshold) formulaRefs.threshold = {};
+                                    if (!formulaRefs.threshold[index])
+                                      formulaRefs.threshold[index] = {};
+                                    formulaRefs.threshold[index].higher = el;
+                                  }}
+                                  placeholder="Введите название переменной (например: pтабл_при_tнаиб)"
+                                  style={{ width: '100%' }}
+                                />
+                                {activeFormulaField === `threshold-higher-${index}` && (
+                                  <FormulaKeyboard
+                                    onKeyPress={value => {
+                                      const input = formulaRefs.threshold[index].higher;
+                                      if (!input) return;
+
+                                      const start = input.selectionStart;
+                                      const end = input.selectionEnd;
+
+                                      if (value === 'backspace') {
+                                        if (start !== end) {
+                                          const newValue =
+                                            input.value.substring(0, start) +
+                                            input.value.substring(end);
+                                          handleIntermediateDataChange(
+                                            index,
+                                            'threshold_table_values',
+                                            {
+                                              ...field.threshold_table_values,
+                                              higher_variable: newValue,
+                                            }
+                                          );
+                                          setTimeout(() => {
+                                            input.selectionStart = input.selectionEnd = start;
+                                            input.focus();
+                                          }, 0);
+                                        } else if (start > 0) {
+                                          const newValue =
+                                            input.value.substring(0, start - 1) +
+                                            input.value.substring(end);
+                                          handleIntermediateDataChange(
+                                            index,
+                                            'threshold_table_values',
+                                            {
+                                              ...field.threshold_table_values,
+                                              higher_variable: newValue,
+                                            }
+                                          );
+                                          setTimeout(() => {
+                                            input.selectionStart = input.selectionEnd = start - 1;
+                                            input.focus();
+                                          }, 0);
+                                        }
+                                      } else {
+                                        const newValue =
+                                          input.value.substring(0, start) +
+                                          value +
+                                          input.value.substring(end);
+                                        handleIntermediateDataChange(
+                                          index,
+                                          'threshold_table_values',
+                                          {
+                                            ...field.threshold_table_values,
+                                            higher_variable: newValue,
+                                          }
+                                        );
+                                        setTimeout(() => {
+                                          input.selectionStart = input.selectionEnd =
+                                            start + value.length;
+                                          input.focus();
+                                        }, 0);
+                                      }
+                                    }}
+                                    variables={getAvailableVariables('intermediate', index)}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                            <div className="form-group">
+                              <label>Переменная для значения при округлении вниз</label>
+                              <div className="formula-input-container">
+                                <input
+                                  type="text"
+                                  value={field.threshold_table_values?.lower_variable || ''}
+                                  onChange={e =>
+                                    handleIntermediateDataChange(index, 'threshold_table_values', {
+                                      ...field.threshold_table_values,
+                                      lower_variable: e.target.value,
+                                    })
+                                  }
+                                  onFocus={() => setActiveFormulaField(`threshold-lower-${index}`)}
+                                  onKeyDown={e => {
+                                    if (
+                                      e.key === 'Backspace' ||
+                                      e.key === 'Delete' ||
+                                      e.key === 'ArrowLeft' ||
+                                      e.key === 'ArrowRight' ||
+                                      ((e.ctrlKey || e.metaKey) &&
+                                        ['c', 'v', 'a', 'x'].includes(e.key.toLowerCase()))
+                                    ) {
+                                      return;
+                                    }
+                                    e.preventDefault();
+                                  }}
+                                  ref={el => {
+                                    if (!formulaRefs.threshold) formulaRefs.threshold = {};
+                                    if (!formulaRefs.threshold[index])
+                                      formulaRefs.threshold[index] = {};
+                                    formulaRefs.threshold[index].lower = el;
+                                  }}
+                                  placeholder="Введите название переменной (например: pтабл_при_tнаим)"
+                                  style={{ width: '100%' }}
+                                />
+                                {activeFormulaField === `threshold-lower-${index}` && (
+                                  <FormulaKeyboard
+                                    onKeyPress={value => {
+                                      const input = formulaRefs.threshold[index].lower;
+                                      if (!input) return;
+
+                                      const start = input.selectionStart;
+                                      const end = input.selectionEnd;
+
+                                      if (value === 'backspace') {
+                                        if (start !== end) {
+                                          const newValue =
+                                            input.value.substring(0, start) +
+                                            input.value.substring(end);
+                                          handleIntermediateDataChange(
+                                            index,
+                                            'threshold_table_values',
+                                            {
+                                              ...field.threshold_table_values,
+                                              lower_variable: newValue,
+                                            }
+                                          );
+                                          setTimeout(() => {
+                                            input.selectionStart = input.selectionEnd = start;
+                                            input.focus();
+                                          }, 0);
+                                        } else if (start > 0) {
+                                          const newValue =
+                                            input.value.substring(0, start - 1) +
+                                            input.value.substring(end);
+                                          handleIntermediateDataChange(
+                                            index,
+                                            'threshold_table_values',
+                                            {
+                                              ...field.threshold_table_values,
+                                              lower_variable: newValue,
+                                            }
+                                          );
+                                          setTimeout(() => {
+                                            input.selectionStart = input.selectionEnd = start - 1;
+                                            input.focus();
+                                          }, 0);
+                                        }
+                                      } else {
+                                        const newValue =
+                                          input.value.substring(0, start) +
+                                          value +
+                                          input.value.substring(end);
+                                        handleIntermediateDataChange(
+                                          index,
+                                          'threshold_table_values',
+                                          {
+                                            ...field.threshold_table_values,
+                                            lower_variable: newValue,
+                                          }
+                                        );
+                                        setTimeout(() => {
+                                          input.selectionStart = input.selectionEnd =
+                                            start + value.length;
+                                          input.focus();
+                                        }, 0);
+                                      }
+                                    }}
+                                    variables={getAvailableVariables('intermediate', index)}
+                                  />
+                                )}
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>

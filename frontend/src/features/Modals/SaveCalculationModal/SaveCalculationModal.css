@@ -135,7 +135,7 @@
 .save-calculation-form {
   padding: 0px;
   padding-bottom: 20px;
-  min-height: 160px;
+  min-height: 230px;
   max-height: calc(90vh - 180px);
   overflow-y: auto;
   padding-right: 15px;

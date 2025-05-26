@@ -207,9 +207,6 @@ const SaveProtocolCalculationModal = ({
           </Form.Item>
         </Form>
 
-        <p className="confirmation-message">
-          Вы уверены, что хотите сохранить результаты в протокол?
-        </p>
         {error && (
           <p className="error-message" style={{ color: '#ff4d4f', marginTop: '8px' }}>
             {error}
