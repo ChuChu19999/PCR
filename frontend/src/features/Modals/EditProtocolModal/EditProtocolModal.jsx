@@ -255,6 +255,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
           inputData: formatInputData(calc.input_data),
           result: formattedResult,
           measurementError: formatMeasurementError(calc.measurement_error),
+          executor: calc.executor || '-',
         };
       });
 
@@ -319,13 +320,13 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       title: 'Метод',
       dataIndex: 'methodName',
       key: 'methodName',
-      width: '25%',
+      width: '20%',
     },
     {
       title: 'Ед. измерения',
       dataIndex: 'unit',
       key: 'unit',
-      width: '15%',
+      width: '10%',
     },
     {
       title: 'Входные данные',
@@ -351,12 +352,18 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       title: 'Результат',
       dataIndex: 'result',
       key: 'result',
-      width: '20%',
+      width: '15%',
     },
     {
       title: 'Погрешность',
       dataIndex: 'measurementError',
       key: 'measurementError',
+      width: '15%',
+    },
+    {
+      title: 'Исполнитель',
+      dataIndex: 'executor',
+      key: 'executor',
       width: '15%',
     },
   ];

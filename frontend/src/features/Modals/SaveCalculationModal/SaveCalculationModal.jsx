@@ -252,23 +252,17 @@ const SaveCalculationModal = ({
     }
 
     if (!useExistingProtocol) {
-      if (!formData.sampling_act_number) {
-        newErrors.sampling_act_number = 'Введите номер акта отбора';
-      }
-      if (!formData.registration_number) {
-        newErrors.registration_number = 'Введите регистрационный номер';
+      if (!formData.excel_template) {
+        newErrors.excel_template = 'Выберите шаблон протокола';
       }
       if (!formData.test_object) {
         newErrors.test_object = 'Введите объект испытаний';
       }
-      if (!formData.excel_template) {
-        newErrors.excel_template = 'Выберите шаблон протокола';
+      if (!formData.registration_number) {
+        newErrors.registration_number = 'Введите регистрационный номер';
       }
-      if (!formData.selectedBranch) {
-        newErrors.branch = 'Выберите филиал';
-      }
-      if (!formData.sampling_location_detail) {
-        newErrors.sampling_location_detail = 'Введите место отбора пробы';
+      if (!formData.sampling_act_number) {
+        newErrors.sampling_act_number = 'Введите номер акта отбора';
       }
     }
 

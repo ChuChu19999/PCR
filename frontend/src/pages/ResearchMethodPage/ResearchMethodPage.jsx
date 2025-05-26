@@ -13,6 +13,7 @@ import locale from 'antd/es/date-picker/locale/ru_RU';
 import ResearchMethodPageWrapper from './ResearchMethodPageWrapper';
 import './ResearchMethodPage.css';
 import SaveProtocolCalculationModal from '../../features/Modals/SaveProtocolCalculationModal/SaveProtocolCalculationModal';
+import ConfirmProtocolModal from '../../features/Modals/ConfirmProtocolModal/ConfirmProtocolModal';
 
 const { Option } = Select;
 
@@ -99,6 +100,7 @@ const ResearchMethodPage = () => {
   const inputRefs = React.useRef({});
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [isConfirmProtocolModalOpen, setIsConfirmProtocolModalOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -382,7 +384,6 @@ const ResearchMethodPage = () => {
                         <Input
                           ref={el => (inputRefs.current[formFieldName] = el)}
                           placeholder={`Введите ${field.name}`}
-                          maxLength={10}
                           style={{ fontSize: '14px', flex: '1' }}
                           value={fieldValue}
                           disabled={lockedMethods[methodId]}
@@ -530,6 +531,50 @@ const ResearchMethodPage = () => {
     } catch (error) {
       console.error('Ошибка при обновлении списка методов:', error);
       message.error('Не удалось обновить список методов');
+    }
+  };
+
+  const handleGenerateProtocol = async () => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/generate-protocol-excel/?registration_number=${protocolData.registration_number}`,
+        {
+          responseType: 'blob',
+        }
+      );
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = 'protocol.xlsx';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        }
+      }
+
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      setIsConfirmProtocolModalOpen(false);
+      setSnackbar({
+        open: true,
+        message: 'Протокол успешно сформирован',
+        severity: 'success',
+      });
+    } catch (error) {
+      console.error('Ошибка при формировании протокола:', error);
+      setSnackbar({
+        open: true,
+        message: 'Не удалось сформировать протокол',
+        severity: 'error',
+      });
     }
   };
 
@@ -864,6 +909,15 @@ const ResearchMethodPage = () => {
                         )}
                       </div>
                     </div>
+                    {protocolData && (
+                      <Button
+                        type="primary"
+                        onClick={() => setIsConfirmProtocolModalOpen(true)}
+                        style={{ fontFamily: 'HeliosCondC' }}
+                      >
+                        Сформировать протокол
+                      </Button>
+                    )}
                   </div>
 
                   {[
@@ -1231,6 +1285,14 @@ const ResearchMethodPage = () => {
             {snackbar.message}
           </Alert>
         </Snackbar>
+
+        {/* Добавляем модальное окно подтверждения */}
+        <ConfirmProtocolModal
+          isOpen={isConfirmProtocolModalOpen}
+          onClose={() => setIsConfirmProtocolModalOpen(false)}
+          protocolNumber={protocolData?.registration_number}
+          onConfirm={handleGenerateProtocol}
+        />
       </Layout>
     </ResearchMethodPageWrapper>
   );

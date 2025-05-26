@@ -509,8 +509,16 @@ const OilProductsPage = () => {
   };
 
   const handleKeyDown = (e, currentFieldIndex, cardFields, methodId) => {
+    // Разрешаем сочетания клавиш с Ctrl
+    if (e.ctrlKey || e.metaKey) {
+      const allowedKeyCodes = ['KeyA', 'KeyC', 'KeyV', 'KeyX'];
+      if (allowedKeyCodes.includes(e.code)) {
+        return;
+      }
+    }
+
     // Добавляем навигацию по Enter
-    if (e.key === 'Enter') {
+    if (e.code === 'Enter') {
       e.preventDefault();
       const nextFieldIndex = (currentFieldIndex + 1) % cardFields.length;
       const nextField = cardFields[nextFieldIndex];
@@ -522,26 +530,31 @@ const OilProductsPage = () => {
     }
 
     // Отключаем Tab
-    if (e.key === 'Tab') {
+    if (e.code === 'Tab') {
       e.preventDefault();
       return;
     }
 
-    // Разрешаем: backspace, delete, escape, запятая, минус
+    // Разрешаем: backspace, delete, escape, запятая, минус, цифры
     if (
-      e.key === 'Backspace' ||
-      e.key === 'Delete' ||
-      e.key === 'Escape' ||
-      e.key === ',' ||
-      e.key === '-' ||
-      // Разрешаем: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
-      ((e.ctrlKey || e.metaKey) &&
-        (e.key === 'a' || e.key === 'c' || e.key === 'v' || e.key === 'x')) ||
-      // Разрешаем: цифры
-      /[0-9]/.test(e.key)
+      e.code === 'Backspace' ||
+      e.code === 'Delete' ||
+      e.code === 'Escape' ||
+      e.code === 'Comma' ||
+      e.code === 'Minus' ||
+      e.code === 'NumpadSubtract' ||
+      e.code === 'NumpadDecimal' ||
+      e.code.startsWith('Digit') ||
+      e.code.startsWith('Numpad')
     ) {
       return;
     }
+
+    // Разрешаем стрелки для навигации
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) {
+      return;
+    }
+
     e.preventDefault();
   };
 
@@ -617,7 +630,6 @@ const OilProductsPage = () => {
                           <Input
                             ref={el => (inputRefs.current[formFieldName] = el)}
                             placeholder={`Введите ${field.name}`}
-                            maxLength={10}
                             style={{ fontSize: '14px', flex: '1' }}
                             value={fieldValue}
                             disabled={lockedMethods[methodId]}
