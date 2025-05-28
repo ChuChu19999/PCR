@@ -1,6 +1,6 @@
 {
     "name": "Массовая доля асфальтенов",
-    "sample_type": "oil",
+    "sample_type": "any",
     "formula": "1*Xср",
     "measurement_error": {
         "type": "formula",
