@@ -394,7 +394,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Протокол_${protocol.registration_number}.xlsx`);
+      link.setAttribute('download', `Протокол_${formData.test_protocol_number}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -688,7 +688,9 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
           loading={isGenerating}
         >
           <div className="save-protocol-calculation-form">
-            <p className="confirmation-message">Вы уверены, что хотите сформировать протокол?</p>
+            <p className="confirmation-message">
+              Вы уверены, что хотите сформировать протокол № {formData.test_protocol_number}?
+            </p>
             {error && <p className="error-message">{error}</p>}
           </div>
         </Modal>

@@ -298,12 +298,33 @@ def calculate_result(request):
 
         # Проверяем условия в порядке приоритета
         convergence_result = "satisfactory"
-        if "absence" in satisfied_conditions:
-            convergence_result = "absence"
-        elif "traces" in satisfied_conditions:
-            convergence_result = "traces"
-        elif "unsatisfactory" in satisfied_conditions:
-            convergence_result = "unsatisfactory"
+        custom_value = None
+
+        # Проверяем наличие кастомного значения
+        for condition in research_method["convergence_conditions"]["formulas"]:
+            if condition["convergence_value"] == "custom" and condition.get(
+                "custom_value"
+            ):
+                try:
+                    condition_result = evaluate_formula(
+                        condition["formula"], variables, is_condition=True
+                    )
+                    if condition_result:
+                        convergence_result = "custom"
+                        custom_value = condition["custom_value"]
+                        break
+                except Exception as e:
+                    logger.error(f"Ошибка при проверке кастомного условия: {str(e)}")
+                    continue
+
+        # Если кастомное условие не сработало, проверяем остальные условия
+        if convergence_result != "custom":
+            if "absence" in satisfied_conditions:
+                convergence_result = "absence"
+            elif "traces" in satisfied_conditions:
+                convergence_result = "traces"
+            elif "unsatisfactory" in satisfied_conditions:
+                convergence_result = "unsatisfactory"
 
         # Сохраняем информацию только о выбранном условии
         conditions_info = []
@@ -332,15 +353,15 @@ def calculate_result(request):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-        # Если выбрано особое условие, возвращаем его
-        if convergence_result in ["absence", "traces", "unsatisfactory"]:
+        # Если выбрано особое условие или кастомное значение, возвращаем его
+        if convergence_result in ["absence", "traces", "unsatisfactory", "custom"]:
             logger.info(f"Найдено особое условие: {convergence_result}")
 
             return Response(
                 {
                     "convergence": convergence_result,
                     "intermediate_results": intermediate_results,
-                    "result": None,
+                    "result": custom_value if convergence_result == "custom" else None,
                     "measurement_error": None,
                     "unit": research_method["unit"],
                     "conditions_info": conditions_info,

@@ -340,6 +340,7 @@ class ResearchMethodSerializer(BaseModelSerializer):
             "unsatisfactory",
             "absence",
             "traces",
+            "custom",
         ]
 
         for formula_data in value["formulas"]:
@@ -358,9 +359,11 @@ class ResearchMethodSerializer(BaseModelSerializer):
                     "Каждое условие должно содержать поле 'convergence_value'"
                 )
 
-            if formula_data["convergence_value"] not in valid_convergence_values:
+            if formula_data[
+                "convergence_value"
+            ] not in valid_convergence_values and not formula_data.get("custom_value"):
                 raise serializers.ValidationError(
-                    f"Значение повторяемости должно быть одним из: {', '.join(valid_convergence_values)}"
+                    f"Значение повторяемости должно быть одним из: {', '.join(valid_convergence_values)} или иметь custom_value"
                 )
 
             # Проверяем структуру формулы на наличие операторов И/ИЛИ

@@ -18,7 +18,8 @@ def _round_to_significant_figures(number, significant_figures):
     mantissa = mantissa.replace(".", "").rstrip("0")
 
     if len(mantissa) > significant_figures:
-        mantissa = str(round(int(mantissa[: significant_figures + 1]) / 10))
+        decimal_mantissa = Decimal(mantissa[: significant_figures + 1]) / Decimal("10")
+        mantissa = str(decimal_mantissa.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
     mantissa = mantissa.ljust(significant_figures, "0")
 

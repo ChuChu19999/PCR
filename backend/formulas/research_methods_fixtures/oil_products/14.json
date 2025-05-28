@@ -146,6 +146,10 @@
             {
                 "formula": "abs(X₁-X₂)>r",
                 "convergence_value": "unsatisfactory"
+            },
+            {
+                "formula": "Xср<0.005",
+                "convergence_value": "absence"
             }
         ]
     },

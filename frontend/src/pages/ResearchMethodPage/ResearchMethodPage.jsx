@@ -18,6 +18,7 @@ import ConfirmProtocolModal from '../../features/Modals/ConfirmProtocolModal/Con
 const { Option } = Select;
 
 const CONVERGENCE_LABELS = {
+  custom: value => value, // Для произвольной сходимости возвращаем само значение
   satisfactory: 'Удовлетворительно',
   unsatisfactory: 'Неудовлетворительно',
   absence: 'Отсутствие',
@@ -584,7 +585,7 @@ const ResearchMethodPage = () => {
         <Layout
           title={
             protocolData
-              ? `Акт отбора № ${protocolData.test_protocol_number || protocolData.registration_number}`
+              ? `Протокол № ${protocolData.test_protocol_number || protocolData.registration_number}`
               : 'Загрузка...'
           }
         >
@@ -612,11 +613,7 @@ const ResearchMethodPage = () => {
   return (
     <ResearchMethodPageWrapper>
       <Layout
-        title={
-          protocolData
-            ? `Акт отбора № ${protocolData.test_protocol_number || protocolData.registration_number}`
-            : 'Загрузка...'
-        }
+        title={protocolData ? `Протокол № ${protocolData.test_protocol_number}` : 'Загрузка...'}
       >
         <Form
           form={form}
@@ -1024,13 +1021,15 @@ const ResearchMethodPage = () => {
                                   }}
                                 >
                                   Результат:
-                                  {result.convergence === 'satisfactory'
-                                    ? ` ${result.result} ± ${result.measurement_error} ${result.unit}`
-                                    : result.convergence === 'absence'
-                                      ? ' Отсутствие'
-                                      : result.convergence === 'traces'
-                                        ? ' Следы'
-                                        : ' Неудовлетворительно'}
+                                  {result.convergence === 'custom'
+                                    ? ` ${result.result}`
+                                    : result.convergence === 'satisfactory'
+                                      ? ` ${result.result} ± ${result.measurement_error} ${result.unit}`
+                                      : result.convergence === 'absence'
+                                        ? ' Отсутствие'
+                                        : result.convergence === 'traces'
+                                          ? ' Следы'
+                                          : ' Неудовлетворительно'}
                                 </Typography>
 
                                 {/* Отображение информации о повторяемости */}
@@ -1079,11 +1078,9 @@ const ResearchMethodPage = () => {
                                           <div
                                             style={{
                                               fontFamily: 'HeliosCondC',
-                                              marginBottom: '12px',
+                                              marginBottom: '6px',
                                               fontSize: '14px',
                                               color: '#1a365d',
-                                              paddingBottom: '12px',
-                                              borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
                                             }}
                                           >
                                             {condition.calculation_steps?.step2
@@ -1102,6 +1099,23 @@ const ResearchMethodPage = () => {
                                                   .replace(/or/g, 'или')
                                                   .replace(/and/g, 'и')}
                                           </div>
+
+                                          {/* Результат вычисления */}
+                                          {condition.calculation_steps && (
+                                            <div
+                                              style={{
+                                                fontFamily: 'HeliosCondC',
+                                                fontSize: '14px',
+                                                color: '#4a5568',
+                                                paddingBottom: '8px',
+                                                borderBottom: '1px solid rgba(64, 150, 255, 0.15)',
+                                              }}
+                                            >
+                                              {condition.calculation_steps.type === 'single'
+                                                ? condition.calculation_steps.step?.evaluated
+                                                : condition.calculation_steps.steps?.[0]?.evaluated}
+                                            </div>
+                                          )}
 
                                           {/* Результат */}
                                           <div
@@ -1290,7 +1304,7 @@ const ResearchMethodPage = () => {
         <ConfirmProtocolModal
           isOpen={isConfirmProtocolModalOpen}
           onClose={() => setIsConfirmProtocolModalOpen(false)}
-          protocolNumber={protocolData?.registration_number}
+          protocolNumber={protocolData?.test_protocol_number}
           onConfirm={handleGenerateProtocol}
         />
       </Layout>

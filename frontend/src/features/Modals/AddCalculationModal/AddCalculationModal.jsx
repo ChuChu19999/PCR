@@ -4,6 +4,7 @@ import axios from 'axios';
 import { message } from 'antd';
 import './AddCalculationModal.css';
 import FormulaKeyboard from './FormulaKeyboard';
+import { Grid, TextField, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 
 const CONVERGENCE_OPTIONS = [
   { value: 'satisfactory', label: 'Удовлетворительно' },
@@ -88,6 +89,14 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
   };
 
   const [isLoading, setIsLoading] = useState(false);
+
+  const convergenceOptions = [
+    { value: 'custom', label: 'Произвольная' },
+    { value: 'satisfactory', label: 'Удовлетворительная' },
+    { value: 'unsatisfactory', label: 'Неудовлетворительная' },
+    { value: 'absence', label: 'Отсутствие' },
+    { value: 'traces', label: 'Следы' },
+  ];
 
   useEffect(() => {
     if (isOpen) {
@@ -238,14 +247,21 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
   };
 
   const handleConvergenceChange = (index, field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      convergence_conditions: {
-        formulas: prev.convergence_conditions.formulas.map((item, i) =>
-          i === index ? { ...item, [field]: value } : item
-        ),
-      },
-    }));
+    const updatedData = { ...formData };
+    if (!updatedData.convergence_conditions) {
+      updatedData.convergence_conditions = { formulas: [] };
+    }
+    if (!updatedData.convergence_conditions.formulas[index]) {
+      updatedData.convergence_conditions.formulas[index] = {};
+    }
+    updatedData.convergence_conditions.formulas[index][field] = value;
+
+    // Если меняется тип сходимости и это не "custom", удаляем custom_value
+    if (field === 'convergence_value' && value !== 'custom') {
+      delete updatedData.convergence_conditions.formulas[index].custom_value;
+    }
+
+    setFormData(updatedData);
   };
 
   const deleteInputField = indexToDelete => {
@@ -1920,13 +1936,27 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
                           }
                           required
                         >
-                          {CONVERGENCE_OPTIONS.map(option => (
+                          {convergenceOptions.map(option => (
                             <option key={option.value} value={option.value}>
                               {option.label}
                             </option>
                           ))}
                         </select>
                       </div>
+                      {condition.convergence_value === 'custom' && (
+                        <div className="form-group">
+                          <label>Текст результата при выполнении условия</label>
+                          <input
+                            type="text"
+                            value={condition.custom_value || ''}
+                            onChange={e =>
+                              handleConvergenceChange(index, 'custom_value', e.target.value)
+                            }
+                            placeholder="Введите текст, который будет показан как результат"
+                            required
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                   <button type="button" onClick={addConvergenceCondition} className="add-field-btn">
