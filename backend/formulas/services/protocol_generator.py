@@ -21,6 +21,7 @@ from ..utils.excel_utils import (
     get_content_height,
     find_table_headers,
     get_table_header_rows,
+    format_decimal_ru,
 )
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,85 @@ def generate_protocol_excel(request):
             "{res_object}": protocol.test_object,
             "{laboratory_activity_dates}": laboratory_activity_dates,
         }
+
+        # Обработка условий отбора
+        selection_conditions = protocol.selection_conditions or []
+        has_filled_conditions = False
+        rows_to_delete = set()
+
+        # Находим все строки с метками условий отбора
+        for row_idx, row in enumerate(worksheet.iter_rows(), 1):
+            has_condition_tags = False
+            all_tags_empty = True
+            bu_cell = None
+
+            for cell in row:
+                if not cell.value or not isinstance(cell.value, str):
+                    continue
+
+                # Проверяем наличие меток условий отбора в строке
+                for i in range(1, 100):  # Предполагаем максимум 99 условий
+                    name_tag = f"{{sel_cond_name_{i}}}"
+                    val_tag = f"{{sel_cond_val_{i}}}"
+                    unit_tag = f"{{sel_cond_unit_{i}}}"
+
+                    if (
+                        name_tag in cell.value
+                        or val_tag in cell.value
+                        or unit_tag in cell.value
+                    ):
+                        has_condition_tags = True
+                        if i <= len(selection_conditions):
+                            condition = selection_conditions[i - 1]
+                            if condition.get("value") is not None:
+                                all_tags_empty = False
+                                cell_value = cell.value
+                                if name_tag in cell_value:
+                                    cell.value = cell_value.replace(
+                                        name_tag, condition.get("name", "") + ":"
+                                    )
+                                elif val_tag in cell_value:
+                                    # Форматируем значение с заменой точки на запятую
+                                    formatted_value = format_decimal_ru(
+                                        condition.get("value", "")
+                                    )
+                                    cell.value = cell_value.replace(
+                                        val_tag, formatted_value
+                                    )
+                                elif unit_tag in cell_value:
+                                    cell.value = cell_value.replace(
+                                        unit_tag, condition.get("unit", "")
+                                    )
+                                has_filled_conditions = True
+
+                if "{bu}" in cell.value:
+                    bu_cell = cell
+
+            # Если в строке есть метки условий и все они пустые, добавляем строку к удалению
+            if has_condition_tags and all_tags_empty:
+                rows_to_delete.add(row_idx)
+
+        # Обрабатываем метку {bu}
+        if has_filled_conditions:
+            # Если есть заполненные условия, очищаем метку {bu}
+            for row in worksheet.iter_rows():
+                for cell in row:
+                    if (
+                        cell.value
+                        and isinstance(cell.value, str)
+                        and "{bu}" in cell.value
+                    ):
+                        cell.value = cell.value.replace("{bu}", "")
+        else:
+            # Если нет заполненных условий, заменяем {bu} на "б/у"
+            for row in worksheet.iter_rows():
+                for cell in row:
+                    if (
+                        cell.value
+                        and isinstance(cell.value, str)
+                        and "{bu}" in cell.value
+                    ):
+                        cell.value = cell.value.replace("{bu}", "б/у")
 
         # Заменяем метки в файле
         for row in worksheet.iter_rows():
@@ -996,7 +1076,7 @@ def generate_protocol_excel(request):
         table_ranges = []
         start_table_row = None
 
-        # Сначала находим все диапазоны с двойными фигурными скобками
+        # Находим все диапазоны с двойными фигурными скобками
         for source_row in range(1, source_worksheet.max_row + 1):
             for col in range(1, source_worksheet.max_column + 1):
                 cell = source_worksheet.cell(row=source_row, column=col)
@@ -1008,7 +1088,7 @@ def generate_protocol_excel(request):
                         start_table_row = None
 
         # Определяем строки, которые нужно пропустить из-за наличия фигурных скобок
-        skip_rows_with_braces = set()
+        skip_rows = set()
         for start_row, end_row in table_ranges:
             has_braces = False
             for row in range(start_row, end_row + 1):
@@ -1030,21 +1110,21 @@ def generate_protocol_excel(request):
                     break
 
             if has_braces:
-                skip_rows_with_braces.update(range(start_row, end_row + 1))
+                skip_rows.update(range(start_row, end_row + 1))
+
+        # Добавляем строки с пустыми условиями отбора
+        skip_rows.update(rows_to_delete)
 
         # Создаем словарь для маппинга исходных строк в целевые
         row_mapping = {}
         target_row = 1
 
-        # Сначала определяем маппинг строк
+        # Сначала определяем маппинг строк, пропуская строки с пустыми условиями отбора
         for source_row in range(1, source_worksheet.max_row + 1):
-            skip_row = False
-
-            # Проверяем, находится ли строка в списке на пропуск
-            if source_row in skip_rows_with_braces:
-                skip_row = True
+            if source_row in skip_rows:
                 continue
 
+            skip_row = False
             for col in range(1, source_worksheet.max_column + 1):
                 cell = source_worksheet.cell(row=source_row, column=col)
                 if cell.value and isinstance(cell.value, str):
@@ -1086,7 +1166,6 @@ def generate_protocol_excel(request):
                 current_sheet_height + row_height > A4_HEIGHT_POINTS
                 and current_sheet_rows
             ):
-                # Добавляем текущий набор строк в список листов
                 sheets_content.append(current_sheet_rows)
                 current_sheet_rows = []
                 current_sheet_height = 0

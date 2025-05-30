@@ -1,0 +1,49 @@
+.selection-conditions-editor {
+  padding: 24px;
+  font-family: 'HeliosCond';
+}
+
+.selection-conditions-editor .editor-header {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.selection-conditions-editor .ant-table {
+  background: #fff;
+  border-radius: 8px;
+  font-family: 'HeliosCond';
+}
+
+.selection-conditions-editor .ant-table-wrapper .ant-table-container {
+  border-top: none;
+}
+
+.selection-conditions-editor .ant-table-thead > tr > th {
+  background: #fafafa;
+  font-weight: 500;
+  font-family: 'HeliosCond';
+}
+
+.selection-conditions-editor .ant-input {
+  border-radius: 4px;
+  font-family: 'HeliosCond';
+}
+
+.selection-conditions-editor .ant-input:hover,
+.selection-conditions-editor .ant-input:focus {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+}
+
+.selection-conditions-editor .ant-btn {
+  font-family: 'HeliosCond';
+}
+
+.selection-conditions-editor .ant-btn-dangerous {
+  color: #ff4d4f;
+}
+
+.selection-conditions-editor .ant-btn-dangerous:hover {
+  color: #ff7875;
+  background: rgba(255, 77, 79, 0.1);
+}

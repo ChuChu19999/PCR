@@ -8,9 +8,11 @@ import {
   PlusOutlined,
   FileExcelOutlined,
   DeleteOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import ExcelEditor from './ExcelEditor';
+import SelectionConditionsEditor from './SelectionConditionsEditor';
 import './EditTemplateModal.css';
 
 const { Dragger } = Upload;
@@ -23,7 +25,13 @@ const SECTIONS = [
     description: 'Редактирование шапки протокола',
     icon: <FileTextOutlined />,
   },
-  // Другие секции добавятся в будущем
+  {
+    id: 'selection_conditions',
+    name: 'Условия отбора',
+    description: 'Настройка условий отбора проб',
+    icon: <SettingOutlined />,
+  },
+  // Другие секции
 ];
 
 const EditTemplateModal = ({ isOpen, onClose }) => {
@@ -273,8 +281,14 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
     return false; // Предотвращаем автоматическую загрузку
   };
 
-  const handleDataChange = (newData, newTemplateId, styles = null) => {
+  const handleDataChange = async (newData, newTemplateId, styles = null) => {
     console.log('handleDataChange:', { newData, newTemplateId, styles });
+
+    if (selectedSection.id === 'selection_conditions') {
+      setExcelData(newData);
+      return;
+    }
+
     setExcelData(newData);
     if (styles !== null) {
       console.log('Обновление стилей:', styles);
@@ -355,6 +369,32 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
       if (!excelData) {
         message.warning('Нет изменений для сохранения');
         return;
+      }
+
+      if (selectedSection.id === 'selection_conditions') {
+        try {
+          console.log('=== Отправка условий отбора на сервер ===');
+          console.log('Отправляемые данные:', excelData);
+
+          const response = await axios.patch(
+            `${import.meta.env.VITE_API_URL}/api/excel-templates/${activeTemplate.id}/update_selection_conditions/`,
+            { selection_conditions: excelData.selection_conditions }
+          );
+
+          setActiveTemplate(response.data);
+          message.success('Условия отбора успешно обновлены');
+          onClose();
+          return;
+        } catch (error) {
+          console.error('Ошибка при обновлении условий отбора:', error);
+          console.error('Детали ошибки:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status,
+          });
+          message.error('Не удалось обновить условия отбора');
+          return;
+        }
       }
 
       console.log('Отправляемые данные при обновлении шаблона:', {
@@ -594,11 +634,18 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
               </Button>
             </div>
             <div className="editor-content">
-              <ExcelEditor
-                templateId={activeTemplate.id}
-                section={selectedSection.id}
-                onDataChange={handleDataChange}
-              />
+              {selectedSection.id === 'header' ? (
+                <ExcelEditor
+                  templateId={activeTemplate.id}
+                  section={selectedSection.id}
+                  onDataChange={handleDataChange}
+                />
+              ) : selectedSection.id === 'selection_conditions' ? (
+                <SelectionConditionsEditor
+                  templateId={activeTemplate.id}
+                  onDataChange={data => handleDataChange({ selection_conditions: data })}
+                />
+              ) : null}
             </div>
           </div>
         )}

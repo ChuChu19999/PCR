@@ -1,0 +1,54 @@
+.selection-conditions-form {
+  margin-bottom: 16px;
+}
+
+.selection-conditions-form .form-group {
+  margin-bottom: 16px;
+}
+
+.selection-conditions-form label {
+  display: block;
+  margin-bottom: 8px;
+  color: #333333;
+  font-weight: 500;
+}
+
+.conditions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.condition-item {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.condition-item .input-wrapper {
+  flex: 1;
+}
+
+.condition-item label {
+  font-weight: normal;
+  margin-bottom: 4px;
+}
+
+.condition-item .unit {
+  color: #666;
+  font-size: 13px;
+  padding: 1px 0;
+  min-width: 30px;
+  text-align: left;
+}
+
+/* Скрываем стрелки в number input */
+.condition-item input[type='number']::-webkit-outer-spin-button,
+.condition-item input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.condition-item input[type='number'] {
+  -moz-appearance: textfield;
+}

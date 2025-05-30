@@ -171,12 +171,6 @@
   cursor: not-allowed;
 }
 
-.save-calculation-form .error-message {
-  color: #ff4d4f;
-  font-size: 12px;
-  margin-top: 4px;
-}
-
 .save-calculation-form .ant-switch {
   background-color: rgba(0, 0, 0, 0.25);
 }
@@ -366,8 +360,7 @@
 
 /* Глобальные стили для формы */
 .save-calculation-form,
-.save-calculation-form *,
-.ant-select-dropdown * {
+.save-calculation-form * {
   font-family: 'HeliosCondC';
 }
 

@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import locale from 'antd/es/date-picker/locale/ru_RU';
 import Modal from '../ui/Modal';
+import SelectionConditionsForm from './SelectionConditionsForm';
 import './CreateProtocolModal.css';
 
 const { Option } = Select;
@@ -55,6 +56,7 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
     phone: '',
     laboratory: null,
     department: null,
+    selection_conditions: null,
   });
 
   const [loading, setLoading] = useState(false);
@@ -174,9 +176,44 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleTemplateChange = async value => {
+    try {
+      const selectedTemplate = templates.find(t => t.id === value);
+      if (selectedTemplate && selectedTemplate.selection_conditions) {
+        // Добавляем поле value к каждому условию
+        const conditionsWithValues = selectedTemplate.selection_conditions.map(condition => ({
+          ...condition,
+          value: null,
+        }));
+        setFormData(prev => ({
+          ...prev,
+          excel_template: value,
+          selection_conditions: conditionsWithValues,
+        }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          excel_template: value,
+          selection_conditions: null,
+        }));
+      }
+    } catch (error) {
+      console.error('Ошибка при получении условий отбора:', error);
+      message.error('Не удалось загрузить условия отбора');
+    }
+  };
+
+  const handleSelectionConditionsChange = conditions => {
+    setFormData(prev => ({
+      ...prev,
+      selection_conditions: conditions,
+    }));
+  };
+
   const handleSave = async () => {
     try {
       console.log('Текущее состояние формы:', formData);
+      console.log('Условия отбора для отправки:', formData.selection_conditions);
 
       const protocolData = {
         test_protocol_number: formData.test_protocol_number,
@@ -192,6 +229,7 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
         branch: formData.branch,
         sampling_location_detail: formData.sampling_location_detail,
         phone: formData.phone || '',
+        selection_conditions: formData.selection_conditions,
       };
 
       console.log('Данные для отправки на сервер:', protocolData);
@@ -450,7 +488,7 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
           </label>
           <Select
             value={formData.excel_template}
-            onChange={handleInputChange('excel_template')}
+            onChange={handleTemplateChange}
             placeholder="Выберите шаблон протокола"
             status={errors.excel_template ? 'error' : ''}
             style={{ width: '100%' }}
@@ -463,6 +501,13 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
           </Select>
           {errors.excel_template && <div className="error-message">{errors.excel_template}</div>}
         </div>
+
+        {formData.excel_template && (
+          <SelectionConditionsForm
+            conditions={formData.selection_conditions}
+            onChange={handleSelectionConditionsChange}
+          />
+        )}
 
         <div className="form-group">
           <label>

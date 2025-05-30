@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import locale from 'antd/es/date-picker/locale/ru_RU';
 import Modal from '../ui/Modal';
+import SelectionConditionsForm from '../CreateProtocolModal/SelectionConditionsForm';
 import './EditProtocolModal.css';
 
 const { Option } = Select;
@@ -56,6 +57,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     sampling_location_detail: '',
     phone: '',
     laboratory: '',
+    selection_conditions: null,
   });
 
   const [loading, setLoading] = useState(false);
@@ -84,6 +86,31 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       fetchCalculations(protocol.id);
     }
   }, [protocol]);
+
+  // useEffect для обработки условий отбора
+  useEffect(() => {
+    if (protocol && templates.length > 0) {
+      const initialSelectionConditions = protocol.selection_conditions || [];
+      const templateSelectionConditions =
+        templates.find(t => t.id === protocol.excel_template)?.selection_conditions || [];
+
+      // Объединяем условия из шаблона со значениями из протокола
+      const mergedConditions = templateSelectionConditions.map(templateCondition => {
+        const existingCondition = initialSelectionConditions.find(
+          c => c.name === templateCondition.name
+        );
+        return {
+          ...templateCondition,
+          value: existingCondition ? existingCondition.value : null,
+        };
+      });
+
+      setFormData(prev => ({
+        ...prev,
+        selection_conditions: mergedConditions,
+      }));
+    }
+  }, [protocol, templates]);
 
   const fetchTemplates = async () => {
     try {
@@ -160,15 +187,15 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
         sampling_date: formData.sampling_date?.format('YYYY-MM-DD'),
         receiving_date: formData.receiving_date?.format('YYYY-MM-DD'),
         excel_template: formData.excel_template,
+        selection_conditions: formData.selection_conditions,
+        branch: formData.branch,
+        sampling_location_detail: formData.sampling_location_detail,
+        phone: formData.phone,
       };
 
-      // Добавляем protocol_details только если есть id
+      // Добавляем protocol_details_id если он есть
       if (formData.protocol_details_id) {
-        updateData.protocol_details = {
-          id: formData.protocol_details_id,
-          branch: formData.branch,
-          phone: formData.phone,
-        };
+        updateData.protocol_details_id = formData.protocol_details_id;
       }
 
       console.log('Отправляемые данные:', updateData);
@@ -408,6 +435,44 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleTemplateChange = async value => {
+    try {
+      const selectedTemplate = templates.find(t => t.id === value);
+      if (selectedTemplate && selectedTemplate.selection_conditions) {
+        // Если у протокола уже есть условия отбора, сохраняем их значения
+        const existingConditions = formData.selection_conditions || [];
+        const conditionsWithValues = selectedTemplate.selection_conditions.map(condition => {
+          const existingCondition = existingConditions.find(ec => ec.name === condition.name);
+          return {
+            ...condition,
+            value: existingCondition ? existingCondition.value : null,
+          };
+        });
+        setFormData(prev => ({
+          ...prev,
+          excel_template: value,
+          selection_conditions: conditionsWithValues,
+        }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          excel_template: value,
+          selection_conditions: null,
+        }));
+      }
+    } catch (error) {
+      console.error('Ошибка при получении условий отбора:', error);
+      message.error('Не удалось загрузить условия отбора');
+    }
+  };
+
+  const handleSelectionConditionsChange = conditions => {
+    setFormData(prev => ({
+      ...prev,
+      selection_conditions: conditions,
+    }));
   };
 
   return (
@@ -651,7 +716,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                 <label>Шаблон протокола</label>
                 <Select
                   value={formData.excel_template}
-                  onChange={handleInputChange('excel_template')}
+                  onChange={handleTemplateChange}
                   placeholder="Выберите шаблон протокола"
                   status={errors.excel_template ? 'error' : ''}
                   style={{ width: '100%' }}
@@ -674,6 +739,13 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                   <div className="error-message">{errors.excel_template}</div>
                 )}
               </div>
+
+              {formData.excel_template && (
+                <SelectionConditionsForm
+                  conditions={formData.selection_conditions}
+                  onChange={handleSelectionConditionsChange}
+                />
+              )}
             </>
           )}
         </div>

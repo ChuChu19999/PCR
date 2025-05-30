@@ -143,6 +143,57 @@ class ExcelTemplateViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(new_template)
         return Response(serializer.data)
 
+    @action(detail=True, methods=["patch"])
+    def update_selection_conditions(self, request, pk=None):
+        """
+        Обновляет условия отбора для шаблона
+        """
+        template = self.get_object()
+
+        selection_conditions = request.data.get("selection_conditions")
+        if not isinstance(selection_conditions, list):
+            return Response(
+                {"error": "Условия отбора должны быть списком"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Проверяем, что каждый элемент содержит только name и unit
+        for condition in selection_conditions:
+            if not isinstance(condition, dict):
+                return Response(
+                    {"error": "Каждое условие должно быть объектом"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not all(key in condition for key in ["name", "unit"]):
+                return Response(
+                    {"error": "Каждое условие должно содержать поля 'name' и 'unit'"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if len(condition.keys()) > 2:
+                return Response(
+                    {
+                        "error": "Каждое условие должно содержать только поля 'name' и 'unit'"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Создаем новую версию шаблона
+        next_version = template.deactivate()
+
+        new_template = ExcelTemplate.objects.create(
+            name=template.name,
+            version=next_version,
+            file=template.file,
+            file_name=template.file_name,
+            is_active=True,
+            laboratory=template.laboratory,
+            department=template.department,
+            selection_conditions=selection_conditions,
+        )
+
+        serializer = self.get_serializer(new_template)
+        return Response(serializer.data)
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
