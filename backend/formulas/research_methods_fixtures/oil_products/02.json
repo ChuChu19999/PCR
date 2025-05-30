@@ -293,11 +293,11 @@
     "convergence_conditions": {
         "formulas": [
             {
-                "formula": "(ρ₁-ρ₂)/2<=0.6",
+                "formula": "abs(ρ₁-ρ₂)<=0.6",
                 "convergence_value": "satisfactory"
             },
             {
-                "formula": "(ρ₁-ρ₂)/2>0.6",
+                "formula": "abs(ρ₁-ρ₂)>0.6",
                 "convergence_value": "unsatisfactory"
             }
         ]

@@ -472,6 +472,12 @@ class Protocol(BaseModel):
         null=True,
         blank=True,
     )
+    selection_conditions = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name="Условия отбора",
+        help_text="JSON с условиями отбора и их значениями",
+    )
     excel_template = models.ForeignKey(
         "ExcelTemplate",
         on_delete=models.SET_NULL,
@@ -654,6 +660,12 @@ class ExcelTemplate(BaseModel):
         default=True,
         verbose_name="Активен",
         help_text="Указывает, является ли версия шаблона активной",
+    )
+    selection_conditions = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name="Условия отбора",
+        help_text="JSON с условиями отбора и их единицами измерения",
     )
     laboratory = models.ForeignKey(
         Laboratory,

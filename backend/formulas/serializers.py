@@ -606,6 +606,7 @@ class ExcelTemplateSerializer(BaseModelSerializer):
             "file_name",
             "file",
             "is_active",
+            "selection_conditions",
             "laboratory",
             "laboratory_name",
             "department",
@@ -658,6 +659,32 @@ class ProtocolSerializer(BaseModelSerializer):
     laboratory_name = serializers.CharField(source="laboratory.name", read_only=True)
     department_name = serializers.CharField(source="department.name", read_only=True)
 
+    def validate_selection_conditions(self, value):
+        if value is not None:
+            if not isinstance(value, list):
+                raise serializers.ValidationError("Условия отбора должны быть списком")
+
+            for condition in value:
+                if not isinstance(condition, dict):
+                    raise serializers.ValidationError(
+                        "Каждое условие должно быть объектом"
+                    )
+
+                if "name" not in condition or "unit" not in condition:
+                    raise serializers.ValidationError(
+                        "Каждое условие должно содержать поля 'name' и 'unit'"
+                    )
+
+                if "value" in condition and condition["value"] is not None:
+                    try:
+                        float(condition["value"])
+                    except (ValueError, TypeError):
+                        raise serializers.ValidationError(
+                            "Значение условия должно быть числом или null"
+                        )
+
+        return value
+
     class Meta:
         model = Protocol
         fields = (
@@ -672,6 +699,7 @@ class ProtocolSerializer(BaseModelSerializer):
             "registration_number",
             "sampling_date",
             "receiving_date",
+            "selection_conditions",
             "excel_template",
             "laboratory",
             "laboratory_name",

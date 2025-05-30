@@ -42,14 +42,25 @@ def restore_row_dimensions(
 
 def format_result(value):
     """
-    Форматирует результат измерения, заменяя минус на слово.
+    Форматирует результат измерения:
+    - заменяет минус на слово
+    - приводит специальные значения к нижнему регистру
     """
     if not value or value == "не указано":
         return "не указано"
 
     str_value = str(value)
+
+    special_values = ["Отсутствие", "Неудовлетворительно", "Следы"]
+
+    # Проверяем, является ли значение без учета регистра
+    for special_value in special_values:
+        if str_value.lower() == special_value.lower():
+            return str_value.lower()
+
     if str_value.startswith("-"):
         return f"минус {str_value[1:]}"
+
     return str_value
 
 
@@ -107,3 +118,18 @@ def get_table_header_rows(worksheet, header_row, source_row):
                     break
 
     return sorted(header_rows)
+
+
+def format_decimal_ru(value):
+    """
+    Форматирует число для отображения с запятой вместо точки.
+    Используется для форматирования числовых значений в соответствии с российским стандартом.
+    """
+    if value is None:
+        return "не указано"
+
+    try:
+        num = float(value)
+        return str(num).replace(".", ",")
+    except (ValueError, TypeError):
+        return str(value)
