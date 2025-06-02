@@ -22,6 +22,8 @@ from ..utils.excel_utils import (
     find_table_headers,
     get_table_header_rows,
     format_decimal_ru,
+    get_object_suffix,
+    format_protocol_number,
 )
 
 logger = logging.getLogger(__name__)
@@ -130,6 +132,16 @@ def generate_protocol_excel(request):
             all_tags_empty = True
             bu_cell = None
 
+            # Проверяем аккредитацию и удаляем строку шапки если нужно
+            if (
+                not protocol.is_accredited
+                and protocol.excel_template.accreditation_header_row
+            ):
+                if row_idx == protocol.excel_template.accreditation_header_row:
+                    rows_to_delete.add(row_idx)
+                    continue
+
+            # Проверяем наличие меток условий отбора в строке
             for cell in row:
                 if not cell.value or not isinstance(cell.value, str):
                     continue
@@ -204,7 +216,13 @@ def generate_protocol_excel(request):
                 if cell.value and isinstance(cell.value, str):
                     for tag, value in replacements.items():
                         if tag in cell.value:
-                            cell.value = cell.value.replace(tag, str(value))
+                            if tag == "{test_protocol_number}":
+                                formatted_number = format_protocol_number(
+                                    protocol, protocol.excel_template
+                                )
+                                cell.value = cell.value.replace(tag, formatted_number)
+                            else:
+                                cell.value = cell.value.replace(tag, str(value))
 
         # Обработка таблицы 1 (результаты расчетов)
         start_row = None

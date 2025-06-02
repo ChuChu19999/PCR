@@ -10,6 +10,38 @@ import CreateProtocolModal from '../../features/Modals/CreateProtocolModal/Creat
 
 const { Option } = Select;
 
+const formatDate = (dateString, isAccredited) => {
+  if (!dateString || !isAccredited) return '-';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+};
+
+const getObjectSuffix = testObject => {
+  if (!testObject) return '';
+  const testObjectLower = testObject.toLowerCase();
+  if (testObjectLower.includes('конденсат')) return 'дк';
+  if (testObjectLower.includes('нефть')) return 'н';
+  return '';
+};
+
+const formatProtocolNumber = (number, date, isAccredited, testObject) => {
+  if (!number && !date) return '-';
+  if (!isAccredited) return number || '-';
+
+  const suffix = getObjectSuffix(testObject);
+  const formattedDate = formatDate(date, isAccredited);
+
+  if (!number) return `от ${formattedDate}`;
+  if (!date) return number;
+
+  const protocolNumber = suffix ? `${number}/07/${suffix}` : `${number}/07`;
+  return `${protocolNumber} от ${formattedDate}`;
+};
+
 const ResizableTitle = props => {
   const { onResize, width, ...restProps } = props;
 
@@ -65,16 +97,6 @@ const ProtocolsPage = () => {
     receiving_date: { width: 150 },
   });
 
-  const formatDate = dateString => {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ru-RU', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-  };
-
   const handleSearch = (selectedKeys, confirm, dataIndex) => {
     confirm();
     setSearchText(selectedKeys[0]);
@@ -119,7 +141,9 @@ const ProtocolsPage = () => {
     filterIcon: filtered => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     onFilter: (value, record) => {
       if (dataIndex === 'sampling_date' || dataIndex === 'receiving_date') {
-        return formatDate(record[dataIndex]).toLowerCase().includes(value.toLowerCase());
+        return formatDate(record[dataIndex], record.is_accredited)
+          .toLowerCase()
+          .includes(value.toLowerCase());
       }
       return record[dataIndex]
         ? record[dataIndex].toString().toLowerCase().includes(value.toLowerCase())
@@ -127,7 +151,7 @@ const ProtocolsPage = () => {
     },
     render: (text, record) => {
       if (dataIndex === 'sampling_date' || dataIndex === 'receiving_date') {
-        return formatDate(text);
+        return formatDate(text, record.is_accredited);
       }
       return text;
     },
@@ -169,8 +193,19 @@ const ProtocolsPage = () => {
       dataIndex: 'test_protocol_number',
       key: 'test_protocol_number',
       width: columnsState.test_protocol_number.width,
-      sorter: (a, b) => a.test_protocol_number.localeCompare(b.test_protocol_number),
+      sorter: (a, b) => {
+        const numA = a.test_protocol_number || '';
+        const numB = b.test_protocol_number || '';
+        return numA.localeCompare(numB);
+      },
       ...getColumnSearchProps('test_protocol_number', '№ протокола'),
+      render: (text, record) =>
+        formatProtocolNumber(
+          text,
+          record.test_protocol_date,
+          record.is_accredited,
+          record.test_object
+        ),
     },
     {
       title: 'Рег. номер',
@@ -189,20 +224,22 @@ const ProtocolsPage = () => {
       ...getColumnSearchProps('test_object', 'Объекту испытаний'),
     },
     {
-      title: 'Дата отбора',
+      title: 'Дата отбора пробы',
       dataIndex: 'sampling_date',
       key: 'sampling_date',
       width: columnsState.sampling_date.width,
       sorter: (a, b) => new Date(a.sampling_date) - new Date(b.sampling_date),
       ...getColumnSearchProps('sampling_date', 'Дате отбора'),
+      render: (text, record) => formatDate(text, record.is_accredited),
     },
     {
-      title: 'Дата получения',
+      title: 'Дата получения пробы',
       dataIndex: 'receiving_date',
       key: 'receiving_date',
       width: columnsState.receiving_date.width,
       sorter: (a, b) => new Date(a.receiving_date) - new Date(b.receiving_date),
       ...getColumnSearchProps('receiving_date', 'Дате получения'),
+      render: (text, record) => formatDate(text, record.is_accredited),
     },
   ].map((col, index) => ({
     ...col,

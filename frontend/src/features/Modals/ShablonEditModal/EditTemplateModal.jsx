@@ -9,6 +9,8 @@ import {
   FileExcelOutlined,
   DeleteOutlined,
   SettingOutlined,
+  InfoCircleOutlined,
+  NumberOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import ExcelEditor from './ExcelEditor';
@@ -31,6 +33,12 @@ const SECTIONS = [
     description: 'Настройка условий отбора проб',
     icon: <SettingOutlined />,
   },
+  {
+    id: 'accreditation',
+    name: 'Аккредитация',
+    description: 'Настройка строки шапки аккредитации',
+    icon: <SettingOutlined />,
+  },
   // Другие секции
 ];
 
@@ -50,6 +58,7 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
   const [selectedLaboratory, setSelectedLaboratory] = useState(null);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
+  const [accreditationHeaderRow, setAccreditationHeaderRow] = useState('');
 
   // Загрузка списка шаблонов при открытии модального окна
   useEffect(() => {
@@ -309,6 +318,26 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
 
   const handleSave = async () => {
     try {
+      setLoading(true);
+      if (selectedSection.id === 'accreditation' && activeTemplate) {
+        const headerRow = parseInt(accreditationHeaderRow);
+        if (isNaN(headerRow) || headerRow < 1) {
+          message.error('Введите корректный номер строки (положительное целое число)');
+          return;
+        }
+
+        const response = await axios.patch(
+          `${import.meta.env.VITE_API_URL}/api/excel-templates/${activeTemplate.id}/update_accreditation_header_row/`,
+          { accreditation_header_row: headerRow }
+        );
+
+        // Обновляем текущий шаблон без изменения версии
+        setActiveTemplate(response.data);
+        message.success('Номер строки шапки аккредитации успешно сохранен');
+        onClose();
+        return;
+      }
+
       if (isCreatingNew) {
         if (!newTemplateName.trim()) {
           message.error('Введите название шаблона');
@@ -363,11 +392,6 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
         message.success('Шаблон успешно создан');
         loadTemplates();
         onClose();
-        return;
-      }
-
-      if (!excelData) {
-        message.warning('Нет изменений для сохранения');
         return;
       }
 
@@ -436,11 +460,18 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
     } catch (error) {
       console.error('Ошибка при сохранении:', error);
       message.error('Ошибка при сохранении изменений');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSectionSelect = section => {
+    console.log('Выбрана секция:', section);
     setSelectedSection(section);
+    if (section.id === 'accreditation' && activeTemplate) {
+      console.log('Загрузка данных аккредитации:', activeTemplate);
+      setAccreditationHeaderRow(activeTemplate.accreditation_header_row?.toString() || '');
+    }
   };
 
   const handleBackToSections = () => {
@@ -625,6 +656,39 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
                 <span className="section-arrow">→</span>
               </div>
             ))}
+          </div>
+        ) : selectedSection?.id === 'accreditation' ? (
+          <div className="editor-container">
+            <div className="editor-header">
+              <Button title="Назад к разделам" onClick={handleBackToSections} type="default">
+                Назад к разделам
+              </Button>
+            </div>
+            <div className="editor-content">
+              <div className="accreditation-section">
+                <div className="accreditation-card">
+                  <div className="card-header">
+                    <NumberOutlined className="card-icon" />
+                    <span>Расположение в документе</span>
+                  </div>
+                  <div className="form-group">
+                    <Input
+                      type="number"
+                      min="1"
+                      value={accreditationHeaderRow}
+                      onChange={e => setAccreditationHeaderRow(e.target.value)}
+                      placeholder="Введите номер строки"
+                      style={{ width: '200px' }}
+                    />
+                    <div className="hint-text">
+                      <InfoCircleOutlined style={{ marginRight: '8px' }} />
+                      Укажите номер строки, в которой находится информация об аккредитации
+                      (учитывайте наличие меток разметки шаблона)
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="editor-container">

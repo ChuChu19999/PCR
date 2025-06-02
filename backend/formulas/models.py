@@ -417,6 +417,17 @@ class Protocol(BaseModel):
         null=True,
         blank=True,
     )
+    test_protocol_date = models.DateField(
+        verbose_name="Дата протокола испытаний",
+        help_text="Дата протокола испытаний",
+        null=True,
+        blank=True,
+    )
+    is_accredited = models.BooleanField(
+        verbose_name="Аккредитован",
+        help_text="Признак аккредитации протокола",
+        default=False,
+    )
     test_object = models.CharField(
         max_length=255,
         verbose_name="Объект испытаний",
@@ -666,6 +677,12 @@ class ExcelTemplate(BaseModel):
         blank=True,
         verbose_name="Условия отбора",
         help_text="JSON с условиями отбора и их единицами измерения",
+    )
+    accreditation_header_row = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Строка шапки аккредитации",
+        help_text="Номер строки с шапкой аккредитации в шаблоне",
     )
     laboratory = models.ForeignKey(
         Laboratory,

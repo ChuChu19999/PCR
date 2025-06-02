@@ -538,7 +538,7 @@ const ResearchMethodPage = () => {
   const handleGenerateProtocol = async () => {
     try {
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/generate-protocol-excel/?registration_number=${protocolData.registration_number}`,
+        `${import.meta.env.VITE_API_URL}/api/generate-protocol-excel/?protocol_id=${protocolId}`,
         {
           responseType: 'blob',
         }
@@ -548,14 +548,17 @@ const ResearchMethodPage = () => {
       const link = document.createElement('a');
       link.href = url;
 
-      const contentDisposition = response.headers['content-disposition'];
-      let filename = 'protocol.xlsx';
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-        if (filenameMatch && filenameMatch[1]) {
-          filename = filenameMatch[1].replace(/['"]/g, '');
-        }
+      // Формируем имя файла на основе данных протокола
+      let filename;
+      if (protocolData.is_accredited && protocolData.test_protocol_date) {
+        const date = dayjs(protocolData.test_protocol_date).format('DD.MM.YYYY');
+        filename = `Протокол_${protocolData.test_protocol_number}_от_${date}.xlsx`;
+      } else {
+        filename = `Протокол_${protocolData.test_protocol_number}.xlsx`;
       }
+
+      // Очищаем имя файла от недопустимых символов
+      filename = filename.replace(/[^\wа-яА-Я\s\.\-_]/g, '');
 
       link.setAttribute('download', filename);
       document.body.appendChild(link);

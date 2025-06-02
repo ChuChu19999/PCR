@@ -194,6 +194,30 @@ class ExcelTemplateViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(new_template)
         return Response(serializer.data)
 
+    @action(detail=True, methods=["patch"])
+    def update_accreditation_header_row(self, request, pk=None):
+        """
+        Обновляет номер строки шапки аккредитации для шаблона
+        """
+        template = self.get_object()
+
+        accreditation_header_row = request.data.get("accreditation_header_row")
+        if (
+            not isinstance(accreditation_header_row, int)
+            or accreditation_header_row < 1
+        ):
+            return Response(
+                {"error": "Номер строки должен быть положительным целым числом"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Обновляем существующий шаблон без создания новой версии
+        template.accreditation_header_row = accreditation_header_row
+        template.save()
+
+        serializer = self.get_serializer(template)
+        return Response(serializer.data)
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])

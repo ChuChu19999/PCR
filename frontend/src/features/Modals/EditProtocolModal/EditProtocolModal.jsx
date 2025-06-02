@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Input, DatePicker, Select, message, Switch, Table, Button } from 'antd';
+import { Input, DatePicker, Select, message, Checkbox, Table, Button } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
@@ -46,6 +46,8 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [formData, setFormData] = useState({
     test_protocol_number: '',
+    test_protocol_date: null,
+    is_accredited: false,
     test_object: '',
     laboratory_location: '',
     sampling_act_number: '',
@@ -82,6 +84,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
         ...protocol,
         sampling_date: protocol.sampling_date ? dayjs(protocol.sampling_date) : null,
         receiving_date: protocol.receiving_date ? dayjs(protocol.receiving_date) : null,
+        test_protocol_date: protocol.test_protocol_date ? dayjs(protocol.test_protocol_date) : null,
       });
       fetchCalculations(protocol.id);
     }
@@ -182,6 +185,8 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       setLoading(true);
       const updateData = {
         test_protocol_number: formData.test_protocol_number,
+        test_protocol_date: formData.test_protocol_date?.format('YYYY-MM-DD'),
+        is_accredited: formData.is_accredited,
         test_object: formData.test_object,
         laboratory_location: formData.laboratory_location,
         sampling_date: formData.sampling_date?.format('YYYY-MM-DD'),
@@ -413,7 +418,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       setError(null);
 
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/generate-protocol-excel/?registration_number=${protocol.registration_number}`,
+        `${import.meta.env.VITE_API_URL}/api/generate-protocol-excel/?protocol_id=${protocol.id}`,
         { responseType: 'blob' }
       );
 
@@ -421,7 +426,20 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Протокол_${formData.test_protocol_number}.xlsx`);
+
+      // Формируем имя файла на основе данных протокола
+      let filename;
+      if (formData.is_accredited && formData.test_protocol_date) {
+        const date = dayjs(formData.test_protocol_date).format('DD.MM.YYYY');
+        filename = `Протокол_${formData.test_protocol_number}_от_${date}.xlsx`;
+      } else {
+        filename = `Протокол_${formData.test_protocol_number}.xlsx`;
+      }
+
+      // Очищаем имя файла от недопустимых символов
+      filename = filename.replace(/[^\wа-яА-Я\s\.\-_]/g, '');
+
+      link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -534,9 +552,66 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                   status={errors.test_protocol_number ? 'error' : ''}
                   style={{ width: '100%' }}
                 />
-                {errors.test_protocol_number && (
-                  <div className="error-message">{errors.test_protocol_number}</div>
+              </div>
+
+              <div className="form-group">
+                <label>Дата протокола испытаний</label>
+                <DatePicker
+                  locale={locale}
+                  format="DD.MM.YYYY"
+                  value={formData.test_protocol_date ? dayjs(formData.test_protocol_date) : null}
+                  onChange={handleInputChange('test_protocol_date')}
+                  placeholder="ДД.ММ.ГГГГ"
+                  style={{ width: '100%' }}
+                  status={errors.test_protocol_date ? 'error' : ''}
+                  className="custom-date-picker"
+                  rootClassName="custom-date-picker-root"
+                  popupClassName="custom-date-picker-popup"
+                  inputReadOnly={false}
+                  showToday={false}
+                  allowClear={true}
+                  superNextIcon={null}
+                  superPrevIcon={null}
+                  onKeyDown={e => {
+                    // Разрешаем цифры, точки, backspace и delete
+                    if (!/[\d\.]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete') {
+                      e.preventDefault();
+                    }
+                  }}
+                  onInput={e => {
+                    const input = e.target;
+                    const cursorPosition = input.selectionStart;
+                    const formatted = formatDateInput(input.value);
+
+                    const dotsBeforeCursor = (
+                      input.value.slice(0, cursorPosition).match(/\./g) || []
+                    ).length;
+                    input.value = formatted;
+                    const newDotsBeforeCursor = (
+                      formatted.slice(0, cursorPosition).match(/\./g) || []
+                    ).length;
+                    const newPosition = cursorPosition + (newDotsBeforeCursor - dotsBeforeCursor);
+                    input.setSelectionRange(newPosition, newPosition);
+
+                    if (formatted.length === 10 && isValidDate(formatted)) {
+                      handleInputChange('test_protocol_date')(dayjs(formatted, 'DD.MM.YYYY'));
+                    }
+                  }}
+                />
+                {errors.test_protocol_date && (
+                  <div className="error-message">{errors.test_protocol_date}</div>
                 )}
+              </div>
+
+              <div className="form-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_accredited}
+                    onChange={e => handleInputChange('is_accredited')(e.target.checked)}
+                  />
+                  <span>Аккредитован</span>
+                </label>
               </div>
 
               <div className="form-group">
@@ -600,7 +675,9 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
               </div>
 
               <div className="form-group">
-                <label>Объект испытаний</label>
+                <label>
+                  Объект испытаний <span className="required">*</span>
+                </label>
                 <Select
                   value={formData.test_object}
                   onChange={value => handleInputChange('test_object')(value)}

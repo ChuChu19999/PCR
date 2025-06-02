@@ -3,11 +3,13 @@ import Modal from '../ui/Modal';
 import { Input, message } from 'antd';
 import axios from 'axios';
 import './GenerateProtocolModal.css';
+import dayjs from 'dayjs';
 
 const GenerateProtocolModal = ({ isOpen, onClose, laboratoryId, departmentId }) => {
   const [protocols, setProtocols] = useState([]);
   const [searchValue, setSearchValue] = useState('');
   const [selectedProtocol, setSelectedProtocol] = useState(null);
+  const [selectedProtocolData, setSelectedProtocolData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const inputRef = useRef(null);
@@ -70,7 +72,8 @@ const GenerateProtocolModal = ({ isOpen, onClose, laboratoryId, departmentId }) 
 
   const handleSelectProtocol = protocol => {
     setSearchValue(protocol.registration_number);
-    setSelectedProtocol(protocol.registration_number);
+    setSelectedProtocol(protocol.id);
+    setSelectedProtocolData(protocol);
     setShowSuggestions(false);
   };
 
@@ -86,7 +89,7 @@ const GenerateProtocolModal = ({ isOpen, onClose, laboratoryId, departmentId }) 
 
     try {
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/generate-protocol-excel/?registration_number=${selectedProtocol}`,
+        `${import.meta.env.VITE_API_URL}/api/generate-protocol-excel/?protocol_id=${selectedProtocol}`,
         {
           responseType: 'blob',
         }
@@ -96,14 +99,15 @@ const GenerateProtocolModal = ({ isOpen, onClose, laboratoryId, departmentId }) 
       const link = document.createElement('a');
       link.href = url;
 
-      const contentDisposition = response.headers['content-disposition'];
-      let filename = 'protocol.xlsx';
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-        if (filenameMatch && filenameMatch[1]) {
-          filename = filenameMatch[1].replace(/['"]/g, '');
-        }
+      let filename;
+      if (selectedProtocolData?.is_accredited && selectedProtocolData?.test_protocol_date) {
+        const date = dayjs(selectedProtocolData.test_protocol_date).format('DD.MM.YYYY');
+        filename = `Протокол_${selectedProtocolData.test_protocol_number}_от_${date}.xlsx`;
+      } else {
+        filename = `Протокол_${selectedProtocolData.test_protocol_number}.xlsx`;
       }
+
+      filename = filename.replace(/[^\wа-яА-Я\s\.\-_]/g, '');
 
       link.setAttribute('download', filename);
       document.body.appendChild(link);

@@ -607,6 +607,7 @@ class ExcelTemplateSerializer(BaseModelSerializer):
             "file",
             "is_active",
             "selection_conditions",
+            "accreditation_header_row",
             "laboratory",
             "laboratory_name",
             "department",
@@ -690,6 +691,7 @@ class ProtocolSerializer(BaseModelSerializer):
         fields = (
             "id",
             "test_protocol_number",
+            "test_protocol_date",
             "test_object",
             "laboratory_location",
             "branch",
@@ -705,6 +707,7 @@ class ProtocolSerializer(BaseModelSerializer):
             "laboratory_name",
             "department",
             "department_name",
+            "is_accredited",
             "created_at",
             "updated_at",
             "is_deleted",

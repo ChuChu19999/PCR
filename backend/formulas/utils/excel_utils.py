@@ -133,3 +133,39 @@ def format_decimal_ru(value):
         return str(num).replace(".", ",")
     except (ValueError, TypeError):
         return str(value)
+
+
+def get_object_suffix(test_object):
+    """
+    Определяет суффикс для номера протокола на основе объекта испытаний.
+    """
+    if not test_object:
+        return ""
+    test_object_lower = test_object.lower()
+    if "конденсат" in test_object_lower:
+        return "дк"
+    elif "нефть" in test_object_lower:
+        return "н"
+    return ""
+
+
+def format_protocol_number(protocol, excel_template):
+    """
+    Форматирует номер протокола в зависимости от условий.
+    """
+    if not protocol.test_protocol_number:
+        return ""
+
+    # Если протокол не аккредитован, возвращаем просто номер протокола
+    if not protocol.is_accredited:
+        return protocol.test_protocol_number
+
+    suffix = get_object_suffix(protocol.test_object)
+
+    base_number = f"{protocol.test_protocol_number}/07/{suffix}"
+
+    # Если есть дата протокола, добавляем её
+    if protocol.test_protocol_date:
+        return f"{base_number} от {protocol.test_protocol_date.strftime('%d.%m.%Y')}"
+
+    return base_number

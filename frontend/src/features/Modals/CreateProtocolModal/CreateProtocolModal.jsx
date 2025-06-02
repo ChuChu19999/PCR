@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Input, DatePicker, Select, message, Switch } from 'antd';
+import { useNavigate } from 'react-router-dom';
+import { Input, DatePicker, Select, message, Checkbox } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
@@ -43,6 +44,8 @@ const isValidDate = dateString => {
 const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     test_protocol_number: '',
+    test_protocol_date: null,
+    is_accredited: false,
     test_object: '',
     laboratory_location: '',
     sampling_act_number: '',
@@ -125,10 +128,20 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
 
   const handleInputChange = field => e => {
     const value = e?.target ? e.target.value : e;
-    setFormData(prev => ({
-      ...prev,
-      [field]: value,
-    }));
+
+    // Специальная обработка для дат
+    if (field === 'test_protocol_date' || field === 'sampling_date' || field === 'receiving_date') {
+      setFormData(prev => ({
+        ...prev,
+        [field]: value ? dayjs(value) : null,
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [field]: value,
+      }));
+    }
+
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
@@ -217,12 +230,17 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
 
       const protocolData = {
         test_protocol_number: formData.test_protocol_number,
+        test_protocol_date: formData.test_protocol_date
+          ? formData.test_protocol_date.format('YYYY-MM-DD')
+          : null,
         test_object: formData.test_object || 'дегазированный конденсат',
         laboratory_location: formData.laboratory_location,
         sampling_act_number: formData.sampling_act_number,
         registration_number: formData.registration_number,
-        sampling_date: formData.sampling_date?.format('YYYY-MM-DD'),
-        receiving_date: formData.receiving_date?.format('YYYY-MM-DD'),
+        sampling_date: formData.sampling_date ? formData.sampling_date.format('YYYY-MM-DD') : null,
+        receiving_date: formData.receiving_date
+          ? formData.receiving_date.format('YYYY-MM-DD')
+          : null,
         excel_template: formData.excel_template,
         laboratory: formData.laboratory,
         department: formData.department,
@@ -230,6 +248,7 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
         sampling_location_detail: formData.sampling_location_detail,
         phone: formData.phone || '',
         selection_conditions: formData.selection_conditions,
+        is_accredited: formData.is_accredited,
       };
 
       console.log('Данные для отправки на сервер:', protocolData);
@@ -301,6 +320,64 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
           {errors.test_protocol_number && (
             <div className="error-message">{errors.test_protocol_number}</div>
           )}
+        </div>
+
+        <div className="form-group">
+          <label>Дата протокола испытаний</label>
+          <DatePicker
+            locale={locale}
+            format="DD.MM.YYYY"
+            value={formData.test_protocol_date}
+            onChange={date => handleInputChange('test_protocol_date')(date)}
+            placeholder="ДД.ММ.ГГГГ"
+            style={{ width: '100%' }}
+            status={errors.test_protocol_date ? 'error' : ''}
+            className="custom-date-picker"
+            rootClassName="custom-date-picker-root"
+            popupClassName="custom-date-picker-popup"
+            inputReadOnly={false}
+            showToday={false}
+            allowClear={true}
+            superNextIcon={null}
+            superPrevIcon={null}
+            onKeyDown={e => {
+              // Разрешаем цифры, точки, backspace и delete
+              if (!/[\d\.]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete') {
+                e.preventDefault();
+              }
+            }}
+            onInput={e => {
+              const input = e.target;
+              const cursorPosition = input.selectionStart;
+              const formatted = formatDateInput(input.value);
+
+              const dotsBeforeCursor = (input.value.slice(0, cursorPosition).match(/\./g) || [])
+                .length;
+              input.value = formatted;
+              const newDotsBeforeCursor = (formatted.slice(0, cursorPosition).match(/\./g) || [])
+                .length;
+              const newPosition = cursorPosition + (newDotsBeforeCursor - dotsBeforeCursor);
+              input.setSelectionRange(newPosition, newPosition);
+
+              if (formatted.length === 10 && isValidDate(formatted)) {
+                handleInputChange('test_protocol_date')(dayjs(formatted, 'DD.MM.YYYY'));
+              }
+            }}
+          />
+          {errors.test_protocol_date && (
+            <div className="error-message">{errors.test_protocol_date}</div>
+          )}
+        </div>
+
+        <div className="form-group">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={formData.is_accredited}
+              onChange={e => handleInputChange('is_accredited')(e.target.checked)}
+            />
+            <span>Аккредитован</span>
+          </label>
         </div>
 
         <div className="form-group">
