@@ -573,6 +573,7 @@ def save_calculation(request):
 
         logger.info(f"Получены данные для сохранения расчета: {data}")
         logger.info(f"Значение поля executor: {data.get('executor')}")
+        logger.info(f"Данные об оборудовании: {data.get('equipment_data')}")
 
         if "protocol_id" in data:
             existing_calculation = Calculation.objects.filter(
@@ -591,6 +592,7 @@ def save_calculation(request):
 
             calculation_data = {
                 "input_data": data.get("input_data"),
+                "equipment_data": data.get("equipment_data"),
                 "result": data.get("result"),
                 "measurement_error": data.get("measurement_error"),
                 "unit": data.get("unit"),
@@ -601,6 +603,10 @@ def save_calculation(request):
                 "laboratory_activity_date": data.get("laboratory_activity_date"),
                 "executor": data.get("executor"),
             }
+
+            logger.info(
+                f"Подготовленные данные для создания расчета: {calculation_data}"
+            )
         else:
             # Создаем новый протокол
             protocol_data = {
@@ -636,6 +642,7 @@ def save_calculation(request):
 
                 calculation_data = {
                     "input_data": data.get("input_data"),
+                    "equipment_data": data.get("equipment_data"),
                     "result": data.get("result"),
                     "measurement_error": data.get("measurement_error"),
                     "unit": data.get("unit"),

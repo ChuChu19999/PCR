@@ -157,8 +157,7 @@
 }
 
 .save-calculation-form .ant-input,
-.save-calculation-form .ant-select,
-.save-calculation-form .ant-picker {
+.save-calculation-form .ant-select {
   width: 100%;
   border-radius: 6px;
   font-size: 13px;
@@ -274,8 +273,29 @@
   font-size: 13px;
 }
 
-.save-calculation-form .ant-select-item {
-  padding: 6px 12px;
+.save-calculation-form .ant-select-dropdown .rc-virtual-list {
+  height: 110px !important;
+}
+
+.save-calculation-form .ant-select-dropdown .rc-virtual-list-holder {
+  overflow-y: auto !important;
+}
+
+.save-calculation-form .ant-select-dropdown .rc-virtual-list-holder::-webkit-scrollbar {
+  width: 6px;
+}
+
+.save-calculation-form .ant-select-dropdown .rc-virtual-list-holder::-webkit-scrollbar-track {
+  background: #fff;
+}
+
+.save-calculation-form .ant-select-dropdown .rc-virtual-list-holder::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 0;
+}
+
+.save-calculation-form .ant-select-dropdown .rc-virtual-list-holder::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
 }
 
 /* Стили для календаря */
@@ -291,117 +311,125 @@
   cursor: not-allowed !important;
 }
 
-/* Новые стили для DatePicker */
-.custom-date-picker {
-  border-color: #d9d9d9;
+/* Стили для мультиселекта оборудования */
+.save-calculation-form .ant-select-multiple .ant-select-selection-item {
+  background-color: #f0f7ff;
+  border-color: #91caff;
 }
 
-.custom-date-picker:hover {
-  border-color: #4096ff !important;
+.save-calculation-form .ant-select-item-option-content {
+  white-space: normal;
+  padding: 4px 0;
 }
 
-.custom-date-picker-root .ant-picker-focused {
-  border-color: #4096ff !important;
-  box-shadow: 0 0 0 2px rgba(64, 150, 255, 0.2) !important;
+.save-calculation-form .ant-select-item {
+  padding: 8px 12px;
 }
 
-.custom-date-picker .ant-picker-suffix {
-  color: #4096ff !important;
+.save-calculation-form .ant-select-selection-overflow {
+  max-height: 80px;
+  overflow-y: auto;
 }
 
-.custom-date-picker-popup .ant-picker-cell-in-view.ant-picker-cell-selected .ant-picker-cell-inner {
-  background: #4096ff !important;
-}
-
-.custom-date-picker-popup
-  .ant-picker-cell-in-view.ant-picker-cell-today
-  .ant-picker-cell-inner::before {
-  border-color: #4096ff !important;
-}
-
-.ant-modal {
-  position: fixed;
-  top: 50%;
-  left: calc(50% - 450px);
-  transform: translate(-50%, -50%);
-}
-
-.save-calculation-form::-webkit-scrollbar {
+/* Стили для скроллбара в Select */
+.save-calculation-form .ant-select-selection-overflow::-webkit-scrollbar {
   width: 6px;
 }
 
-.save-calculation-form::-webkit-scrollbar-track {
+.save-calculation-form .ant-select-selection-overflow::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 3px;
 }
 
-.save-calculation-form::-webkit-scrollbar-thumb {
+.save-calculation-form .ant-select-selection-overflow::-webkit-scrollbar-thumb {
   background: #c1c1c1;
   border-radius: 3px;
 }
 
-.save-calculation-form::-webkit-scrollbar-thumb:hover {
+.save-calculation-form .ant-select-selection-overflow::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
 
 /* Стили для состояния ошибки */
-.form-group .ant-picker-status-error {
-  border-color: #ff4d4f;
+.form-group .ant-select-status-error .ant-select-selector {
+  border-color: #ff4d4f !important;
 }
 
-.form-group .ant-picker-status-error:hover {
-  border-color: #ff7875;
+.form-group .ant-select-status-error:hover .ant-select-selector {
+  border-color: #ff7875 !important;
 }
 
-.form-group .ant-picker-status-error.ant-picker-focused {
-  border-color: #ff4d4f;
-  box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.2);
+.form-group .ant-select-status-error.ant-select-focused .ant-select-selector {
+  border-color: #ff4d4f !important;
+  box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.2) !important;
 }
 
-/* Глобальные стили для формы */
-.save-calculation-form,
-.save-calculation-form * {
+.save-calculation-form .ant-form-item-label > label {
   font-family: 'HeliosCondC';
 }
 
-.form-group.disabled input,
-.form-group.disabled .ant-picker,
-.form-group.disabled .ant-select-selector {
-  background-color: #f5f5f5;
-  cursor: not-allowed;
-  color: rgba(0, 0, 0, 0.25);
+.save-calculation-form .ant-input,
+.save-calculation-form .ant-select {
+  font-family: 'HeliosCondC';
 }
 
-.form-group.disabled label {
-  color: rgba(0, 0, 0, 0.45);
-}
-
-.modal-footer {
-  position: sticky;
-  bottom: 0;
-  background-color: #fff;
-  padding: 16px 24px;
-  border-top: 1px solid #f0f0f0;
-  margin: 0 -24px -24px;
-  z-index: 10;
-  font-size: 14px;
-}
-
-/* Стили для скроллбара */
-.protocol-dropdown::-webkit-scrollbar {
+.save-calculation-form .ant-select-dropdown .ant-select-item-list::-webkit-scrollbar,
+.save-calculation-form .ant-select-dropdown .rc-virtual-list-holder::-webkit-scrollbar {
   width: 6px;
 }
 
-.protocol-dropdown::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
+.save-calculation-form .ant-select-dropdown .ant-select-item-list::-webkit-scrollbar-track,
+.save-calculation-form .ant-select-dropdown .rc-virtual-list-holder::-webkit-scrollbar-track {
+  background: #fff;
+  border-radius: 0;
 }
 
-.protocol-dropdown::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
+.save-calculation-form .ant-select-dropdown .ant-select-item-list::-webkit-scrollbar-thumb,
+.save-calculation-form .ant-select-dropdown .rc-virtual-list-holder::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 0;
 }
 
-.protocol-dropdown::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+.save-calculation-form .ant-select-dropdown .ant-select-item-list::-webkit-scrollbar-thumb:hover,
+.save-calculation-form .ant-select-dropdown .rc-virtual-list-holder::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
+}
+
+.save-calculation-form .ant-select-dropdown .rc-virtual-list-scrollbar {
+  width: 6px !important;
+}
+
+.save-calculation-form .ant-select-dropdown .rc-virtual-list-scrollbar-thumb {
+  background: #d9d9d9 !important;
+  border-radius: 0 !important;
+}
+
+.save-calculation-form .ant-select-dropdown .rc-virtual-list-scrollbar-thumb:hover {
+  background: #bfbfbf !important;
+}
+
+.equipment-select-dropdown {
+  max-height: 110px;
+}
+
+.equipment-select-dropdown .ant-select-item-list {
+  overflow-y: auto !important;
+}
+
+.equipment-select-dropdown .ant-select-item-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.equipment-select-dropdown .ant-select-item-list::-webkit-scrollbar-track {
+  background: #fff;
+  border-radius: 0;
+}
+
+.equipment-select-dropdown .ant-select-item-list::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 0;
+}
+
+.equipment-select-dropdown .ant-select-item-list::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
 }

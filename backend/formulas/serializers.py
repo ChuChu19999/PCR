@@ -9,6 +9,7 @@ from .models import (
     Calculation,
     ExcelTemplate,
     Protocol,
+    Equipment,
 )
 
 
@@ -800,6 +801,7 @@ class CalculationSerializer(BaseModelSerializer):
         fields = (
             "id",
             "input_data",
+            "equipment_data",
             "protocol",
             "protocol_id",
             "result",
@@ -830,3 +832,61 @@ class CalculationSerializer(BaseModelSerializer):
             )
 
         return data
+
+
+class EquipmentSerializer(BaseModelSerializer):
+    laboratory_name = serializers.CharField(source="laboratory.name", read_only=True)
+    department_name = serializers.CharField(source="department.name", read_only=True)
+
+    class Meta:
+        model = Equipment
+        fields = (
+            "id",
+            "name",
+            "type",
+            "serial_number",
+            "verification_info",
+            "verification_date",
+            "verification_end_date",
+            "version",
+            "is_active",
+            "laboratory",
+            "laboratory_name",
+            "department",
+            "department_name",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+            "deleted_at",
+        )
+        read_only_fields = ("created_at", "updated_at", "is_deleted", "deleted_at")
+
+    def validate(self, data):
+        if (
+            data.get("department")
+            and data["department"].laboratory != data["laboratory"]
+        ):
+            raise serializers.ValidationError(
+                {
+                    "department": "Подразделение должно принадлежать выбранной лаборатории"
+                }
+            )
+        return data
+
+    def validate_name(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Название прибора не может быть пустым")
+        return value.strip()
+
+    def validate_serial_number(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Серийный номер не может быть пустым")
+        return value.strip()
+
+    def validate_type(self, value):
+        valid_types = ["measuring_instrument", "test_equipment"]
+        if value not in valid_types:
+            raise serializers.ValidationError(
+                "Тип прибора должен быть одним из: " + ", ".join(valid_types)
+            )
+        return value

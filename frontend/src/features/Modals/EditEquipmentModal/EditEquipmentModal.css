@@ -1,0 +1,210 @@
+.edit-equipment-form {
+  padding: 0px;
+  padding-bottom: 20px;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  padding-right: 15px;
+  margin-right: -15px;
+}
+
+.edit-equipment-form .form-group {
+  margin-bottom: 16px;
+}
+
+.edit-equipment-form .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.edit-equipment-form label {
+  display: block;
+  margin-bottom: 8px;
+  color: #333333;
+  font-weight: 500;
+}
+
+.edit-equipment-form .required {
+  color: #ff4d4f;
+  margin-left: 2px;
+}
+
+.edit-equipment-form .ant-input,
+.edit-equipment-form .ant-select,
+.edit-equipment-form .ant-picker {
+  width: 100%;
+  border-radius: 8px;
+  font-size: 13px;
+  border-color: #d9d9d9;
+}
+
+.edit-equipment-form .ant-select .ant-select-selector {
+  border-radius: 8px !important;
+}
+
+.edit-equipment-form .ant-input[disabled] {
+  color: rgba(0, 0, 0, 0.65);
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.edit-equipment-form .error-message {
+  color: #ff4d4f;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* Стили для компонентов выбора даты */
+.edit-equipment-form .ant-picker {
+  width: 100%;
+  height: 32px;
+  background: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  transition: all 0.3s;
+  padding: 0 11px;
+  display: flex;
+  align-items: center;
+}
+
+.edit-equipment-form .ant-picker:hover {
+  border-color: #0066cc;
+}
+
+.edit-equipment-form .ant-picker-focused,
+.edit-equipment-form .ant-picker:focus {
+  border-color: #0066cc;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+  outline: none;
+}
+
+.edit-equipment-form .ant-picker .ant-picker-input {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: transparent;
+}
+
+.edit-equipment-form .ant-picker .ant-picker-input > input {
+  flex: 1;
+  border: none !important;
+  background: transparent !important;
+  padding: 0;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 14px;
+  line-height: 1.5714285714285714;
+  box-shadow: none !important;
+}
+
+.edit-equipment-form .ant-picker .ant-picker-input > input::placeholder {
+  color: rgba(0, 0, 0, 0.25);
+}
+
+.edit-equipment-form .ant-picker .ant-picker-suffix {
+  margin-left: 4px;
+  color: rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+}
+
+/* Стили для состояния ошибки */
+.edit-equipment-form .ant-picker-status-error {
+  border-color: #ff4d4f;
+}
+
+.edit-equipment-form .ant-picker-status-error:hover {
+  border-color: #ff7875;
+}
+
+.edit-equipment-form .ant-picker-status-error.ant-picker-focused {
+  border-color: #ff4d4f;
+  box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.2);
+}
+
+/* Стили для выпадающих списков */
+.edit-equipment-form .ant-select-dropdown {
+  font-size: 13px;
+}
+
+.edit-equipment-form .ant-select-dropdown * {
+  font-family: 'HeliosCondC';
+  font-size: 13px;
+}
+
+.edit-equipment-form .ant-select-item {
+  padding: 6px 12px;
+  color: #333333;
+}
+
+/* Стили для disabled полей */
+.edit-equipment-form .ant-input[disabled],
+.edit-equipment-form .ant-select-disabled .ant-select-selector {
+  color: rgba(0, 0, 0, 0.65) !important;
+  background-color: #f5f5f5 !important;
+  cursor: not-allowed !important;
+}
+
+.edit-equipment-form .ant-select-selection-item {
+  color: #333333 !important;
+}
+
+.edit-equipment-form .ant-select-dropdown .ant-select-item-option-content {
+  color: #333333;
+}
+
+/* Стили для DatePicker */
+.custom-date-picker {
+  border-color: #d9d9d9;
+}
+
+.custom-date-picker:hover {
+  border-color: #0066cc !important;
+}
+
+.custom-date-picker-root .ant-picker-focused {
+  border-color: #0066cc !important;
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2) !important;
+}
+
+.custom-date-picker .ant-picker-suffix {
+  color: #0066cc !important;
+}
+
+.custom-date-picker-popup .ant-picker-cell-in-view.ant-picker-cell-selected .ant-picker-cell-inner {
+  background: #0066cc !important;
+}
+
+.custom-date-picker-popup
+  .ant-picker-cell-in-view.ant-picker-cell-today
+  .ant-picker-cell-inner::before {
+  border-color: #0066cc !important;
+}
+
+/* Стили для модального окна подтверждения удаления */
+.delete-equipment-confirmation {
+  padding: 0;
+}
+
+.delete-equipment-confirmation .confirmation-message {
+  font-size: 16px;
+  text-align: center;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.delete-equipment-confirmation .error-message {
+  color: #ff4d4f;
+  font-size: 14px;
+  margin-top: 8px;
+  padding: 8px;
+  background-color: #fff1f0;
+  border: 1px solid #ffccc7;
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* Общий стиль для форм */
+.edit-equipment-form,
+.edit-equipment-form *,
+.ant-select-dropdown *,
+.delete-equipment-confirmation * {
+  font-family: 'HeliosCondC';
+}

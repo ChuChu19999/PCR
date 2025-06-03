@@ -17,7 +17,7 @@ from .views.excel_views import (
     get_sampling_locations,
     get_branches,
 )
-from .services.protocol_generator import generate_protocol_excel
+from .views.equipment_views import EquipmentViewSet
 from .views.user_views import UserViewSet
 from .api.calculation_api import (
     calculate_result,
@@ -27,6 +27,7 @@ from .api.calculation_api import (
     get_registration_numbers,
 )
 from .api.fixtures_api import get_fixtures
+from .services.protocol_generator import generate_protocol_excel
 
 
 router = DefaultRouter()
@@ -42,6 +43,7 @@ router.register(r"research-pages", ResearchObjectViewSet, basename="research-pag
 router.register(r"protocols", ProtocolViewSet, basename="protocol")
 router.register(r"calculations", CalculationViewSet, basename="calculation")
 router.register(r"excel-templates", ExcelTemplateViewSet, basename="excel-template")
+router.register(r"equipment", EquipmentViewSet, basename="equipment")
 router.register(r"users", UserViewSet, basename="user")
 
 urlpatterns = [

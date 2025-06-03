@@ -11,7 +11,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from ..models import ExcelTemplate, Protocol, Calculation
+from ..models import ExcelTemplate, Protocol, Calculation, Equipment
 from ..utils.excel_utils import (
     A4_HEIGHT_POINTS,
     DEFAULT_ROW_HEIGHT,
@@ -919,6 +919,176 @@ def generate_protocol_excel(request):
                 worksheet, original_dimensions, template_row, rows_to_insert
             )
 
+        # Обработка таблицы 2 (оборудование)
+        start_row_table2 = None
+        end_row_table2 = None
+        template_row_table2 = None
+
+        # Находим границы таблицы 2
+        for row_idx, row in enumerate(worksheet.iter_rows(), 1):
+            for cell in row:
+                if cell.value == "{start_table2}":
+                    start_row_table2 = row_idx
+                    logger.info(f"Найдена метка start_table2 в строке {row_idx}")
+                elif cell.value == "{end_table2}":
+                    end_row_table2 = row_idx
+                    logger.info(f"Найдена метка end_table2 в строке {row_idx}")
+                    break
+            if start_row_table2 and end_row_table2:
+                break
+
+        if start_row_table2 and end_row_table2:
+            template_row_table2 = start_row_table2 + 1
+
+            # Получаем уникальные приборы из всех расчетов
+            unique_equipment = []
+            seen_equipment = set()
+
+            # Собираем все ID оборудования из всех расчетов
+            equipment_ids = set()
+            for calc in calculations:
+                if calc.equipment_data:
+                    for equipment_item in calc.equipment_data:
+                        if isinstance(equipment_item, dict) and "id" in equipment_item:
+                            equipment_ids.add(equipment_item["id"])
+
+            # Получаем все оборудование из базы данных
+            if equipment_ids:
+                equipment_list = Equipment.objects.filter(id__in=equipment_ids)
+                for equipment in equipment_list:
+                    equipment_key = (equipment.name, equipment.serial_number)
+                    if equipment_key not in seen_equipment:
+                        seen_equipment.add(equipment_key)
+                        unique_equipment.append(equipment)
+
+            rows_needed = len(unique_equipment)
+
+            logger.info(
+                f"Найдены границы таблицы 2: start_row={start_row_table2}, end_row={end_row_table2}"
+            )
+            logger.info(f"Шаблонная строка таблицы 2: {template_row_table2}")
+            logger.info(
+                f"Необходимо вставить строк для уникального оборудования: {rows_needed}"
+            )
+            logger.info(
+                f"Уникальное оборудование: {[equip.name for equip in unique_equipment]}"
+            )
+
+            # Проверяем содержимое шаблонной строки
+            for col in range(1, worksheet.max_column + 1):
+                cell = worksheet.cell(row=template_row_table2, column=col)
+                if cell.value:
+                    logger.info(f"Ячейка [{template_row_table2}, {col}]: {cell.value}")
+
+            # Сохраняем размеры строк перед любыми изменениями
+            original_dimensions = save_row_dimensions(worksheet)
+
+            # Вставляем новые строки, если их больше одной
+            if rows_needed > 1:
+                # Сохраняем существующие объединенные ячейки
+                merged_ranges = []
+                for merge_range in worksheet.merged_cells.ranges:
+                    merged_ranges.append(
+                        {
+                            "min_row": merge_range.min_row,
+                            "max_row": merge_range.max_row,
+                            "min_col": merge_range.min_col,
+                            "max_col": merge_range.max_col,
+                        }
+                    )
+
+                # Вставляем новые строки
+                rows_to_insert = rows_needed - 1  # Одна строка уже есть
+                worksheet.insert_rows(template_row_table2 + 1, rows_to_insert)
+                logger.info(
+                    f"Вставлено {rows_to_insert} новых строк после строки {template_row_table2}"
+                )
+
+                # Копируем стили для каждой новой строки
+                for idx in range(rows_to_insert):
+                    new_row = template_row_table2 + 1 + idx
+                    logger.info(f"Копирование стилей для новой строки {new_row}")
+
+                    for col in range(1, worksheet.max_column + 1):
+                        source_cell = worksheet.cell(
+                            row=template_row_table2, column=col
+                        )
+                        target_cell = worksheet.cell(row=new_row, column=col)
+
+                        # Копируем стили только если в исходной ячейке есть значение или это ячейка с границами таблицы
+                        if source_cell.has_style and (
+                            source_cell.value is not None
+                            or col in [1, worksheet.max_column]
+                        ):
+                            target_cell._style = copy(source_cell._style)
+
+                        target_cell.value = source_cell.value
+
+                # Восстанавливаем и обновляем объединенные ячейки
+                worksheet.merged_cells.ranges.clear()
+                for merge_range in merged_ranges:
+                    if merge_range["max_row"] < template_row_table2:
+                        worksheet.merge_cells(
+                            start_row=merge_range["min_row"],
+                            start_column=merge_range["min_col"],
+                            end_row=merge_range["max_row"],
+                            end_column=merge_range["max_col"],
+                        )
+                    elif merge_range["min_row"] > template_row_table2:
+                        worksheet.merge_cells(
+                            start_row=merge_range["min_row"] + rows_to_insert,
+                            start_column=merge_range["min_col"],
+                            end_row=merge_range["max_row"] + rows_to_insert,
+                            end_column=merge_range["max_col"],
+                        )
+                    elif merge_range["min_row"] == template_row_table2:
+                        for i in range(rows_needed):
+                            worksheet.merge_cells(
+                                start_row=template_row_table2 + i,
+                                start_column=merge_range["min_col"],
+                                end_row=template_row_table2 + i,
+                                end_column=merge_range["max_col"],
+                            )
+
+            # Заполняем данные таблицы 2
+            current_row = template_row_table2
+            for idx, equipment in enumerate(unique_equipment, 1):
+                for col in range(1, worksheet.max_column + 1):
+                    cell = worksheet.cell(row=current_row, column=col)
+                    if cell.value and isinstance(cell.value, str):
+                        # Форматируем даты в нужный формат
+                        verification_date = (
+                            equipment.verification_date.strftime("%d.%m.%Y")
+                            if equipment.verification_date
+                            else "не указано"
+                        )
+                        verification_end_date = (
+                            equipment.verification_end_date.strftime("%d.%m.%Y")
+                            if equipment.verification_end_date
+                            else "не указано"
+                        )
+
+                        value = (
+                            cell.value.replace("{id_equipment}", str(idx))
+                            .replace("{name_equipment}", equipment.name or "не указано")
+                            .replace(
+                                "{serial_num}", equipment.serial_number or "не указано"
+                            )
+                            .replace(
+                                "{ver_info}",
+                                equipment.verification_info or "не указано",
+                            )
+                            .replace("{ver_date}", verification_date)
+                            .replace("{ver_end_date}", verification_end_date)
+                        )
+                        cell.value = value
+                current_row += 1
+
+            # Восстанавливаем размеры строк с учетом сдвига
+            restore_row_dimensions(
+                worksheet, original_dimensions, template_row_table2, rows_needed - 1
+            )
+
         # Обработка таблицы 3 (НД методов испытаний)
         start_row_table3 = None
         end_row_table3 = None
@@ -1085,6 +1255,8 @@ def generate_protocol_excel(request):
             "{end_header}",
             "{start_table1}",
             "{end_table1}",
+            "{start_table2}",
+            "{end_table2}",
             "{start_table3}",
             "{end_table3}",
             "{{start_table}}",
@@ -1137,6 +1309,17 @@ def generate_protocol_excel(request):
         row_mapping = {}
         target_row = 1
 
+        # Создаем список маркеров, которые нужно пропустить при маппинге
+        skip_markers = [
+            "{start_header}",
+            "{end_header}",
+            "{{start_table}}",
+            "{{end_table}}",
+        ]
+
+        # Создаем множество для строк с маркерами таблиц
+        table_marker_rows = set()
+
         # Сначала определяем маппинг строк, пропуская строки с пустыми условиями отбора
         for source_row in range(1, source_worksheet.max_row + 1):
             if source_row in skip_rows:
@@ -1146,11 +1329,28 @@ def generate_protocol_excel(request):
             for col in range(1, source_worksheet.max_column + 1):
                 cell = source_worksheet.cell(row=source_row, column=col)
                 if cell.value and isinstance(cell.value, str):
-                    if any(marker in cell.value for marker in markers):
+                    cell_value = str(cell.value)
+                    # Проверяем маркеры таблиц
+                    if any(
+                        marker in cell_value
+                        for marker in [
+                            "{start_table1}",
+                            "{end_table1}",
+                            "{start_table2}",
+                            "{end_table2}",
+                            "{start_table3}",
+                            "{end_table3}",
+                        ]
+                    ):
+                        table_marker_rows.add(source_row)
+                        skip_row = True
+                        break
+                    # Проверяем другие маркеры
+                    if any(marker in cell_value for marker in skip_markers):
                         skip_row = True
                         break
 
-            if not skip_row:
+            if not skip_row and source_row not in table_marker_rows:
                 row_mapping[source_row] = target_row
                 target_row += 1
 
@@ -1160,6 +1360,18 @@ def generate_protocol_excel(request):
         current_sheet_height = 0
         last_header_row = None
         last_header_rows = []
+        is_table_complete = False  # Флаг для отслеживания заполненности таблицы
+        current_table = None  # Текущая обрабатываемая таблица
+
+        # Создаем словарь для отслеживания состояния таблиц
+        table_states = {
+            "table1": {"complete": False, "header_rows": []},
+            "table2": {"complete": False, "header_rows": []},
+            "table3": {"complete": False, "header_rows": []},
+        }
+
+        # Создаем временный список для всех строк
+        all_rows = []
 
         for source_row, target_row in row_mapping.items():
             # Получаем высоту строки
@@ -1168,6 +1380,43 @@ def generate_protocol_excel(request):
                 if source_row in source_worksheet.row_dimensions
                 else DEFAULT_ROW_HEIGHT
             )
+
+            # Проверяем маркеры начала и конца таблиц в исходных строках (включая пропущенные)
+            for check_row in range(
+                source_row - 1, source_row + 2
+            ):  # Проверяем текущую строку и соседние
+                if check_row < 1 or check_row > source_worksheet.max_row:
+                    continue
+
+                for col in range(1, source_worksheet.max_column + 1):
+                    cell = source_worksheet.cell(row=check_row, column=col)
+                    if cell.value and isinstance(cell.value, str):
+                        cell_value = str(cell.value)
+
+                        # Проверяем начало таблиц
+                        if "{start_table1}" in cell_value:
+                            current_table = "table1"
+                            table_states["table1"]["complete"] = False
+                        elif "{start_table2}" in cell_value:
+                            current_table = "table2"
+                            table_states["table2"]["complete"] = False
+                        elif "{start_table3}" in cell_value:
+                            current_table = "table3"
+                            table_states["table3"]["complete"] = False
+
+                        # Проверяем конец таблиц
+                        elif "{end_table1}" in cell_value:
+                            table_states["table1"]["complete"] = True
+                            if current_table == "table1":
+                                current_table = None
+                        elif "{end_table2}" in cell_value:
+                            table_states["table2"]["complete"] = True
+                            if current_table == "table2":
+                                current_table = None
+                        elif "{end_table3}" in cell_value:
+                            table_states["table3"]["complete"] = True
+                            if current_table == "table3":
+                                current_table = None
 
             # Проверяем, является ли текущая строка частью таблицы
             header_row = find_table_headers(source_worksheet, source_row)
@@ -1178,6 +1427,8 @@ def generate_protocol_excel(request):
                 last_header_rows = get_table_header_rows(
                     source_worksheet, header_row, source_row
                 )
+                if current_table:
+                    table_states[current_table]["header_rows"] = last_header_rows
 
             # Если текущий лист превысит высоту А4
             if (
@@ -1188,19 +1439,21 @@ def generate_protocol_excel(request):
                 current_sheet_rows = []
                 current_sheet_height = 0
 
-                # Если есть шапка таблицы, добавляем только строки шапки в начало нового листа
-                if last_header_rows:
-                    header_height = 0
-                    for header_row in last_header_rows:
-                        if header_row in row_mapping:
-                            header_row_height = (
-                                source_worksheet.row_dimensions[header_row].height
-                                if header_row in source_worksheet.row_dimensions
-                                else DEFAULT_ROW_HEIGHT
-                            )
-                            header_height += header_row_height
-                            current_sheet_rows.append(header_row)
-                    current_sheet_height = header_height
+                # Если есть шапка таблицы и текущая таблица не завершена, добавляем шапку в начало нового листа
+                if current_table and not table_states[current_table]["complete"]:
+                    header_rows = table_states[current_table]["header_rows"]
+                    if header_rows:
+                        header_height = 0
+                        for header_row in header_rows:
+                            if header_row in row_mapping:
+                                header_row_height = (
+                                    source_worksheet.row_dimensions[header_row].height
+                                    if header_row in source_worksheet.row_dimensions
+                                    else DEFAULT_ROW_HEIGHT
+                                )
+                                header_height += header_row_height
+                                current_sheet_rows.append(header_row)
+                        current_sheet_height = header_height
 
             current_sheet_rows.append(source_row)
             current_sheet_height += row_height

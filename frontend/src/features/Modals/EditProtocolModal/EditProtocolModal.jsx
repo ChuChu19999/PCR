@@ -90,6 +90,19 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     }
   }, [protocol]);
 
+  // useEffect для синхронизации значения шаблона
+  useEffect(() => {
+    if (templates.length > 0 && protocol?.excel_template) {
+      const template = templates.find(t => t.id === protocol.excel_template);
+      if (template) {
+        setFormData(prev => ({
+          ...prev,
+          excel_template: template.id,
+        }));
+      }
+    }
+  }, [templates, protocol]);
+
   // useEffect для обработки условий отбора
   useEffect(() => {
     if (protocol && templates.length > 0) {
@@ -797,20 +810,23 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                   placeholder="Выберите шаблон протокола"
                   status={errors.excel_template ? 'error' : ''}
                   style={{ width: '100%' }}
+                  loading={templates.length === 0}
                 >
-                  {templates.map(template => (
-                    <Option
-                      key={template.id}
-                      value={template.id}
-                      style={{
-                        color: template.is_active ? 'inherit' : '#999',
-                        fontStyle: template.is_active ? 'normal' : 'italic',
-                      }}
-                    >
-                      {template.name} - {template.version}
-                      {!template.is_active && ' (архивная версия)'}
-                    </Option>
-                  ))}
+                  {templates.length > 0
+                    ? templates.map(template => (
+                        <Option
+                          key={template.id}
+                          value={template.id}
+                          style={{
+                            color: template.is_active ? 'inherit' : '#999',
+                            fontStyle: template.is_active ? 'normal' : 'italic',
+                          }}
+                        >
+                          {template.name} - {template.version}
+                          {!template.is_active && ' (архивная версия)'}
+                        </Option>
+                      ))
+                    : null}
                 </Select>
                 {errors.excel_template && (
                   <div className="error-message">{errors.excel_template}</div>

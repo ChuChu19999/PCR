@@ -2,8 +2,11 @@ import React, { useState, useEffect } from 'react';
 import Modal from '../ui/Modal';
 import axios from 'axios';
 import dayjs from 'dayjs';
-import { Input, Form } from 'antd';
+import { Input, Form, Select, Spin, Typography } from 'antd';
 import './SaveProtocolCalculationModal.css';
+
+const { Option } = Select;
+const { Text } = Typography;
 
 const CONVERGENCE_MAPPING = {
   unsatisfactory: 'Неудовлетворительно',
@@ -26,11 +29,18 @@ const SaveProtocolCalculationModal = ({
   const [error, setError] = useState(null);
   const [executor, setExecutor] = useState('');
   const [executorError, setExecutorError] = useState('');
+  const [equipment, setEquipment] = useState([]);
+  const [selectedEquipment, setSelectedEquipment] = useState([]);
+  const [loadingEquipment, setLoadingEquipment] = useState(false);
+  const [equipmentError, setEquipmentError] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       setExecutor('');
       setExecutorError('');
+      setSelectedEquipment([]);
+      setEquipmentError('');
+      fetchEquipment();
       console.log('SaveProtocolCalculationModal - входящие данные:', {
         calculationResult,
         currentMethod,
@@ -50,6 +60,26 @@ const SaveProtocolCalculationModal = ({
     departmentId,
   ]);
 
+  const fetchEquipment = async () => {
+    try {
+      setLoadingEquipment(true);
+      const params = new URLSearchParams({
+        laboratory: laboratoryId,
+        ...(departmentId && { department: departmentId }),
+      });
+
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/equipment/active_equipment/?${params}`
+      );
+      setEquipment(response.data);
+    } catch (error) {
+      console.error('Ошибка при загрузке оборудования:', error);
+      setEquipmentError('Не удалось загрузить список оборудования');
+    } finally {
+      setLoadingEquipment(false);
+    }
+  };
+
   const handleSave = async () => {
     try {
       // Проверяем заполнение исполнителя
@@ -65,7 +95,14 @@ const SaveProtocolCalculationModal = ({
         return;
       }
 
+      // Проверяем выбор оборудования
+      if (selectedEquipment.length === 0) {
+        setEquipmentError('Необходимо выбрать хотя бы один прибор');
+        return;
+      }
+
       setExecutorError('');
+      setEquipmentError('');
       setLoading(true);
       setError(null);
 
@@ -93,6 +130,7 @@ const SaveProtocolCalculationModal = ({
 
       const requestData = {
         input_data: calculationResult.input_data || {},
+        equipment_data: selectedEquipment.map(id => ({ id })),
         unit: currentMethod.unit,
         laboratory_activity_date: calculationResult.laboratory_activity_date
           ? dayjs(calculationResult.laboratory_activity_date).format('YYYY-MM-DD')
@@ -106,6 +144,12 @@ const SaveProtocolCalculationModal = ({
         measurement_error: measurement_error,
       };
 
+      console.log('Подготовленные данные для отправки:', {
+        selectedEquipment,
+        equipmentData: requestData.equipment_data,
+        fullRequestData: requestData,
+      });
+
       const requiredFields = {
         Результат: requestData.result,
         'ID протокола': requestData.protocol_id,
@@ -113,6 +157,7 @@ const SaveProtocolCalculationModal = ({
         'ID лаборатории': requestData.laboratory,
         Дата: requestData.laboratory_activity_date,
         Исполнитель: requestData.executor,
+        Оборудование: requestData.equipment_data.length > 0,
       };
 
       const missingFields = Object.entries(requiredFields)
@@ -121,14 +166,16 @@ const SaveProtocolCalculationModal = ({
 
       if (missingFields.length > 0) {
         const errorMsg = `Отсутствуют обязательные поля: ${missingFields.join(', ')}`;
-        console.error(errorMsg);
+        console.error('Ошибка валидации:', errorMsg);
         setError(errorMsg);
         return;
       }
 
-      console.log('Отправляемые данные на сервер:', JSON.stringify(requestData, null, 2));
-      console.log('Значение поля executor:', requestData.executor);
-      console.log('Тип данных executor:', typeof requestData.executor);
+      console.log('Отправка запроса на сервер:', {
+        url: `${import.meta.env.VITE_API_URL}/api/save-calculation/`,
+        method: 'POST',
+        data: requestData,
+      });
 
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/save-calculation/`,
@@ -139,6 +186,11 @@ const SaveProtocolCalculationModal = ({
           },
         }
       );
+
+      console.log('Ответ от сервера:', {
+        status: response.status,
+        data: response.data,
+      });
 
       if (response.data) {
         console.log('Успешный ответ от сервера:', response.data);
@@ -160,6 +212,12 @@ const SaveProtocolCalculationModal = ({
             Array.isArray(error.response.data.executor)
               ? error.response.data.executor[0]
               : error.response.data.executor
+          );
+        } else if (error.response.data.equipment_data) {
+          setEquipmentError(
+            Array.isArray(error.response.data.equipment_data)
+              ? error.response.data.equipment_data[0]
+              : error.response.data.equipment_data
           );
         } else {
           const errorMessage =
@@ -183,7 +241,7 @@ const SaveProtocolCalculationModal = ({
       header="Подтверждение сохранения"
       onClose={onClose}
       onSave={handleSave}
-      style={{ width: '500px' }}
+      style={{ width: '600px' }}
       loading={loading}
     >
       <div className="save-protocol-calculation-form">
@@ -204,6 +262,55 @@ const SaveProtocolCalculationModal = ({
               style={{ width: '100%' }}
               maxLength={100}
             />
+          </Form.Item>
+
+          <Form.Item
+            label="Использованное оборудование"
+            required
+            validateStatus={equipmentError ? 'error' : ''}
+            help={equipmentError}
+          >
+            {loadingEquipment ? (
+              <div style={{ textAlign: 'center', padding: '10px' }}>
+                <Spin size="small" />
+              </div>
+            ) : (
+              <>
+                <Select
+                  mode="multiple"
+                  placeholder="Выберите оборудование"
+                  value={selectedEquipment}
+                  onChange={value => {
+                    setSelectedEquipment(value);
+                    setEquipmentError('');
+                  }}
+                  style={{ width: '100%' }}
+                  optionFilterProp="children"
+                  showSearch={false}
+                  listHeight={110}
+                  maxTagCount="responsive"
+                  virtual={false}
+                  popupClassName="equipment-select-dropdown"
+                >
+                  {equipment.map(item => (
+                    <Option key={item.id} value={item.id}>
+                      <div>
+                        <Text>{item.name}</Text>
+                        <br />
+                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                          {`Зав. № ${item.serial_number}`}
+                        </Text>
+                      </div>
+                    </Option>
+                  ))}
+                </Select>
+                {equipment.length === 0 && !loadingEquipment && (
+                  <Text type="secondary" style={{ display: 'block', marginTop: '8px' }}>
+                    Нет доступного оборудования
+                  </Text>
+                )}
+              </>
+            )}
           </Form.Item>
         </Form>
 

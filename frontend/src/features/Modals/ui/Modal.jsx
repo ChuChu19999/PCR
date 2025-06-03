@@ -21,6 +21,7 @@ const Modal = ({
   onGenerate,
   generateButtonText = 'Сформировать протокол',
   generateLoading = false,
+  extraButtons,
 }) => {
   const [isLoading, setLoading] = useState({
     loading: false,
@@ -72,6 +73,7 @@ const Modal = ({
         {children}
 
         <div className="body-buttons" style={{ marginTop: '0' }}>
+          {extraButtons}
           {onDelete && (
             <Button
               danger

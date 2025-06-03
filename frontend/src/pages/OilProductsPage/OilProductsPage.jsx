@@ -1477,7 +1477,7 @@ const OilProductsPage = () => {
                           onChange={value => setRegistrationNumber(value)}
                           onSearch={handleRegistrationSearch}
                           options={registrationOptions}
-                          placeholder="Введите регистрационный номер"
+                          placeholder="Введите регистрационный номер пробы"
                           style={{ width: '250px', fontFamily: 'HeliosCondC' }}
                         />
                         <Button
@@ -1498,7 +1498,7 @@ const OilProductsPage = () => {
                               setLaboratoryActivityDate(date);
                               setDateError('');
                             }}
-                            placeholder="Дата лабораторной деятельности"
+                            placeholder="Дата лаб. деятельности"
                             style={{
                               width: '100%',
                               borderColor: dateError ? '#ff4d4f' : undefined,

@@ -319,25 +319,8 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
   const handleSave = async () => {
     try {
       setLoading(true);
-      if (selectedSection.id === 'accreditation' && activeTemplate) {
-        const headerRow = parseInt(accreditationHeaderRow);
-        if (isNaN(headerRow) || headerRow < 1) {
-          message.error('Введите корректный номер строки (положительное целое число)');
-          return;
-        }
 
-        const response = await axios.patch(
-          `${import.meta.env.VITE_API_URL}/api/excel-templates/${activeTemplate.id}/update_accreditation_header_row/`,
-          { accreditation_header_row: headerRow }
-        );
-
-        // Обновляем текущий шаблон без изменения версии
-        setActiveTemplate(response.data);
-        message.success('Номер строки шапки аккредитации успешно сохранен');
-        onClose();
-        return;
-      }
-
+      // Если создаем новый шаблон
       if (isCreatingNew) {
         if (!newTemplateName.trim()) {
           message.error('Введите название шаблона');
@@ -395,6 +378,32 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
         return;
       }
 
+      // Если не выбрана секция, показываем сообщение
+      if (!selectedSection) {
+        message.info('Выберите раздел для редактирования');
+        return;
+      }
+
+      // Обработка секции аккредитации
+      if (selectedSection.id === 'accreditation' && activeTemplate) {
+        const headerRow = parseInt(accreditationHeaderRow);
+        if (isNaN(headerRow) || headerRow < 1) {
+          message.error('Введите корректный номер строки (положительное целое число)');
+          return;
+        }
+
+        const response = await axios.patch(
+          `${import.meta.env.VITE_API_URL}/api/excel-templates/${activeTemplate.id}/update_accreditation_header_row/`,
+          { accreditation_header_row: headerRow }
+        );
+
+        setActiveTemplate(response.data);
+        message.success('Номер строки шапки аккредитации успешно сохранен');
+        onClose();
+        return;
+      }
+
+      // Обработка секции условий отбора
       if (selectedSection.id === 'selection_conditions') {
         try {
           console.log('=== Отправка условий отбора на сервер ===');
@@ -421,42 +430,45 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
         }
       }
 
-      console.log('Отправляемые данные при обновлении шаблона:', {
-        data: excelData,
-        styles: cellStyles,
-        type: selectedType,
-        section: selectedSection?.id,
-        templateId: activeTemplate?.id,
-      });
+      // Обработка секции шапки (header)
+      if (selectedSection.id === 'header') {
+        console.log('Отправляемые данные при обновлении шаблона:', {
+          data: excelData,
+          styles: cellStyles,
+          type: selectedType,
+          section: selectedSection.id,
+          templateId: activeTemplate?.id,
+        });
 
-      const formData = new FormData();
-      formData.append('data', JSON.stringify(excelData));
-      formData.append('styles', JSON.stringify(cellStyles));
-      formData.append('template_id', activeTemplate.id);
-      formData.append('section', selectedSection.id);
+        const formData = new FormData();
+        formData.append('data', JSON.stringify(excelData));
+        formData.append('styles', JSON.stringify(cellStyles));
+        formData.append('template_id', activeTemplate.id);
+        formData.append('section', selectedSection.id);
 
-      console.log('FormData при обновлении содержит:');
-      for (let pair of formData.entries()) {
-        console.log(pair[0] + ':', pair[1]);
+        console.log('FormData при обновлении содержит:');
+        for (let pair of formData.entries()) {
+          console.log(pair[0] + ':', pair[1]);
+        }
+
+        const response = await axios.post(
+          `${import.meta.env.VITE_API_URL}/api/save-excel/`,
+          formData
+        );
+        console.log('Ответ сервера при сохранении:', response.data);
+
+        if (response.data.error) {
+          throw new Error(response.data.error);
+        }
+
+        // Обновляем templateId на новую версию
+        if (response.data.template_id) {
+          handleDataChange(excelData, response.data.template_id);
+        }
+
+        message.success('Изменения сохранены');
+        onClose();
       }
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/save-excel/`,
-        formData
-      );
-      console.log('Ответ сервера при сохранении:', response.data);
-
-      if (response.data.error) {
-        throw new Error(response.data.error);
-      }
-
-      // Обновляем templateId на новую версию
-      if (response.data.template_id) {
-        handleDataChange(excelData, response.data.template_id);
-      }
-
-      message.success('Изменения сохранены');
-      onClose();
     } catch (error) {
       console.error('Ошибка при сохранении:', error);
       message.error('Ошибка при сохранении изменений');

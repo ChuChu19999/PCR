@@ -547,6 +547,13 @@ class Calculation(BaseModel):
         help_text="Входные данные для расчета",
         default=dict,
     )
+    equipment_data = models.JSONField(
+        verbose_name="Данные об использованном оборудовании",
+        help_text="Список ID приборов",
+        default=list,
+        null=True,
+        blank=True,
+    )
     result = models.CharField(
         max_length=255,
         verbose_name="Результат",
@@ -644,6 +651,118 @@ class Calculation(BaseModel):
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
+
+
+class Equipment(BaseModel):
+    class EquipmentType(models.TextChoices):
+        MEASURING_INSTRUMENT = "measuring_instrument", "Средство измерения"
+        TEST_EQUIPMENT = "test_equipment", "Испытательное оборудование"
+
+    type = models.CharField(
+        max_length=20,
+        choices=EquipmentType.choices,
+        verbose_name="Тип оборудования",
+        help_text="Тип прибора или оборудования",
+        db_index=True,
+    )
+    name = models.CharField(
+        max_length=255,
+        verbose_name="Наименование",
+        help_text="Наименование прибора или оборудования",
+        db_index=True,
+    )
+    serial_number = models.CharField(
+        max_length=100,
+        verbose_name="Заводской номер",
+        help_text="Заводской номер прибора или оборудования",
+    )
+    verification_info = models.CharField(
+        max_length=255,
+        verbose_name="Сведения о результатах поверки",
+        help_text="Сведения о результатах поверки",
+    )
+    verification_date = models.DateField(
+        verbose_name="Дата поверки",
+        help_text="Дата поверки",
+    )
+    verification_end_date = models.DateField(
+        verbose_name="Дата окончания поверки",
+        help_text="Дата окончания срока действия поверки",
+    )
+    laboratory = models.ForeignKey(
+        Laboratory,
+        on_delete=models.CASCADE,
+        related_name="equipment",
+        verbose_name="Лаборатория",
+        help_text="Лаборатория, к которой привязан прибор",
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        related_name="equipment",
+        verbose_name="Подразделение",
+        help_text="Подразделение, к которому привязан прибор",
+        null=True,
+        blank=True,
+    )
+    version = models.CharField(
+        max_length=8,
+        verbose_name="Версия",
+        help_text="Версия прибора (например, v1)",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Активен",
+        help_text="Указывает, является ли версия прибора активной",
+        db_index=True,
+    )
+
+    class Meta:
+        verbose_name = "Прибор"
+        verbose_name_plural = "Приборы"
+        ordering = ("name", "-version")
+        indexes = [
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["updated_at"]),
+            models.Index(fields=["verification_end_date"]),
+        ]
+
+    def __str__(self):
+        department_info = f" ({self.department.name})" if self.department else ""
+        return f"{self.name} - {self.version} - {self.laboratory.name}{department_info}"
+
+    def clean(self):
+        if self.department and self.department.laboratory != self.laboratory:
+            raise ValidationError(
+                {
+                    "department": "Подразделение должно принадлежать выбранной лаборатории"
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_next_version(cls, name):
+        """
+        Получает следующую версию для прибора с указанным именем.
+        Например, если последняя версия v1, вернет v2.
+        """
+        latest = cls.objects.filter(name=name).order_by("-version").first()
+        if not latest:
+            return "v1"
+
+        current_num = int(latest.version[1:])
+        return f"v{current_num + 1}"
+
+    def deactivate(self):
+        """
+        Деактивирует текущий прибор и возвращает следующую версию.
+        """
+        self.is_active = False
+        self.save()
+        return self.get_next_version(self.name)
 
 
 class ExcelTemplate(BaseModel):
