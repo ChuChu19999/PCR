@@ -218,6 +218,36 @@ class ExcelTemplateViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(template)
         return Response(serializer.data)
 
+    @action(detail=False, methods=["get"], url_path="by-laboratory")
+    def by_laboratory(self, request):
+        """
+        Получение шаблонов по лаборатории и подразделению.
+        Если подразделение указано, возвращает шаблоны этого подразделения и общие шаблоны лаборатории.
+        Если подразделение не указано, возвращает только общие шаблоны лаборатории.
+        """
+        laboratory = request.query_params.get("laboratory")
+        department = request.query_params.get("department")
+
+        if not laboratory:
+            return Response(
+                {"error": "Необходимо указать лабораторию"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        queryset = self.get_queryset().filter(laboratory=laboratory)
+
+        if department:
+            queryset = queryset.filter(
+                models.Q(department=department) | models.Q(department__isnull=True)
+            )
+        else:
+            queryset = queryset.filter(department__isnull=True)
+
+        queryset = queryset.order_by("name", "-version")
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])

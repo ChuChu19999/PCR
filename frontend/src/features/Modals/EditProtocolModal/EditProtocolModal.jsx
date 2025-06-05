@@ -65,6 +65,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [templates, setTemplates] = useState([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
   const [branches, setBranches] = useState([]);
   const [samplingLocations, setSamplingLocations] = useState([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
@@ -86,8 +87,54 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
   const branchSearchRef = useRef(null);
   const locationSearchRef = useRef(null);
 
+  const [laboratories, setLaboratories] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [laboratoriesLoading, setLaboratoriesLoading] = useState(false);
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
+
+  const fetchLaboratories = async () => {
+    try {
+      setLaboratoriesLoading(true);
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
+      setLaboratories(response.data.filter(lab => !lab.is_deleted));
+    } catch (error) {
+      console.error('Ошибка при загрузке лабораторий:', error);
+      message.error('Не удалось загрузить список лабораторий');
+    } finally {
+      setLaboratoriesLoading(false);
+    }
+  };
+
+  const fetchDepartments = async laboratoryId => {
+    try {
+      setDepartmentsLoading(true);
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/departments/by_laboratory/?laboratory_id=${laboratoryId}`
+      );
+      setDepartments(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Ошибка при загрузке подразделений:', error);
+      message.error('Не удалось загрузить список подразделений');
+      setDepartments([]);
+    } finally {
+      setDepartmentsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchTemplates();
+    fetchLaboratories();
+  }, []);
+
+  useEffect(() => {
+    if (formData.laboratory) {
+      fetchDepartments(formData.laboratory);
+    } else {
+      setDepartments([]);
+      setFormData(prev => ({ ...prev, department: null }));
+    }
+  }, [formData.laboratory]);
+
+  useEffect(() => {
     if (protocol) {
       setFormData({
         ...protocol,
@@ -98,6 +145,11 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       setBranchSearchValue(protocol.branch || '');
       setLocationSearchValue(protocol.sampling_location_detail || '');
       fetchCalculations(protocol.id);
+
+      // Загружаем шаблоны, если есть лаборатория
+      if (protocol.laboratory) {
+        fetchTemplates(protocol.laboratory, protocol.department);
+      }
     }
   }, [protocol]);
 
@@ -155,44 +207,78 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     };
   }, []);
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = async (laboratoryId, departmentId = null) => {
     try {
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/excel-templates/`);
-      const allTemplates = response.data;
-
-      // Фильтруем шаблоны по лаборатории и подразделению протокола
-      const filteredTemplates = allTemplates.filter(template => {
-        const matchesLaboratory = template.laboratory === protocol.laboratory;
-        if (protocol.department) {
-          return matchesLaboratory && template.department === protocol.department;
+      setTemplatesLoading(true);
+      const params = { laboratory: laboratoryId };
+      if (departmentId) {
+        params.department = departmentId;
+      }
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/excel-templates/by-laboratory/`,
+        {
+          params,
         }
-        return matchesLaboratory && !template.department;
-      });
-
-      // Сортируем шаблоны по имени и версии
-      const sortedTemplates = filteredTemplates.sort((a, b) => {
-        if (a.name !== b.name) {
-          return a.name.localeCompare(b.name);
-        }
-        // Извлекаем номер версии и сравниваем как числа
-        const versionA = parseInt(a.version.replace('v', ''));
-        const versionB = parseInt(b.version.replace('v', ''));
-        return versionB - versionA; // Сортировка по убыванию версии
-      });
-
-      setTemplates(sortedTemplates);
+      );
+      setTemplates(response.data);
     } catch (error) {
       console.error('Ошибка при загрузке шаблонов:', error);
       message.error('Не удалось загрузить список шаблонов');
+    } finally {
+      setTemplatesLoading(false);
     }
   };
 
   const handleInputChange = field => e => {
     const value = e?.target ? e.target.value : e;
-    setFormData(prev => ({
-      ...prev,
-      [field]: value,
-    }));
+
+    if (field === 'laboratory') {
+      // При смене лаборатории сбрасываем подразделение и шаблон
+      setFormData(prev => ({
+        ...prev,
+        [field]: value,
+        department: null,
+        excel_template: undefined,
+        selection_conditions: null,
+      }));
+      // Загружаем подразделения и шаблоны при выборе лаборатории
+      if (value) {
+        fetchDepartments(value);
+        fetchTemplates(value);
+      } else {
+        setDepartments([]);
+        setTemplates([]);
+      }
+    } else if (field === 'department') {
+      // При смене подразделения сбрасываем шаблон
+      setFormData(prev => ({
+        ...prev,
+        [field]: value,
+        excel_template: undefined,
+        selection_conditions: null,
+      }));
+      // Обновляем список шаблонов при выборе подразделения
+      if (value) {
+        fetchTemplates(formData.laboratory, value);
+      } else {
+        fetchTemplates(formData.laboratory);
+      }
+    } else if (
+      field === 'test_protocol_date' ||
+      field === 'sampling_date' ||
+      field === 'receiving_date'
+    ) {
+      setFormData(prev => ({
+        ...prev,
+        [field]: value ? dayjs(value) : null,
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [field]: value,
+      }));
+    }
+
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
@@ -222,7 +308,17 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
 
   const handleSave = async () => {
     try {
+      // Проверяем обязательность подразделения
+      if (formData.laboratory && departments.length > 0 && !formData.department) {
+        setErrors(prev => ({
+          ...prev,
+          department: 'В выбранной лаборатории необходимо указать подразделение',
+        }));
+        return;
+      }
+
       setLoading(true);
+
       const updateData = {
         test_protocol_number: formData.test_protocol_number || '',
         test_protocol_date: formData.test_protocol_date?.format('YYYY-MM-DD') || null,
@@ -231,16 +327,19 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
         laboratory_location: formData.laboratory_location || '',
         sampling_date: formData.sampling_date?.format('YYYY-MM-DD') || null,
         receiving_date: formData.receiving_date?.format('YYYY-MM-DD') || null,
-        excel_template: formData.excel_template,
-        selection_conditions: formData.selection_conditions || [],
         branch: formData.branch || '',
         sampling_location_detail: formData.sampling_location_detail || '',
         phone: formData.phone || '',
+        laboratory: formData.laboratory || null,
+        // Явно указываем department и excel_template как null если нет подразделений
+        department: departments.length > 0 ? formData.department : null,
+        excel_template: formData.excel_template || null,
+        selection_conditions: formData.selection_conditions || [],
       };
 
-      // Удаляем undefined и null значения из объекта
+      // Удаляем undefined значения из объекта
       Object.keys(updateData).forEach(key => {
-        if (updateData[key] === undefined || updateData[key] === null) {
+        if (updateData[key] === undefined) {
           delete updateData[key];
         }
       });
@@ -984,17 +1083,64 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
               </div>
 
               <div className="form-group">
-                <label>Шаблон протокола</label>
+                <label>
+                  Лаборатория <span className="required">*</span>
+                </label>
                 <Select
-                  value={formData.excel_template}
-                  onChange={handleTemplateChange}
-                  placeholder="Выберите шаблон протокола"
-                  status={errors.excel_template ? 'error' : ''}
+                  value={formData.laboratory}
+                  onChange={value => handleInputChange('laboratory')(value)}
+                  placeholder="Выберите лабораторию"
+                  loading={laboratoriesLoading}
+                  status={errors.laboratory ? 'error' : ''}
                   style={{ width: '100%' }}
-                  loading={templates.length === 0}
                 >
-                  {templates.length > 0
-                    ? templates.map(template => (
+                  {laboratories.map(lab => (
+                    <Option key={lab.id} value={lab.id}>
+                      {lab.name}
+                    </Option>
+                  ))}
+                </Select>
+                {errors.laboratory && <div className="error-message">{errors.laboratory}</div>}
+              </div>
+
+              {departments.length > 0 && (
+                <div className="form-group">
+                  <label>
+                    Подразделение <span className="required">*</span>
+                  </label>
+                  <Select
+                    value={formData.department}
+                    onChange={value => handleInputChange('department')(value)}
+                    placeholder="Выберите подразделение"
+                    loading={departmentsLoading}
+                    disabled={!formData.laboratory}
+                    status={errors.department ? 'error' : ''}
+                    style={{ width: '100%' }}
+                  >
+                    {departments.map(dept => (
+                      <Option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </Option>
+                    ))}
+                  </Select>
+                  {errors.department && <div className="error-message">{errors.department}</div>}
+                </div>
+              )}
+
+              {/* Показываем шаблон только если выбрана лаборатория и подразделение (если требуется) */}
+              {formData.laboratory && (!departments.length || formData.department) && (
+                <>
+                  <div className="form-group">
+                    <label>Шаблон протокола</label>
+                    <Select
+                      value={formData.excel_template}
+                      onChange={handleTemplateChange}
+                      placeholder="Выберите шаблон протокола"
+                      loading={templatesLoading}
+                      status={errors.excel_template ? 'error' : ''}
+                      style={{ width: '100%' }}
+                    >
+                      {templates.map(template => (
                         <Option
                           key={template.id}
                           value={template.id}
@@ -1006,19 +1152,20 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                           {template.name} - {template.version}
                           {!template.is_active && ' (архивная версия)'}
                         </Option>
-                      ))
-                    : null}
-                </Select>
-                {errors.excel_template && (
-                  <div className="error-message">{errors.excel_template}</div>
-                )}
-              </div>
+                      ))}
+                    </Select>
+                    {errors.excel_template && (
+                      <div className="error-message">{errors.excel_template}</div>
+                    )}
+                  </div>
 
-              {formData.excel_template && (
-                <SelectionConditionsForm
-                  conditions={formData.selection_conditions}
-                  onChange={handleSelectionConditionsChange}
-                />
+                  {formData.excel_template && (
+                    <SelectionConditionsForm
+                      conditions={formData.selection_conditions}
+                      onChange={handleSelectionConditionsChange}
+                    />
+                  )}
+                </>
               )}
             </>
           )}

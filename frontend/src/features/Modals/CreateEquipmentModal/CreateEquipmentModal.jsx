@@ -120,6 +120,11 @@ const CreateEquipmentModal = ({ isOpen, onClose, onSuccess }) => {
       }
     });
 
+    // Проверяем обязательность подразделения
+    if (formData.laboratory && departments.length > 0 && !formData.department) {
+      newErrors.department = 'В выбранной лаборатории необходимо указать подразделение';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -326,25 +331,29 @@ const CreateEquipmentModal = ({ isOpen, onClose, onSuccess }) => {
           {errors.laboratory && <div className="error-message">{errors.laboratory}</div>}
         </div>
 
-        <div className="form-group">
-          <label>Подразделение</label>
-          <Select
-            value={formData.department}
-            onChange={value => handleInputChange('department')(value)}
-            placeholder="Выберите подразделение"
-            loading={departmentsLoading}
-            disabled={!formData.laboratory}
-            status={errors.department ? 'error' : ''}
-            style={{ width: '100%' }}
-          >
-            {departments.map(dept => (
-              <Option key={dept.id} value={dept.id}>
-                {dept.name}
-              </Option>
-            ))}
-          </Select>
-          {errors.department && <div className="error-message">{errors.department}</div>}
-        </div>
+        {departments.length > 0 && (
+          <div className="form-group">
+            <label>
+              Подразделение <span className="required">*</span>
+            </label>
+            <Select
+              value={formData.department}
+              onChange={value => handleInputChange('department')(value)}
+              placeholder="Выберите подразделение"
+              loading={departmentsLoading}
+              disabled={!formData.laboratory}
+              status={errors.department ? 'error' : ''}
+              style={{ width: '100%' }}
+            >
+              {departments.map(dept => (
+                <Option key={dept.id} value={dept.id}>
+                  {dept.name}
+                </Option>
+              ))}
+            </Select>
+            {errors.department && <div className="error-message">{errors.department}</div>}
+          </div>
+        )}
       </div>
     </Modal>
   );

@@ -65,6 +65,7 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [templates, setTemplates] = useState([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
   const [branches, setBranches] = useState([]);
   const [samplingLocations, setSamplingLocations] = useState([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
@@ -84,7 +85,6 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
 
   useEffect(() => {
     fetchLaboratories();
-    fetchTemplates();
   }, []);
 
   useEffect(() => {
@@ -112,13 +112,25 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
     };
   }, []);
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = async (laboratoryId, departmentId = null) => {
     try {
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/excel-templates/`);
-      setTemplates(response.data.filter(template => template.is_active));
+      setTemplatesLoading(true);
+      const params = { laboratory: laboratoryId };
+      if (departmentId) {
+        params.department = departmentId;
+      }
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/excel-templates/by-laboratory/`,
+        {
+          params,
+        }
+      );
+      setTemplates(response.data);
     } catch (error) {
       console.error('Ошибка при загрузке шаблонов:', error);
       message.error('Не удалось загрузить список шаблонов');
+    } finally {
+      setTemplatesLoading(false);
     }
   };
 
@@ -154,8 +166,40 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
   const handleInputChange = field => e => {
     const value = e?.target ? e.target.value : e;
 
-    // Специальная обработка для дат
-    if (field === 'test_protocol_date' || field === 'sampling_date' || field === 'receiving_date') {
+    if (field === 'laboratory') {
+      setFormData(prev => ({
+        ...prev,
+        [field]: value,
+        department: null,
+        excel_template: undefined,
+        selection_conditions: null,
+      }));
+      // Загружаем подразделения и шаблоны при выборе лаборатории
+      if (value) {
+        fetchDepartments(value);
+        fetchTemplates(value);
+      } else {
+        setDepartments([]);
+        setTemplates([]);
+      }
+    } else if (field === 'department') {
+      setFormData(prev => ({
+        ...prev,
+        [field]: value,
+        excel_template: undefined,
+        selection_conditions: null,
+      }));
+      // Обновляем список шаблонов при выборе подразделения
+      if (value) {
+        fetchTemplates(formData.laboratory, value);
+      } else {
+        fetchTemplates(formData.laboratory);
+      }
+    } else if (
+      field === 'test_protocol_date' ||
+      field === 'sampling_date' ||
+      field === 'receiving_date'
+    ) {
       setFormData(prev => ({
         ...prev,
         [field]: value ? dayjs(value) : null,
@@ -209,6 +253,11 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
         newErrors[field] = 'Это поле обязательно для заполнения';
       }
     });
+
+    // Проверяем обязательность подразделения
+    if (formData.laboratory && departments.length > 0 && !formData.department) {
+      newErrors.department = 'В выбранной лаборатории необходимо указать подразделение';
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -700,33 +749,6 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
 
         <div className="form-group">
           <label>
-            Шаблон протокола <span className="required">*</span>
-          </label>
-          <Select
-            value={formData.excel_template}
-            onChange={handleTemplateChange}
-            placeholder="Выберите шаблон протокола"
-            status={errors.excel_template ? 'error' : ''}
-            style={{ width: '100%' }}
-          >
-            {templates.map(template => (
-              <Option key={template.id} value={template.id}>
-                {template.name} - {template.version}
-              </Option>
-            ))}
-          </Select>
-          {errors.excel_template && <div className="error-message">{errors.excel_template}</div>}
-        </div>
-
-        {formData.excel_template && (
-          <SelectionConditionsForm
-            conditions={formData.selection_conditions}
-            onChange={handleSelectionConditionsChange}
-          />
-        )}
-
-        <div className="form-group">
-          <label>
             Лаборатория <span className="required">*</span>
           </label>
           <Select
@@ -746,26 +768,72 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
           {errors.laboratory && <div className="error-message">{errors.laboratory}</div>}
         </div>
 
-        <div className="form-group">
-          <label>Подразделение</label>
-          <Select
-            value={formData.department}
-            onChange={value => handleInputChange('department')(value)}
-            placeholder="Выберите подразделение"
-            loading={departmentsLoading}
-            disabled={!formData.laboratory}
-            status={errors.department ? 'error' : ''}
-            style={{ width: '100%' }}
-          >
-            {Array.isArray(departments) &&
-              departments.map(dept => (
+        {departments.length > 0 && (
+          <div className="form-group">
+            <label>
+              Подразделение <span className="required">*</span>
+            </label>
+            <Select
+              value={formData.department}
+              onChange={value => handleInputChange('department')(value)}
+              placeholder="Выберите подразделение"
+              loading={departmentsLoading}
+              disabled={!formData.laboratory}
+              status={errors.department ? 'error' : ''}
+              style={{ width: '100%' }}
+            >
+              {departments.map(dept => (
                 <Option key={dept.id} value={dept.id}>
                   {dept.name}
                 </Option>
               ))}
-          </Select>
-          {errors.department && <div className="error-message">{errors.department}</div>}
-        </div>
+            </Select>
+            {errors.department && <div className="error-message">{errors.department}</div>}
+          </div>
+        )}
+
+        {/* Показываем шаблон только если выбрана лаборатория и подразделение (если требуется) */}
+        {formData.laboratory && (!departments.length || formData.department) && (
+          <>
+            <div className="form-group">
+              <label>
+                Шаблон протокола <span className="required">*</span>
+              </label>
+              <Select
+                value={formData.excel_template}
+                onChange={handleTemplateChange}
+                placeholder="Выберите шаблон протокола"
+                loading={templatesLoading}
+                status={errors.excel_template ? 'error' : ''}
+                style={{ width: '100%' }}
+              >
+                {templates.map(template => (
+                  <Option
+                    key={template.id}
+                    value={template.id}
+                    style={{
+                      color: template.is_active ? 'inherit' : '#999',
+                      fontStyle: template.is_active ? 'normal' : 'italic',
+                    }}
+                  >
+                    {template.name} - {template.version}
+                    {!template.is_active && ' (архивная версия)'}
+                  </Option>
+                ))}
+              </Select>
+              {errors.excel_template && (
+                <div className="error-message">{errors.excel_template}</div>
+              )}
+            </div>
+
+            {formData.excel_template && (
+              <SelectionConditionsForm
+                conditions={formData.selection_conditions}
+                onChange={handleSelectionConditionsChange}
+              />
+            )}
+          </>
+        )}
       </div>
     </Modal>
   );

@@ -59,6 +59,7 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [accreditationHeaderRow, setAccreditationHeaderRow] = useState('');
+  const [errors, setErrors] = useState({});
 
   // Загрузка списка шаблонов при открытии модального окна
   useEffect(() => {
@@ -318,6 +319,15 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
 
   const handleSave = async () => {
     try {
+      // Проверяем обязательность подразделения
+      if (selectedLaboratory && departments.length > 0 && !selectedDepartment) {
+        setErrors(prev => ({
+          ...prev,
+          department: 'В выбранной лаборатории необходимо указать подразделение',
+        }));
+        return;
+      }
+
       setLoading(true);
 
       // Если создаем новый шаблон
@@ -515,7 +525,9 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
           <div className="new-template-form">
             <div className="form-section">
               <div className="form-group">
-                <label className="form-label">Название шаблона</label>
+                <label className="form-label">
+                  Название шаблона <span className="required">*</span>
+                </label>
                 <Input
                   placeholder="Введите название шаблона"
                   value={newTemplateName}
@@ -527,7 +539,9 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Лаборатория</label>
+                <label className="form-label">
+                  Лаборатория <span className="required">*</span>
+                </label>
                 <Select
                   placeholder="Выберите лабораторию"
                   value={selectedLaboratory}
@@ -551,26 +565,32 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
                 </Select>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Подразделение (необязательно)</label>
-                <Select
-                  placeholder="Выберите подразделение"
-                  value={selectedDepartment}
-                  onChange={value => setSelectedDepartment(value)}
-                  className="template-select-input"
-                  style={{ width: '100%' }}
-                  disabled={!selectedLaboratory}
-                >
-                  {departments.map(dept => (
-                    <Option key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </Option>
-                  ))}
-                </Select>
-              </div>
+              {departments.length > 0 && (
+                <div className="form-group">
+                  <label>
+                    Подразделение <span className="required">*</span>
+                  </label>
+                  <Select
+                    value={selectedDepartment}
+                    onChange={value => setSelectedDepartment(value)}
+                    placeholder="Выберите подразделение"
+                    disabled={!selectedLaboratory}
+                    style={{ width: '100%' }}
+                  >
+                    {departments.map(dept => (
+                      <Option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </Option>
+                    ))}
+                  </Select>
+                  {errors.department && <div className="error-message">{errors.department}</div>}
+                </div>
+              )}
 
               <div className="form-group">
-                <label className="form-label">Файл шаблона</label>
+                <label className="form-label">
+                  Файл шаблона <span className="required">*</span>
+                </label>
                 <div className="upload-container">
                   {selectedFile ? (
                     <div className="selected-file">
