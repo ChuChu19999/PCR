@@ -4,6 +4,7 @@ import './App.css';
 import { LicenseManager } from 'ag-grid-enterprise';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
+import { message } from 'antd';
 import { routersData } from './data';
 import Content from './Content/Content';
 import LoadingPage from '../pages/LoadingPage/LoadingPage';
@@ -13,6 +14,15 @@ import LaboratoryPage from '../pages/LaboratoryPage/LaboratoryPage';
 import OilProductsPage from '../pages/OilProductsPage/OilProductsPage.jsx';
 import ResearchMethodPage from '../pages/ResearchMethodPage/ResearchMethodPage.jsx';
 import axios from 'axios';
+
+// Глобальная конфигурация для сообщений
+message.config({
+  top: 20,
+  duration: 3,
+  maxCount: 3,
+  rtl: false,
+  getContainer: () => document.body,
+});
 
 LicenseManager.setLicenseKey('BOARD4ALL_NDEwMjM1MTIwMDAwMA==8f4481b5cc626ad79fe91bc5f4e52e3d');
 

@@ -1,5 +1,5 @@
-/* Стили для скроллбара */
 * {
+  font-family: 'HeliosCondC' !important;
   scrollbar-width: thin;
   scrollbar-color: #bdbfc1 #dfe9eb;
 }
@@ -43,4 +43,59 @@
 
 ::-webkit-scrollbar-corner {
   background-color: transparent;
+}
+
+/* Стили для сообщений antd */
+.ant-message {
+  position: fixed !important;
+  left: auto !important;
+  transform: none !important;
+  top: 20px !important;
+  right: 20px !important;
+  margin: 0 !important;
+  z-index: 1000;
+}
+
+.ant-message .ant-message-notice {
+  text-align: right;
+  margin-bottom: 8px;
+}
+
+.ant-message-notice-content {
+  font-family: 'HeliosCondC' !important;
+  padding: 12px 20px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  min-width: 240px;
+  position: relative;
+}
+
+.ant-message-custom-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.ant-message-notice-content .anticon {
+  font-size: 16px;
+}
+
+.ant-message-success .anticon {
+  color: #52c41a;
+}
+
+.ant-message-error .anticon {
+  color: #ff4d4f;
+}
+
+.ant-message-warning .anticon {
+  color: #faad14;
+}
+
+.ant-message-info .anticon {
+  color: #1890ff;
 }

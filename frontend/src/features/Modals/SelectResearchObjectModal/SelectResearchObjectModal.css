@@ -55,7 +55,7 @@
 }
 
 .select-research-object-form {
-  padding: 18px;
+  padding: 12px;
   padding-top: 0px;
   padding-bottom: 5px;
 }
@@ -66,7 +66,7 @@
 
 .form-group label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: #333;
   font-weight: 500;
 }
@@ -77,8 +77,8 @@
 
 .select-field .ant-select-selector {
   border-radius: 8px !important;
-  padding: 4px 11px !important;
-  height: 40px !important;
+  padding: 2px 11px !important;
+  height: 32px !important;
   display: flex;
   align-items: center;
 }

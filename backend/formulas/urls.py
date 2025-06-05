@@ -14,8 +14,6 @@ from .views.excel_views import (
     ExcelTemplateViewSet,
     get_excel_styles,
     save_excel,
-    get_sampling_locations,
-    get_branches,
 )
 from .views.equipment_views import EquipmentViewSet
 from .views.user_views import UserViewSet
@@ -27,6 +25,7 @@ from .api.calculation_api import (
     get_registration_numbers,
 )
 from .api.fixtures_api import get_fixtures
+from .api.protocol_api import get_sampling_locations, get_branches
 from .services.protocol_generator import generate_protocol_excel
 
 

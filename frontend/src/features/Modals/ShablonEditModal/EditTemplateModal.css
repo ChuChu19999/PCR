@@ -128,32 +128,33 @@
 .upload-container {
   background: #fafafa;
   border: 1px dashed #e8e8e8;
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0px;
   transition: all 0.3s;
   width: 100%;
 }
 
 .ant-upload-drag {
-  border: 2px dashed #d9d9d9;
-  border-radius: 8px;
-  background: #fafafa;
-  padding: 32px;
-  transition: all 0.3s;
+  border: none !important;
+  background: transparent !important;
+  padding: 16px !important;
 }
 
-.ant-upload-drag:hover {
-  border-color: #1890ff;
+.ant-upload-drag-icon {
+  color: #1976d2;
+  font-size: 24px;
+  margin-bottom: 8px;
 }
 
 .ant-upload-text {
-  margin: 16px 0;
-  color: rgba(0, 0, 0, 0.85);
-  font-size: 16px;
+  color: #262626;
+  font-size: 14px;
+  margin-bottom: 4px;
 }
 
 .ant-upload-hint {
-  color: rgba(0, 0, 0, 0.45);
+  color: #8c8c8c;
+  font-size: 12px;
 }
 
 .excel-editor {
@@ -215,12 +216,12 @@
 }
 
 .new-template-form {
-  max-width: 800px;
+  max-width: 600px;
   margin: 0 auto;
 }
 
 .form-section {
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .form-section-title {
@@ -232,16 +233,16 @@
 }
 
 .form-group {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   max-width: 100%;
 }
 
 .form-label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: #262626;
   font-weight: 500;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .template-name-input {
@@ -250,9 +251,9 @@
 
 .template-name-input .ant-input {
   width: 100% !important;
-  height: 40px !important;
+  height: 32px !important;
   padding: 4px 11px !important;
-  line-height: 32px !important;
+  line-height: 24px !important;
 }
 
 .template-name-input.ant-input-disabled {
@@ -270,44 +271,14 @@
   background: #f5f5f5;
 }
 
-.ant-upload-drag {
-  border: none !important;
-  background: transparent !important;
-}
-
-.ant-upload-drag-icon {
-  color: #1976d2;
-  font-size: 32px;
-  margin-bottom: 16px;
-}
-
-.ant-upload-text {
-  color: #262626;
-  font-size: 16px;
-  margin-bottom: 8px;
-}
-
-.ant-upload-hint {
-  color: #8c8c8c;
-  font-size: 14px;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding-top: 24px;
-  border-top: 1px solid #f0f0f0;
-}
-
 .selected-file {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 8px 12px;
   background: #fff;
   border: 1px solid #e8e8e8;
-  border-radius: 8px;
+  border-radius: 6px;
   transition: all 0.3s;
 }
 
@@ -319,16 +290,16 @@
 .file-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .file-icon {
-  font-size: 24px;
+  font-size: 20px;
   color: #1976d2;
 }
 
 .file-name {
-  font-size: 14px;
+  font-size: 13px;
   color: #262626;
   font-weight: 500;
 }
@@ -344,18 +315,18 @@
 }
 
 .template-select-input {
-  height: 40px;
-  font-size: 14px;
+  height: 32px;
+  font-size: 13px;
 }
 
 .template-select-input .ant-select-selector {
-  height: 40px !important;
-  padding: 4px 11px !important;
+  height: 32px !important;
+  padding: 0 11px !important;
 }
 
 .template-select-input .ant-select-selection-placeholder,
 .template-select-input .ant-select-selection-item {
-  line-height: 32px !important;
+  line-height: 30px !important;
 }
 
 .template-select-input.ant-select-disabled .ant-select-selector {

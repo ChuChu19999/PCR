@@ -94,6 +94,38 @@
   cursor: default;
 }
 
+.equipment-item {
+  padding: 6px 8px;
+  background-color: #f8fafd;
+  border: 1px solid #e6e9ed;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.equipment-item:last-child {
+  margin-bottom: 0;
+}
+
+.equipment-item:hover {
+  background-color: #f0f5ff;
+  border-color: #d6e4ff;
+}
+
+.equipment-item .equipment-name {
+  font-weight: 500;
+  color: #333;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.equipment-item .equipment-serial {
+  color: #666;
+  font-size: 12px;
+  display: block;
+}
+
 /* Стили для компонентов выбора даты */
 .edit-protocol-form .ant-picker {
   width: 100%;
@@ -388,4 +420,91 @@
 .checkbox-label input[type='checkbox']:disabled + span {
   color: rgba(0, 0, 0, 0.25);
   cursor: not-allowed;
+}
+
+/* Стили для поиска */
+.search-container {
+  position: relative;
+  z-index: 1001;
+}
+
+.search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  max-height: calc(3 * 36px); /* Высота трех элементов (36px каждый) */
+  overflow-y: auto;
+  background-color: #fff;
+  border: 1px solid #d9d9d9;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1002;
+}
+
+.search-option {
+  padding: 8px 12px;
+  height: 36px; /* Фиксированная высота для каждого элемента */
+  cursor: pointer;
+  transition: background-color 0.3s;
+  font-family: 'HeliosCondC';
+  font-size: 13px;
+  color: #333333;
+  background-color: #fff;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.search-option:last-child {
+  border-bottom: none;
+}
+
+.search-option:hover {
+  background-color: #f5f5f5;
+}
+
+.search-loading {
+  padding: 8px 12px;
+  height: 36px;
+  text-align: center;
+  background-color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Стили для скроллбара в выпадающем списке */
+.search-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.search-dropdown::-webkit-scrollbar-track {
+  background: #fff;
+  border-radius: 0;
+}
+
+.search-dropdown::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+}
+
+.search-dropdown::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
+}
+
+/* Обеспечиваем, чтобы другие элементы формы не перекрывали выпадающий список */
+.form-group {
+  position: relative;
+  z-index: 1;
+}
+
+.form-group:has(.search-container) {
+  z-index: 2;
+}
+
+/* Когда дропдаун открыт, увеличиваем z-index родительской группы */
+.form-group:has(.search-dropdown) {
+  z-index: 3;
 }

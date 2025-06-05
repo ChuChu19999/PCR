@@ -105,10 +105,6 @@ const SaveCalculationModal = ({
       newErrors.executor = 'Введите ФИО исполнителя расчета';
     }
 
-    if (!selectedEquipment || selectedEquipment.length === 0) {
-      newErrors.equipment = 'Выберите хотя бы один прибор';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -262,7 +258,6 @@ const SaveCalculationModal = ({
 
           <Form.Item
             label="Использованное оборудование"
-            required
             validateStatus={errors.equipment ? 'error' : ''}
             help={errors.equipment}
           >

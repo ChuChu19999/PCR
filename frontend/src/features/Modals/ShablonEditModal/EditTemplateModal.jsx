@@ -345,17 +345,6 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
           formData.append('department', selectedDepartment);
         }
 
-        console.log('Отправляемые данные при создании шаблона:');
-        console.log('- Название шаблона:', newTemplateName.trim());
-        console.log('- ID лаборатории:', selectedLaboratory);
-        console.log('- ID подразделения:', selectedDepartment || 'не выбрано');
-        console.log('- Файл:', selectedFile);
-
-        console.log('FormData содержит:');
-        for (let pair of formData.entries()) {
-          console.log(pair[0] + ':', pair[1]);
-        }
-
         const response = await axios.post(
           `${import.meta.env.VITE_API_URL}/api/excel-templates/`,
           formData,
@@ -374,7 +363,7 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
         setSelectedDepartment(null);
         message.success('Шаблон успешно создан');
         loadTemplates();
-        onClose();
+        setSelectedSection(null);
         return;
       }
 
@@ -399,16 +388,13 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
 
         setActiveTemplate(response.data);
         message.success('Номер строки шапки аккредитации успешно сохранен');
-        onClose();
+        setSelectedSection(null);
         return;
       }
 
       // Обработка секции условий отбора
       if (selectedSection.id === 'selection_conditions') {
         try {
-          console.log('=== Отправка условий отбора на сервер ===');
-          console.log('Отправляемые данные:', excelData);
-
           const response = await axios.patch(
             `${import.meta.env.VITE_API_URL}/api/excel-templates/${activeTemplate.id}/update_selection_conditions/`,
             { selection_conditions: excelData.selection_conditions }
@@ -416,15 +402,10 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
 
           setActiveTemplate(response.data);
           message.success('Условия отбора успешно обновлены');
-          onClose();
+          setSelectedSection(null);
           return;
         } catch (error) {
           console.error('Ошибка при обновлении условий отбора:', error);
-          console.error('Детали ошибки:', {
-            message: error.message,
-            response: error.response?.data,
-            status: error.response?.status,
-          });
           message.error('Не удалось обновить условия отбора');
           return;
         }
@@ -432,30 +413,16 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
 
       // Обработка секции шапки (header)
       if (selectedSection.id === 'header') {
-        console.log('Отправляемые данные при обновлении шаблона:', {
-          data: excelData,
-          styles: cellStyles,
-          type: selectedType,
-          section: selectedSection.id,
-          templateId: activeTemplate?.id,
-        });
-
         const formData = new FormData();
         formData.append('data', JSON.stringify(excelData));
         formData.append('styles', JSON.stringify(cellStyles));
         formData.append('template_id', activeTemplate.id);
         formData.append('section', selectedSection.id);
 
-        console.log('FormData при обновлении содержит:');
-        for (let pair of formData.entries()) {
-          console.log(pair[0] + ':', pair[1]);
-        }
-
         const response = await axios.post(
           `${import.meta.env.VITE_API_URL}/api/save-excel/`,
           formData
         );
-        console.log('Ответ сервера при сохранении:', response.data);
 
         if (response.data.error) {
           throw new Error(response.data.error);
@@ -467,7 +434,7 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
         }
 
         message.success('Изменения сохранены');
-        onClose();
+        setSelectedSection(null);
       }
     } catch (error) {
       console.error('Ошибка при сохранении:', error);
@@ -554,8 +521,8 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
                   value={newTemplateName}
                   onChange={e => setNewTemplateName(e.target.value)}
                   className="template-name-input"
-                  size="large"
-                  style={{ height: '40px' }}
+                  size="middle"
+                  style={{ height: '32px' }}
                 />
               </div>
 

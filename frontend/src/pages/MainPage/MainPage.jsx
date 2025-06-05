@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PlusOutlined } from '@ant-design/icons';
 import EmptyPageWrapper from './MainPageWrapper';
 import Layout from '../../shared/ui/Layout/Layout';
 import { Button } from '../../shared/ui/Button/Button';
 import EditLaboratoryModal from '../../features/Modals/EditLaboratoryModal/EditLaboratoryModal';
 import AddLaboratoryModal from '../../features/Modals/AddLaboratoryModal/AddLaboratoryModal';
 import DeleteLaboratoryModal from '../../features/Modals/DeleteLaboratoryModal/DeleteLaboratoryModal';
-import EditTemplateModal from '../../features/Modals/ShablonEditModal/EditTemplateModal.jsx';
 import LoadingCard from '../../features/Cards/ui/LoadingCard/LoadingCard';
 import axios from 'axios';
 import './MainPage.css';
@@ -17,7 +17,6 @@ function MainPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [selectedLaboratory, setSelectedLaboratory] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -78,7 +77,6 @@ function MainPage() {
     setIsDeleteModalOpen(false);
     setIsEditModalOpen(false);
     setIsAddModalOpen(false);
-    setIsTemplateModalOpen(false);
     setSelectedLaboratory(null);
   };
 
@@ -107,20 +105,13 @@ function MainPage() {
         <div className="laboratories-container">
           <div className="laboratories-header">
             {Array.isArray(laboratories) && laboratories.length > 0 && (
-              <>
-                <Button
-                  title="Добавить лабораторию"
-                  onClick={() => setIsAddModalOpen(true)}
-                  buttonColor="#0066cc"
-                  type="primary"
-                />
-                <Button
-                  title="Редактировать шаблон"
-                  onClick={() => setIsTemplateModalOpen(true)}
-                  buttonColor="#0066cc"
-                  type="primary"
-                />
-              </>
+              <Button
+                title="Добавить лабораторию"
+                onClick={() => setIsAddModalOpen(true)}
+                buttonColor="#0066cc"
+                type="primary"
+                icon={<PlusOutlined />}
+              />
             )}
           </div>
 
@@ -164,6 +155,7 @@ function MainPage() {
                   onClick={() => setIsAddModalOpen(true)}
                   type="primary"
                   buttonColor="#0066cc"
+                  icon={<PlusOutlined />}
                 />
               </div>
             )}
@@ -188,8 +180,6 @@ function MainPage() {
             onSuccess={handleSuccess}
             laboratory={selectedLaboratory}
           />
-
-          <EditTemplateModal isOpen={isTemplateModalOpen} onClose={handleModalClose} />
         </div>
       </Layout>
     </EmptyPageWrapper>

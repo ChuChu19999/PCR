@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import Layout from '../../shared/ui/Layout/Layout';
-import { Typography, Alert, IconButton, Tooltip, Snackbar } from '@mui/material';
+import { Typography, IconButton, Tooltip } from '@mui/material';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { Form, Input, Button, Select, message, DatePicker } from 'antd';
 import { FormItem } from '../../features/FormItems';
@@ -100,7 +100,6 @@ const ResearchMethodPage = () => {
   const [protocolData, setProtocolData] = useState(null);
   const inputRefs = React.useRef({});
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [isConfirmProtocolModalOpen, setIsConfirmProtocolModalOpen] = useState(false);
 
   useEffect(() => {
@@ -475,10 +474,6 @@ const ResearchMethodPage = () => {
     }
   };
 
-  const handleCloseSnackbar = () => {
-    setSnackbar(prev => ({ ...prev, open: false }));
-  };
-
   const handleOpenSaveModal = () => {
     if (!laboratoryActivityDate) {
       setDateError('Укажите дату лабораторной деятельности');
@@ -567,18 +562,10 @@ const ResearchMethodPage = () => {
       window.URL.revokeObjectURL(url);
 
       setIsConfirmProtocolModalOpen(false);
-      setSnackbar({
-        open: true,
-        message: 'Протокол успешно сформирован',
-        severity: 'success',
-      });
+      message.success('Протокол успешно сформирован');
     } catch (error) {
       console.error('Ошибка при формировании протокола:', error);
-      setSnackbar({
-        open: true,
-        message: 'Не удалось сформировать протокол',
-        severity: 'error',
-      });
+      message.error('Не удалось сформировать протокол');
     }
   };
 
@@ -1280,28 +1267,6 @@ const ResearchMethodPage = () => {
             onSuccess={handleSaveSuccess}
           />
         )}
-
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={6000}
-          onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-          sx={{
-            '& .MuiAlert-root': {
-              width: '100%',
-              maxWidth: '400px',
-            },
-          }}
-        >
-          <Alert
-            onClose={handleCloseSnackbar}
-            severity={snackbar.severity}
-            variant="filled"
-            sx={{ width: '100%' }}
-          >
-            {snackbar.message}
-          </Alert>
-        </Snackbar>
 
         {/* Добавляем модальное окно подтверждения */}
         <ConfirmProtocolModal

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
-import { Typography, Snackbar, Alert, IconButton, Tooltip } from '@mui/material';
+import { Typography, IconButton, Tooltip } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
@@ -66,7 +66,6 @@ const OilProductsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedTab, setSelectedTab] = useState(0);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [researchPageId, setResearchPageId] = useState(null);
   const [calculationResults, setCalculationResults] = useState({});
   const [isCalculating, setIsCalculating] = useState(false);
@@ -232,11 +231,7 @@ const OilProductsPage = () => {
       setCurrentMethod(response.data);
     } catch (error) {
       console.error('Ошибка при загрузке деталей метода:', error);
-      setSnackbar({
-        open: true,
-        message: 'Не удалось загрузить детали метода исследования',
-        severity: 'error',
-      });
+      message.error('Не удалось загрузить детали метода исследования');
     }
   };
 
@@ -277,27 +272,17 @@ const OilProductsPage = () => {
 
   const handleMethodAdded = async newMethod => {
     try {
-      // Перезагружаем все методы и группы для обновления состояния
       await fetchResearchMethods();
-
-      // Получаем актуальный список активных методов после обновления
       const activeMethods = researchMethods.filter(method => method.is_active);
-
-      // Находим индекс нового метода
       const newMethodIndex = activeMethods.findIndex(
         method =>
           method.id === newMethod.id ||
           (method.is_group && method.methods?.some(m => m.id === newMethod.id))
       );
-
-      // Устанавливаем таб на новый метод, если он найден, иначе на последний
       setSelectedTab(newMethodIndex !== -1 ? newMethodIndex : activeMethods.length - 1);
-
-      // Если новый метод найден, загружаем его детали
       if (newMethodIndex !== -1) {
         const method = activeMethods[newMethodIndex];
         if (method.is_group && method.methods?.length > 0) {
-          // Если это группа, загружаем первый метод из группы
           await fetchMethodDetails(researchPageId, method.methods[0].id);
           setCurrentMethod(prev => ({
             ...prev,
@@ -308,46 +293,24 @@ const OilProductsPage = () => {
             },
           }));
         } else {
-          // Если это обычный метод
           await fetchMethodDetails(researchPageId, method.id);
         }
       }
-
-      setSnackbar({
-        open: true,
-        message: 'Метод исследования успешно добавлен',
-        severity: 'success',
-      });
+      message.success('Метод исследования успешно добавлен');
     } catch (error) {
       console.error('Ошибка при обновлении списка методов:', error);
-      setSnackbar({
-        open: true,
-        message: 'Ошибка при обновлении списка методов',
-        severity: 'error',
-      });
+      message.error('Ошибка при обновлении списка методов');
     }
-  };
-
-  const handleCloseSnackbar = () => {
-    setSnackbar(prev => ({ ...prev, open: false }));
   };
 
   const handleHideMethod = async () => {
     try {
-      // Если это группа методов
       if (methodToHide.is_group) {
-        // Получаем ID группы
         const groupId = methodToHide.id.replace('group_', '');
-
-        // Деактивируем группу
         await axios.post(
           `${import.meta.env.VITE_API_URL}/api/research-method-groups/${groupId}/toggle_active/`
         );
-
-        // Получаем ID всех методов в группе
         const methodIds = methodToHide.methods.map(method => method.id);
-
-        // Скрываем каждый метод в группе
         for (const methodId of methodIds) {
           await axios.patch(
             `${import.meta.env.VITE_API_URL}/api/research-pages/${researchPageId}/methods/${methodId}/`,
@@ -355,17 +318,13 @@ const OilProductsPage = () => {
           );
         }
       } else {
-        // Для обычного метода - стандартная логика
         await axios.patch(
           `${import.meta.env.VITE_API_URL}/api/research-pages/${researchPageId}/methods/${methodToHide.id}/`,
           { is_active: false }
         );
       }
-
-      // Обновляем состояние на фронтенде
       const updatedMethods = researchMethods.map(method => {
         if (methodToHide.is_group) {
-          // Если текущий метод - это скрываемая группа
           if (method.id === methodToHide.id) {
             return {
               ...method,
@@ -374,45 +333,28 @@ const OilProductsPage = () => {
             };
           }
         } else if (method.id === methodToHide.id) {
-          // Для обычного метода
           return { ...method, is_active: false };
         }
         return method;
       });
-
-      // Перезагружаем методы для обновления состояния
       await fetchResearchMethods();
-
-      // Находим индекс скрываемого метода среди активных методов
       const activeMethodsBeforeHide = researchMethods.filter(m => m.is_active);
       const hiddenMethodActiveIndex = activeMethodsBeforeHide.findIndex(
         m => m.id === methodToHide.id
       );
-
-      // Если скрытый метод был активным, переключаемся на предыдущий активный метод или на первый доступный
       if (selectedTab === hiddenMethodActiveIndex) {
         const activeMethodsAfterHide = updatedMethods.filter(m => m.is_active);
         const newIndex = Math.max(0, hiddenMethodActiveIndex - 1);
         setSelectedTab(newIndex);
-
         if (activeMethodsAfterHide.length > 0) {
           const newMethod = activeMethodsAfterHide[newIndex] || activeMethodsAfterHide[0];
           await fetchMethodDetails(researchPageId, newMethod.id);
         }
       }
-
-      setSnackbar({
-        open: true,
-        message: 'Метод успешно скрыт',
-        severity: 'success',
-      });
+      message.success('Метод успешно скрыт');
     } catch (error) {
       console.error('Ошибка при скрытии метода:', error);
-      setSnackbar({
-        open: true,
-        message: 'Не удалось скрыть метод',
-        severity: 'error',
-      });
+      message.error('Не удалось скрыть метод');
     } finally {
       setIsHideModalOpen(false);
       setMethodToHide(null);
@@ -688,11 +630,7 @@ const OilProductsPage = () => {
     if (currentMethod?.id && lastCalculationResult[currentMethod.id]) {
       setIsSaveModalOpen(true);
     } else {
-      setSnackbar({
-        open: true,
-        message: 'Нет результатов для сохранения',
-        severity: 'warning',
-      });
+      message.warning('Нет результатов для сохранения');
     }
   };
 
@@ -808,11 +746,7 @@ const OilProductsPage = () => {
       }));
     } catch (error) {
       console.error('Ошибка при расчете:', error);
-      setSnackbar({
-        open: true,
-        message: error.message || 'Ошибка при расчете',
-        severity: 'error',
-      });
+      message.error(error.message || 'Ошибка при расчете');
     } finally {
       setIsCalculating(false);
     }
@@ -910,11 +844,7 @@ const OilProductsPage = () => {
       );
     } catch (error) {
       console.error('Ошибка при обновлении порядка методов:', error);
-      setSnackbar({
-        open: true,
-        message: 'Не удалось обновить порядок методов',
-        severity: 'error',
-      });
+      message.error('Не удалось обновить порядок методов');
     }
   };
 
@@ -960,11 +890,7 @@ const OilProductsPage = () => {
 
   const handleLoadRegistrationData = async () => {
     if (!registrationNumber || !currentMethod) {
-      setSnackbar({
-        open: true,
-        message: 'Введите регистрационный номер',
-        severity: 'warning',
-      });
+      message.warning('Введите регистрационный номер');
       return;
     }
 
@@ -1021,19 +947,11 @@ const OilProductsPage = () => {
           ...initialValues,
         }));
 
-        setSnackbar({
-          open: true,
-          message: 'Данные успешно загружены',
-          severity: 'success',
-        });
+        message.success('Данные успешно загружены');
       }
     } catch (error) {
       console.error('Ошибка при получении данных:', error);
-      setSnackbar({
-        open: true,
-        message: 'Не удалось загрузить данные по указанному номеру',
-        severity: 'error',
-      });
+      message.error('Не удалось загрузить данные по указанному номеру');
       setLockedMethods(prev => ({
         ...prev,
         [currentMethod.id]: false,
@@ -1913,28 +1831,6 @@ const OilProductsPage = () => {
             laboratoryId={isDepartment ? laboratoryId : id}
             departmentId={isDepartment ? id : null}
           />
-
-          <Snackbar
-            open={snackbar.open}
-            autoHideDuration={6000}
-            onClose={handleCloseSnackbar}
-            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-            sx={{
-              '& .MuiAlert-root': {
-                width: '100%',
-                maxWidth: '400px',
-              },
-            }}
-          >
-            <Alert
-              onClose={handleCloseSnackbar}
-              severity={snackbar.severity}
-              variant="filled"
-              sx={{ width: '100%' }}
-            >
-              {snackbar.message}
-            </Alert>
-          </Snackbar>
         </Form>
       </Layout>
     </OilProductsPageWrapper>

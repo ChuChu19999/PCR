@@ -95,12 +95,6 @@ const SaveProtocolCalculationModal = ({
         return;
       }
 
-      // Проверяем выбор оборудования
-      if (selectedEquipment.length === 0) {
-        setEquipmentError('Необходимо выбрать хотя бы один прибор');
-        return;
-      }
-
       setExecutorError('');
       setEquipmentError('');
       setLoading(true);
@@ -157,7 +151,6 @@ const SaveProtocolCalculationModal = ({
         'ID лаборатории': requestData.laboratory,
         Дата: requestData.laboratory_activity_date,
         Исполнитель: requestData.executor,
-        Оборудование: requestData.equipment_data.length > 0,
       };
 
       const missingFields = Object.entries(requiredFields)
@@ -266,7 +259,6 @@ const SaveProtocolCalculationModal = ({
 
           <Form.Item
             label="Использованное оборудование"
-            required
             validateStatus={equipmentError ? 'error' : ''}
             help={equipmentError}
           >

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Input, DatePicker, Select, message, Checkbox, Table, Button } from 'antd';
+import { Input, DatePicker, Select, message, Checkbox, Table, Button, Spin } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
@@ -77,6 +77,15 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
+  const [branchSearchValue, setBranchSearchValue] = useState('');
+  const [locationSearchValue, setLocationSearchValue] = useState('');
+  const [branchesDropdownVisible, setBranchesDropdownVisible] = useState(false);
+  const [locationsDropdownVisible, setLocationsDropdownVisible] = useState(false);
+  const [locationsLoading, setLocationsLoading] = useState(false);
+
+  const branchSearchRef = useRef(null);
+  const locationSearchRef = useRef(null);
+
   useEffect(() => {
     fetchTemplates();
     if (protocol) {
@@ -86,6 +95,8 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
         receiving_date: protocol.receiving_date ? dayjs(protocol.receiving_date) : null,
         test_protocol_date: protocol.test_protocol_date ? dayjs(protocol.test_protocol_date) : null,
       });
+      setBranchSearchValue(protocol.branch || '');
+      setLocationSearchValue(protocol.sampling_location_detail || '');
       fetchCalculations(protocol.id);
     }
   }, [protocol]);
@@ -127,6 +138,22 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       }));
     }
   }, [protocol, templates]);
+
+  useEffect(() => {
+    const handleClickOutside = event => {
+      if (branchSearchRef.current && !branchSearchRef.current.contains(event.target)) {
+        setBranchesDropdownVisible(false);
+      }
+      if (locationSearchRef.current && !locationSearchRef.current.contains(event.target)) {
+        setLocationsDropdownVisible(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const fetchTemplates = async () => {
     try {
@@ -197,24 +224,26 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     try {
       setLoading(true);
       const updateData = {
-        test_protocol_number: formData.test_protocol_number,
-        test_protocol_date: formData.test_protocol_date?.format('YYYY-MM-DD'),
-        is_accredited: formData.is_accredited,
-        test_object: formData.test_object,
-        laboratory_location: formData.laboratory_location,
-        sampling_date: formData.sampling_date?.format('YYYY-MM-DD'),
-        receiving_date: formData.receiving_date?.format('YYYY-MM-DD'),
+        test_protocol_number: formData.test_protocol_number || '',
+        test_protocol_date: formData.test_protocol_date?.format('YYYY-MM-DD') || null,
+        is_accredited: formData.is_accredited || false,
+        test_object: formData.test_object || '',
+        laboratory_location: formData.laboratory_location || '',
+        sampling_date: formData.sampling_date?.format('YYYY-MM-DD') || null,
+        receiving_date: formData.receiving_date?.format('YYYY-MM-DD') || null,
         excel_template: formData.excel_template,
-        selection_conditions: formData.selection_conditions,
-        branch: formData.branch,
-        sampling_location_detail: formData.sampling_location_detail,
-        phone: formData.phone,
+        selection_conditions: formData.selection_conditions || [],
+        branch: formData.branch || '',
+        sampling_location_detail: formData.sampling_location_detail || '',
+        phone: formData.phone || '',
       };
 
-      // Добавляем protocol_details_id если он есть
-      if (formData.protocol_details_id) {
-        updateData.protocol_details_id = formData.protocol_details_id;
-      }
+      // Удаляем undefined и null значения из объекта
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined || updateData[key] === null) {
+          delete updateData[key];
+        }
+      });
 
       console.log('Отправляемые данные:', updateData);
 
@@ -230,8 +259,23 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       if (error.response?.data?.error) {
         message.error(error.response.data.error);
       } else if (error.response?.data) {
-        console.log('Ответ сервера:', error.response.data);
-        message.error('Ошибка валидации данных');
+        const serverErrors = error.response.data;
+        const newErrors = {};
+
+        // Обрабатываем ошибки для каждого поля
+        Object.keys(serverErrors).forEach(field => {
+          if (Array.isArray(serverErrors[field])) {
+            newErrors[field] = serverErrors[field][0];
+          } else {
+            newErrors[field] = serverErrors[field];
+          }
+        });
+
+        setErrors(newErrors);
+
+        if (Object.keys(newErrors).length === 0) {
+          message.error('Ошибка валидации данных');
+        }
       } else {
         message.error('Произошла ошибка при обновлении протокола');
       }
@@ -300,6 +344,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
           inputData: formatInputData(calc.input_data),
           result: formattedResult,
           measurementError: formatMeasurementError(calc.measurement_error),
+          equipment: calc.equipment || [],
           executor: calc.executor || '-',
         };
       });
@@ -365,19 +410,19 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       title: 'Метод',
       dataIndex: 'methodName',
       key: 'methodName',
-      width: '20%',
+      width: '15%',
     },
     {
       title: 'Ед. измерения',
       dataIndex: 'unit',
       key: 'unit',
-      width: '10%',
+      width: '8%',
     },
     {
       title: 'Входные данные',
       dataIndex: 'inputData',
       key: 'inputData',
-      width: '25%',
+      width: '20%',
       render: inputData => {
         if (!inputData || Object.keys(inputData).length === 0) return '-';
         return (
@@ -397,19 +442,38 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       title: 'Результат',
       dataIndex: 'result',
       key: 'result',
-      width: '15%',
+      width: '12%',
     },
     {
       title: 'Погрешность',
       dataIndex: 'measurementError',
       key: 'measurementError',
-      width: '15%',
+      width: '12%',
+    },
+    {
+      title: 'Приборы',
+      dataIndex: 'equipment',
+      key: 'equipment',
+      width: '20%',
+      render: equipment => {
+        if (!equipment || equipment.length === 0) return '-';
+        return (
+          <div>
+            {equipment.map((eq, index) => (
+              <div key={eq.id} className="equipment-item">
+                <span className="equipment-name">{eq.name}</span>
+                <span className="equipment-serial"> (Зав.№{eq.serial_number})</span>
+              </div>
+            ))}
+          </div>
+        );
+      },
     },
     {
       title: 'Исполнитель',
       dataIndex: 'executor',
       key: 'executor',
-      width: '15%',
+      width: '13%',
     },
   ];
 
@@ -504,6 +568,50 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       ...prev,
       selection_conditions: conditions,
     }));
+  };
+
+  const searchBranches = async searchText => {
+    if (!searchText || searchText.length < 2) {
+      setBranches([]);
+      setBranchesDropdownVisible(false);
+      return;
+    }
+
+    try {
+      setBranchesLoading(true);
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/get-branches/?search=${searchText}`
+      );
+      setBranches(response.data);
+      setBranchesDropdownVisible(true);
+    } catch (error) {
+      console.error('Ошибка при поиске филиалов:', error);
+      message.error('Не удалось загрузить список филиалов');
+    } finally {
+      setBranchesLoading(false);
+    }
+  };
+
+  const searchLocations = async searchText => {
+    if (!searchText || searchText.length < 2) {
+      setSamplingLocations([]);
+      setLocationsDropdownVisible(false);
+      return;
+    }
+
+    try {
+      setLocationsLoading(true);
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/get-sampling-locations/?search=${searchText}`
+      );
+      setSamplingLocations(response.data);
+      setLocationsDropdownVisible(true);
+    } catch (error) {
+      console.error('Ошибка при поиске мест отбора:', error);
+      message.error('Не удалось загрузить список мест отбора');
+    } finally {
+      setLocationsLoading(false);
+    }
   };
 
   return (
@@ -649,22 +757,95 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
 
               <div className="form-group">
                 <label>Филиал</label>
-                <Input
-                  value={formData.branch}
-                  onChange={handleInputChange('branch')}
-                  placeholder="Введите название филиала"
-                  style={{ width: '100%' }}
-                />
+                <div className="search-container" ref={branchSearchRef}>
+                  <Input
+                    value={branchSearchValue}
+                    onChange={e => {
+                      const value = e.target.value;
+                      setBranchSearchValue(value);
+                      setFormData(prev => ({ ...prev, branch: value }));
+                      searchBranches(value);
+                    }}
+                    onFocus={() => {
+                      if (branchSearchValue && branchSearchValue.length >= 2) {
+                        setBranchesDropdownVisible(true);
+                      }
+                    }}
+                    placeholder="Введите название филиала"
+                    style={{ width: '100%' }}
+                  />
+                  {branchesDropdownVisible && branches.length > 0 && (
+                    <div className="search-dropdown">
+                      {branchesLoading ? (
+                        <div className="search-loading">
+                          <Spin size="small" />
+                        </div>
+                      ) : (
+                        branches.map((branch, index) => (
+                          <div
+                            key={index}
+                            className="search-option"
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, branch }));
+                              setBranchSearchValue(branch);
+                              setBranchesDropdownVisible(false);
+                            }}
+                          >
+                            {branch}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="form-group">
                 <label>Место отбора пробы</label>
-                <Input
-                  value={formData.sampling_location_detail}
-                  onChange={handleInputChange('sampling_location_detail')}
-                  placeholder="Введите место отбора пробы"
-                  style={{ width: '100%' }}
-                />
+                <div className="search-container" ref={locationSearchRef}>
+                  <Input
+                    value={locationSearchValue}
+                    onChange={e => {
+                      const value = e.target.value;
+                      setLocationSearchValue(value);
+                      setFormData(prev => ({ ...prev, sampling_location_detail: value }));
+                      searchLocations(value);
+                    }}
+                    onFocus={() => {
+                      if (locationSearchValue && locationSearchValue.length >= 2) {
+                        setLocationsDropdownVisible(true);
+                      }
+                    }}
+                    placeholder="Введите место отбора пробы"
+                    style={{ width: '100%' }}
+                  />
+                  {locationsDropdownVisible && samplingLocations.length > 0 && (
+                    <div className="search-dropdown">
+                      {locationsLoading ? (
+                        <div className="search-loading">
+                          <Spin size="small" />
+                        </div>
+                      ) : (
+                        samplingLocations.map((location, index) => (
+                          <div
+                            key={index}
+                            className="search-option"
+                            onClick={() => {
+                              setFormData(prev => ({
+                                ...prev,
+                                sampling_location_detail: location,
+                              }));
+                              setLocationSearchValue(location);
+                              setLocationsDropdownVisible(false);
+                            }}
+                          >
+                            {location}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="form-group">

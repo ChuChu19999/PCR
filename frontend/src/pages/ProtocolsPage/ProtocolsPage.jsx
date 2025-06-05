@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Select, Form, Button, Table, Input, Space } from 'antd';
-import { SearchOutlined, PlusOutlined } from '@ant-design/icons';
+import { SearchOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons';
 import { Resizable } from 'react-resizable';
 import Layout from '../../shared/ui/Layout/Layout';
 import ProtocolsPageWrapper from './ProtocolsPageWrapper';
 import EditProtocolModal from '../../features/Modals/EditProtocolModal/EditProtocolModal';
 import CreateProtocolModal from '../../features/Modals/CreateProtocolModal/CreateProtocolModal';
+import EditTemplateModal from '../../features/Modals/ShablonEditModal/EditTemplateModal.jsx';
 
 const { Option } = Select;
 
@@ -89,6 +90,7 @@ const ProtocolsPage = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedProtocol, setSelectedProtocol] = useState(null);
   const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [columnsState, setColumnsState] = useState({
     test_protocol_number: { width: 150 },
     registration_number: { width: 150 },
@@ -320,80 +322,81 @@ const ProtocolsPage = () => {
   return (
     <Layout title="Протоколы">
       <ProtocolsPageWrapper>
-        <style>
-          {`
-            .react-resizable {
-              position: relative;
-              background-clip: padding-box;
-            }
-            .react-resizable-handle {
-              position: absolute;
-              right: -5px;
-              bottom: 0;
-              z-index: 1;
-              width: 10px;
-              height: 100%;
-              cursor: col-resize;
-            }
-          `}
-        </style>
-        <div className="form">
-          <Form form={form} layout="vertical">
-            <Form.Item label="Лаборатория" name="laboratory">
-              <Select
-                placeholder="Выберите лабораторию"
-                value={selectedLaboratory}
-                onChange={handleLaboratoryChange}
-                style={{ width: '100%' }}
-              >
-                {laboratories.map(lab => (
-                  <Option key={lab.id} value={lab.id}>
-                    {lab.name}
-                  </Option>
-                ))}
-              </Select>
-            </Form.Item>
-
-            {selectedLaboratory && departments.length > 0 && (
-              <Form.Item label="Подразделение" name="department">
+        <div style={{ height: 'calc(100vh - 87px)', display: 'flex', flexDirection: 'column' }}>
+          <div className="form" style={{ padding: '20px', flex: 'none' }}>
+            <Form form={form} layout="vertical">
+              <Form.Item label="Лаборатория" name="laboratory">
                 <Select
-                  placeholder="Выберите подразделение"
-                  value={selectedDepartment}
-                  onChange={handleDepartmentChange}
-                  allowClear
+                  placeholder="Выберите лабораторию"
+                  value={selectedLaboratory}
+                  onChange={handleLaboratoryChange}
                   style={{ width: '100%' }}
                 >
-                  {departments.map(dept => (
-                    <Option key={dept.id} value={dept.id}>
-                      {dept.name}
+                  {laboratories.map(lab => (
+                    <Option key={lab.id} value={lab.id}>
+                      {lab.name}
                     </Option>
                   ))}
                 </Select>
               </Form.Item>
-            )}
 
-            <Form.Item>
-              <Space>
-                <Button
-                  type="primary"
-                  onClick={handleShowProtocols}
-                  disabled={!selectedLaboratory}
-                  loading={loading}
-                >
-                  Показать
-                </Button>
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => setCreateModalVisible(true)}
-                >
-                  Создать
-                </Button>
-              </Space>
-            </Form.Item>
-          </Form>
+              {selectedLaboratory && departments.length > 0 && (
+                <Form.Item label="Подразделение" name="department">
+                  <Select
+                    placeholder="Выберите подразделение"
+                    value={selectedDepartment}
+                    onChange={handleDepartmentChange}
+                    allowClear
+                    style={{ width: '100%' }}
+                  >
+                    {departments.map(dept => (
+                      <Option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              )}
 
-          <div className="protocols-list">
+              <Form.Item>
+                <Space>
+                  <Button
+                    type="primary"
+                    onClick={handleShowProtocols}
+                    disabled={!selectedLaboratory}
+                    loading={loading}
+                  >
+                    Показать
+                  </Button>
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={() => setCreateModalVisible(true)}
+                  >
+                    Создать
+                  </Button>
+                  <Button
+                    type="primary"
+                    icon={<EditOutlined />}
+                    onClick={() => setIsTemplateModalOpen(true)}
+                  >
+                    Редактировать шаблон
+                  </Button>
+                </Space>
+              </Form.Item>
+            </Form>
+          </div>
+
+          <div
+            className="protocols-list"
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              padding: '0 20px 20px 20px',
+              marginTop: 0,
+            }}
+          >
             <Table
               columns={columns}
               dataSource={protocols}
@@ -442,6 +445,11 @@ const ProtocolsPage = () => {
               selectedDepartment={selectedDepartment}
             />
           )}
+
+          <EditTemplateModal
+            isOpen={isTemplateModalOpen}
+            onClose={() => setIsTemplateModalOpen(false)}
+          />
         </div>
       </ProtocolsPageWrapper>
     </Layout>

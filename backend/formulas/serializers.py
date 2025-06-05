@@ -786,6 +786,30 @@ class CalculationSerializer(BaseModelSerializer):
         write_only=True,
     )
     executor = serializers.CharField(required=True, allow_blank=False, min_length=2)
+    equipment = serializers.SerializerMethodField()
+
+    def get_equipment(self, obj):
+        if not obj.equipment_data:
+            return []
+        equipment_ids = [
+            eq["id"] if isinstance(eq, dict) else eq for eq in obj.equipment_data
+        ]
+        equipment_list = Equipment.objects.filter(
+            id__in=equipment_ids, is_deleted=False
+        )
+        return [
+            {
+                "id": eq.id,
+                "name": eq.name,
+                "serial_number": eq.serial_number,
+                "verification_info": eq.verification_info,
+                "verification_date": eq.verification_date,
+                "verification_end_date": eq.verification_end_date,
+                "type": eq.type,
+                "version": eq.version,
+            }
+            for eq in equipment_list
+        ]
 
     def validate_executor(self, value):
         if not value or not value.strip():
@@ -802,6 +826,7 @@ class CalculationSerializer(BaseModelSerializer):
             "id",
             "input_data",
             "equipment_data",
+            "equipment",
             "protocol",
             "protocol_id",
             "result",

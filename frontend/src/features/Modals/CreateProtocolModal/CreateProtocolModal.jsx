@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Input, DatePicker, Select, message, Checkbox } from 'antd';
+import { Input, DatePicker, Select, message, Checkbox, Spin } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
@@ -68,10 +68,19 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
   const [branches, setBranches] = useState([]);
   const [samplingLocations, setSamplingLocations] = useState([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
+  const [locationsLoading, setLocationsLoading] = useState(false);
   const [laboratories, setLaboratories] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [laboratoriesLoading, setLaboratoriesLoading] = useState(false);
   const [departmentsLoading, setDepartmentsLoading] = useState(false);
+
+  const [branchSearchValue, setBranchSearchValue] = useState('');
+  const [locationSearchValue, setLocationSearchValue] = useState('');
+  const [branchesDropdownVisible, setBranchesDropdownVisible] = useState(false);
+  const [locationsDropdownVisible, setLocationsDropdownVisible] = useState(false);
+
+  const branchSearchRef = useRef(null);
+  const locationSearchRef = useRef(null);
 
   useEffect(() => {
     fetchLaboratories();
@@ -86,6 +95,22 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
       setFormData(prev => ({ ...prev, department: null }));
     }
   }, [formData.laboratory]);
+
+  useEffect(() => {
+    const handleClickOutside = event => {
+      if (branchSearchRef.current && !branchSearchRef.current.contains(event.target)) {
+        setBranchesDropdownVisible(false);
+      }
+      if (locationSearchRef.current && !locationSearchRef.current.contains(event.target)) {
+        setLocationsDropdownVisible(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const fetchTemplates = async () => {
     try {
@@ -299,6 +324,50 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
     }
   };
 
+  const searchBranches = async searchText => {
+    if (!searchText || searchText.length < 2) {
+      setBranches([]);
+      setBranchesDropdownVisible(false);
+      return;
+    }
+
+    try {
+      setBranchesLoading(true);
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/get-branches/?search=${searchText}`
+      );
+      setBranches(response.data);
+      setBranchesDropdownVisible(true);
+    } catch (error) {
+      console.error('Ошибка при поиске филиалов:', error);
+      message.error('Не удалось загрузить список филиалов');
+    } finally {
+      setBranchesLoading(false);
+    }
+  };
+
+  const searchLocations = async searchText => {
+    if (!searchText || searchText.length < 2) {
+      setSamplingLocations([]);
+      setLocationsDropdownVisible(false);
+      return;
+    }
+
+    try {
+      setLocationsLoading(true);
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/get-sampling-locations/?search=${searchText}`
+      );
+      setSamplingLocations(response.data);
+      setLocationsDropdownVisible(true);
+    } catch (error) {
+      console.error('Ошибка при поиске мест отбора:', error);
+      message.error('Не удалось загрузить список мест отбора');
+    } finally {
+      setLocationsLoading(false);
+    }
+  };
+
   return (
     <Modal
       header="Создание протокола"
@@ -414,22 +483,92 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
 
         <div className="form-group">
           <label>Филиал</label>
-          <Input
-            value={formData.branch}
-            onChange={handleInputChange('branch')}
-            placeholder="Введите название филиала"
-            style={{ width: '100%' }}
-          />
+          <div className="search-container" ref={branchSearchRef}>
+            <Input
+              value={branchSearchValue}
+              onChange={e => {
+                const value = e.target.value;
+                setBranchSearchValue(value);
+                setFormData(prev => ({ ...prev, branch: value }));
+                searchBranches(value);
+              }}
+              onFocus={() => {
+                if (branchSearchValue && branchSearchValue.length >= 2) {
+                  setBranchesDropdownVisible(true);
+                }
+              }}
+              placeholder="Введите название филиала"
+              style={{ width: '100%' }}
+            />
+            {branchesDropdownVisible && branches.length > 0 && (
+              <div className="search-dropdown">
+                {branchesLoading ? (
+                  <div className="search-loading">
+                    <Spin size="small" />
+                  </div>
+                ) : (
+                  branches.map((branch, index) => (
+                    <div
+                      key={index}
+                      className="search-option"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, branch }));
+                        setBranchSearchValue(branch);
+                        setBranchesDropdownVisible(false);
+                      }}
+                    >
+                      {branch}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="form-group">
           <label>Место отбора пробы</label>
-          <Input
-            value={formData.sampling_location_detail}
-            onChange={handleInputChange('sampling_location_detail')}
-            placeholder="Введите место отбора пробы"
-            style={{ width: '100%' }}
-          />
+          <div className="search-container" ref={locationSearchRef}>
+            <Input
+              value={locationSearchValue}
+              onChange={e => {
+                const value = e.target.value;
+                setLocationSearchValue(value);
+                setFormData(prev => ({ ...prev, sampling_location_detail: value }));
+                searchLocations(value);
+              }}
+              onFocus={() => {
+                if (locationSearchValue && locationSearchValue.length >= 2) {
+                  setLocationsDropdownVisible(true);
+                }
+              }}
+              placeholder="Введите место отбора пробы"
+              style={{ width: '100%' }}
+            />
+            {locationsDropdownVisible && samplingLocations.length > 0 && (
+              <div className="search-dropdown">
+                {locationsLoading ? (
+                  <div className="search-loading">
+                    <Spin size="small" />
+                  </div>
+                ) : (
+                  samplingLocations.map((location, index) => (
+                    <div
+                      key={index}
+                      className="search-option"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, sampling_location_detail: location }));
+                        setLocationSearchValue(location);
+                        setLocationsDropdownVisible(false);
+                      }}
+                    >
+                      {location}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="form-group">
