@@ -21,9 +21,9 @@ const SaveCalculationModal = ({
   const [calculationFormData, setCalculationFormData] = useState({
     executor: '',
   });
-  const [selectedProtocol, setSelectedProtocol] = useState(null);
-  const [protocols, setProtocols] = useState([]);
-  const [protocolsLoading, setProtocolsLoading] = useState(false);
+  const [selectedSample, setSelectedSample] = useState(null);
+  const [samples, setSamples] = useState([]);
+  const [samplesLoading, setSamplesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [searchValue, setSearchValue] = useState('');
@@ -31,40 +31,34 @@ const SaveCalculationModal = ({
   const [selectedEquipment, setSelectedEquipment] = useState([]);
   const [loadingEquipment, setLoadingEquipment] = useState(false);
 
-  const searchProtocols = async searchText => {
+  const searchSamples = async searchText => {
     if (!searchText) {
-      setProtocols([]);
+      setSamples([]);
       return;
     }
 
-    setProtocolsLoading(true);
+    setSamplesLoading(true);
     try {
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/protocols/?search=${searchText}&laboratory=${laboratoryId}${departmentId ? `&department=${departmentId}` : ''}`
+        `${import.meta.env.VITE_API_URL}/api/samples/?search=${searchText}&laboratory=${laboratoryId}${departmentId ? `&department=${departmentId}` : ''}`
       );
-      // Фильтруем протоколы, чтобы искать только по регистрационному номеру
-      const filteredProtocols = response.data.filter(protocol =>
-        protocol.registration_number.toLowerCase().includes(searchText.toLowerCase())
-      );
-      setProtocols(filteredProtocols);
+      setSamples(response.data);
     } catch (error) {
-      console.error('Ошибка при поиске протоколов:', error);
-      message.error('Не удалось загрузить список протоколов');
+      console.error('Ошибка при поиске проб:', error);
+      message.error('Не удалось загрузить список проб');
     } finally {
-      setProtocolsLoading(false);
+      setSamplesLoading(false);
     }
   };
 
-  const handleProtocolSelect = async protocolId => {
+  const handleSampleSelect = async sampleId => {
     try {
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/protocols/${protocolId}/`
-      );
-      const protocol = response.data;
-      setSelectedProtocol(protocol);
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/samples/${sampleId}/`);
+      const sample = response.data;
+      setSelectedSample(sample);
     } catch (error) {
-      console.error('Ошибка при загрузке протокола:', error);
-      message.error('Не удалось загрузить данные протокола');
+      console.error('Ошибка при загрузке пробы:', error);
+      message.error('Не удалось загрузить данные пробы');
     }
   };
 
@@ -97,8 +91,8 @@ const SaveCalculationModal = ({
   const validate = () => {
     const newErrors = {};
 
-    if (!selectedProtocol) {
-      newErrors.protocol = 'Выберите протокол';
+    if (!selectedSample) {
+      newErrors.sample = 'Выберите пробу';
     }
 
     if (!calculationFormData.executor) {
@@ -119,7 +113,7 @@ const SaveCalculationModal = ({
 
       // Создаем расчет
       const calculationData = {
-        protocol_id: selectedProtocol.id,
+        sample_id: selectedSample.id,
         input_data: calculationResult.input_data,
         equipment_data: selectedEquipment.map(id => ({ id })),
         result:
@@ -178,7 +172,7 @@ const SaveCalculationModal = ({
   };
 
   const handleModalClose = () => {
-    setSelectedProtocol(null);
+    setSelectedSample(null);
     setErrors({});
     setSelectedEquipment([]);
     onClose();
@@ -213,41 +207,41 @@ const SaveCalculationModal = ({
           <Form.Item
             label="Регистрационный номер пробы"
             required
-            validateStatus={errors.protocol ? 'error' : ''}
-            help={errors.protocol}
+            validateStatus={errors.sample ? 'error' : ''}
+            help={errors.sample}
           >
             <div className="protocol-search-container">
               <Input
                 value={searchValue}
-                placeholder="Введите регистрационный номер"
+                placeholder="Введите регистрационный номер пробы"
                 onChange={e => {
                   const value = e.target.value;
                   setSearchValue(value);
-                  searchProtocols(value);
-                  if (selectedProtocol) {
-                    setSelectedProtocol(null);
+                  searchSamples(value);
+                  if (selectedSample) {
+                    setSelectedSample(null);
                   }
                 }}
                 className="protocol-search"
                 style={{ width: '100%' }}
               />
-              {protocols.length > 0 && !selectedProtocol && (
+              {samples.length > 0 && !selectedSample && (
                 <div className="protocol-dropdown">
-                  {protocolsLoading ? (
+                  {samplesLoading ? (
                     <div className="protocol-loading">
                       <Spin size="small" />
                     </div>
                   ) : (
-                    protocols.map(protocol => (
+                    samples.map(sample => (
                       <div
-                        key={protocol.id}
+                        key={sample.id}
                         className="protocol-option"
                         onClick={() => {
-                          handleProtocolSelect(protocol.id);
-                          setSearchValue(protocol.registration_number);
+                          handleSampleSelect(sample.id);
+                          setSearchValue(sample.registration_number);
                         }}
                       >
-                        {protocol.registration_number}
+                        {sample.registration_number} - {sample.test_object}
                       </div>
                     ))
                   )}
@@ -304,28 +298,34 @@ const SaveCalculationModal = ({
             )}
           </Form.Item>
 
-          {selectedProtocol && (
+          {selectedSample && (
             <div className="selected-protocol-info">
               <div className="info-row">
-                <span className="info-label">Номер протокола:</span>
-                <span className="info-value">{selectedProtocol.test_protocol_number}</span>
+                <span className="info-label">Регистрационный номер:</span>
+                <span className="info-value">{selectedSample.registration_number}</span>
               </div>
               <div className="info-row">
-                <span className="info-label">Номер акта отбора:</span>
-                <span className="info-value">{selectedProtocol.sampling_act_number}</span>
+                <span className="info-label">Объект испытаний:</span>
+                <span className="info-value">{selectedSample.test_object}</span>
               </div>
-              <div className="info-row">
-                <span className="info-label">Дата отбора:</span>
-                <span className="info-value">
-                  {dayjs(selectedProtocol.sampling_date).format('DD.MM.YYYY')}
-                </span>
-              </div>
-              <div className="info-row">
-                <span className="info-label">Дата получения:</span>
-                <span className="info-value">
-                  {dayjs(selectedProtocol.receiving_date).format('DD.MM.YYYY')}
-                </span>
-              </div>
+              {selectedSample.protocol && (
+                <>
+                  <div className="info-row">
+                    <span className="info-label">Номер протокола:</span>
+                    <span className="info-value">{selectedSample.protocol_number}</span>
+                  </div>
+                  <div className="info-row">
+                    <span className="info-label">Лаборатория:</span>
+                    <span className="info-value">{selectedSample.laboratory_name}</span>
+                  </div>
+                  {selectedSample.department_name && (
+                    <div className="info-row">
+                      <span className="info-label">Подразделение:</span>
+                      <span className="info-value">{selectedSample.department_name}</span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 

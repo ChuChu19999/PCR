@@ -17,6 +17,8 @@ from ..models import (
     ResearchObjectMethod,
     Calculation,
     Protocol,
+    Sample,
+    Equipment,
 )
 from ..serializers import (
     DepartmentSerializer,
@@ -26,6 +28,7 @@ from ..serializers import (
     ResearchObjectSerializer,
     CalculationSerializer,
     ProtocolSerializer,
+    SampleSerializer,
 )
 from .user_views import UserViewSet
 import logging
@@ -195,9 +198,13 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
     def available_methods(self, request):
         """
         Получает список активных и неудаленных методов исследования из ResearchObjectMethod.
-        Если указан protocol_id, исключает методы, уже привязанные к этому протоколу.
+        Если указан sample_id, исключает методы, уже привязанные к этой пробе.
+        Методы возвращаются в том же порядке, что и на странице исследований.
+        Фильтрует методы в зависимости от типа объекта испытаний пробы:
+        - для "дегазированный конденсат" исключает методы с "Нефть"
+        - для "Нефть" исключает методы с "Конденсат"
         """
-        protocol_id = request.query_params.get("protocol_id")
+        sample_id = request.query_params.get("sample_id")
         research_page_id = request.query_params.get("research_page_id")
 
         if not research_page_id:
@@ -206,51 +213,127 @@ class ResearchMethodViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Получаем активные методы для конкретной страницы
-        active_method_ids = (
+        # Получаем страницу исследований
+        research_object = get_object_or_404(ResearchObject, id=research_page_id)
+
+        # Получаем активные методы для конкретной страницы с учетом порядка сортировки
+        research_methods = (
             ResearchObjectMethod.objects.filter(
-                research_object_id=research_page_id, is_active=True, is_deleted=False
+                research_object=research_object, is_active=True, is_deleted=False
             )
-            .values_list("research_method_id", flat=True)
-            .distinct()
+            .select_related("research_method")
+            .order_by("sort_order", "created_at")
         )
 
-        queryset = ResearchMethod.objects.filter(
-            id__in=active_method_ids, is_deleted=False
-        )
+        # Если указан sample_id, исключаем методы, уже привязанные к этой пробе
+        # и фильтруем по типу объекта испытаний
+        if sample_id:
+            try:
+                sample = Sample.objects.get(id=sample_id)
+                used_methods = Calculation.objects.filter(
+                    sample_id=sample_id, is_deleted=False
+                ).values_list("research_method_id", flat=True)
+                research_methods = research_methods.exclude(
+                    research_method_id__in=used_methods
+                )
 
-        # Если указан protocol_id, исключаем методы, уже привязанные к этому протоколу
-        if protocol_id:
-            used_methods = Calculation.objects.filter(
-                protocol_id=protocol_id, is_deleted=False
-            ).values_list("research_method_id", flat=True)
-            queryset = queryset.exclude(id__in=used_methods)
+                # Фильтруем методы в зависимости от типа объекта испытаний
+                filtered_methods = []
+                for rom in research_methods:
+                    method = rom.research_method
+                    method_name = method.name.lower()
+                    test_object = sample.test_object.lower()
 
+                    # Пропускаем метод если:
+                    # - для дегазированного конденсата метод содержит "нефть"
+                    # - для нефти метод содержит "конденсат"
+                    if (
+                        "дегазированный конденсат" in test_object
+                        and "нефть" in method_name
+                    ) or ("нефть" in test_object and "конденсат" in method_name):
+                        continue
+                    filtered_methods.append(rom)
+
+                research_methods = filtered_methods
+
+            except Sample.DoesNotExist:
+                return Response(
+                    {"error": "Проба не найдена"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        # Получаем все активные группы
         groups = ResearchMethodGroup.objects.filter(
             is_active=True, is_deleted=False
         ).prefetch_related("methods")
 
-        result = {"individual_methods": [], "groups": []}
+        # Создаем список всех методов
+        all_methods = []
 
-        # Добавляем негруппированные методы
-        individual_methods = queryset.filter(is_group_member=False)
-        result["individual_methods"] = self.get_serializer(
-            individual_methods, many=True
-        ).data
-
-        # Добавляем группы с их методами
-        for group in groups:
-            group_methods = group.methods.filter(id__in=queryset, is_group_member=True)
-            if group_methods.exists():
-                result["groups"].append(
-                    {
-                        "id": group.id,
+        # Обрабатываем методы в порядке их sort_order
+        for rom in research_methods:
+            method = rom.research_method
+            if method.groups.exists():
+                group = method.groups.first()
+                # Проверяем, есть ли уже группа в списке
+                group_entry = next(
+                    (item for item in all_methods if item.get("group_id") == group.id),
+                    None,
+                )
+                if not group_entry:
+                    # Если группы нет, добавляем её
+                    group_entry = {
+                        "id": f"group_{group.id}",
                         "name": group.name,
-                        "methods": self.get_serializer(group_methods, many=True).data,
+                        "is_group": True,
+                        "group_id": group.id,
+                        "methods": [],
+                        "sort_order": rom.sort_order,
+                    }
+                    all_methods.append(group_entry)
+                # Добавляем метод в группу
+                group_entry["methods"].append(
+                    {
+                        "id": method.id,
+                        "name": method.name,
+                        "sort_order": rom.sort_order,
+                        "input_data": method.input_data,
+                        "intermediate_data": method.intermediate_data,
+                        "unit": method.unit,
+                    }
+                )
+            else:
+                # Самостоятельный метод
+                all_methods.append(
+                    {
+                        "id": method.id,
+                        "name": method.name,
+                        "sort_order": rom.sort_order,
+                        "input_data": method.input_data,
+                        "intermediate_data": method.intermediate_data,
+                        "unit": method.unit,
+                        "is_group": False,
                     }
                 )
 
-        return Response(result)
+        # Удаляем пустые группы
+        all_methods = [
+            m for m in all_methods if not m.get("is_group") or m.get("methods")
+        ]
+
+        for method in all_methods:
+            if method.get("is_group"):
+                method["methods"].sort(key=lambda x: (x["sort_order"], x["name"]))
+
+        # Сортируем все методы вместе (и группы, и индивидуальные)
+        all_methods.sort(
+            key=lambda x: (
+                x["sort_order"] if not x.get("is_group") else x["sort_order"],
+                x["name"],
+            )
+        )
+
+        return Response({"methods": all_methods})
 
 
 @permission_classes([AllowAny])
@@ -542,28 +625,6 @@ class ProtocolViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            has_calculations = instance.calculations.filter(is_deleted=False).exists()
-
-            # Если есть расчеты, запрещаем изменение критических полей
-            if has_calculations:
-                protected_fields = {
-                    "registration_number": "Регистрационный номер",
-                    "sampling_act_number": "Номер акта отбора",
-                    "laboratory": "Лаборатория",
-                    "department": "Подразделение",
-                }
-
-                for field, field_name in protected_fields.items():
-                    if field in request.data and str(request.data[field]) != str(
-                        getattr(instance, field)
-                    ):
-                        return Response(
-                            {
-                                "error": f"{field_name} нельзя изменить, так как протокол уже содержит расчеты"
-                            },
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-
             serializer = self.get_serializer(instance, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
 
@@ -591,6 +652,104 @@ class ProtocolViewSet(viewsets.ModelViewSet):
         protocol.mark_as_deleted(user=user)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=True, methods=["get"])
+    def calculations(self, request, pk=None):
+        """
+        Получить все расчеты для протокола, включая расчеты всех связанных проб
+        """
+        protocol = self.get_object()
+        calculations = []
+
+        # Получаем страницу исследований для определения порядка методов
+        research_page = ResearchObject.objects.filter(
+            laboratory=protocol.laboratory,
+            department=protocol.department,
+            type="oil_products",
+            is_deleted=False,
+        ).first()
+
+        # Получаем порядок методов из ResearchObjectMethod
+        method_order = {}
+        if research_page:
+            research_methods = (
+                ResearchObjectMethod.objects.filter(
+                    research_object=research_page, is_active=True, is_deleted=False
+                )
+                .select_related("research_method")
+                .order_by("sort_order", "research_method__name", "created_at")
+            )
+            method_order = {
+                rom.research_method_id: (rom.sort_order, rom.research_method.name)
+                for rom in research_methods
+            }
+
+        samples = protocol.samples.filter(is_deleted=False).order_by(
+            "registration_number"
+        )
+
+        for sample in samples.prefetch_related("calculations__research_method__groups"):
+            sample_calculations = list(sample.calculations.filter(is_deleted=False))
+
+            # Сортируем расчеты: сначала по sort_order, затем по имени метода
+            sample_calculations.sort(
+                key=lambda x: (
+                    method_order.get(
+                        x.research_method_id, (float("inf"), x.research_method.name)
+                    )[0],
+                    x.research_method.name,
+                )
+            )
+
+            for calc in sample_calculations:
+                equipment_list = []
+                if calc.equipment_data:
+                    equipment_ids = [
+                        eq.get("id")
+                        for eq in calc.equipment_data
+                        if isinstance(eq, dict) and "id" in eq
+                    ]
+                    equipment = Equipment.objects.filter(
+                        id__in=equipment_ids, is_deleted=False
+                    )
+                    equipment_list = [
+                        {"name": eq.name, "serial_number": eq.serial_number}
+                        for eq in equipment
+                    ]
+
+                formatted_result = calc.result
+                if (
+                    formatted_result
+                    and formatted_result.replace(".", "").replace("-", "").isdigit()
+                ):
+                    num_value = float(formatted_result)
+                    if num_value < 0:
+                        formatted_result = f"минус {abs(num_value)}".replace(".", ",")
+                    else:
+                        formatted_result = str(num_value).replace(".", ",")
+
+                calculations.append(
+                    {
+                        "key": calc.id,
+                        "research_method": {
+                            "name": calc.research_method.name,
+                            "is_group_member": calc.research_method.is_group_member,
+                            "groups": [
+                                {"name": group.name}
+                                for group in calc.research_method.groups.all()
+                            ],
+                        },
+                        "unit": calc.unit or "-",
+                        "input_data": calc.input_data,
+                        "result": formatted_result,
+                        "measurement_error": calc.measurement_error,
+                        "equipment": equipment_list,
+                        "executor": calc.executor or "-",
+                        "sample": {"registration_number": sample.registration_number},
+                    }
+                )
+
+        return Response(calculations)
+
 
 @permission_classes([AllowAny])
 class CalculationViewSet(viewsets.ModelViewSet):
@@ -598,16 +757,16 @@ class CalculationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Calculation.objects.select_related(
-            "protocol", "laboratory", "department", "research_method"
+            "sample", "laboratory", "department", "research_method"
         ).all()
 
-        protocol_id = self.request.query_params.get("protocol")
+        sample_id = self.request.query_params.get("sample")
         is_deleted = (
             self.request.query_params.get("is_deleted", "false").lower() == "true"
         )
 
-        if protocol_id:
-            queryset = queryset.filter(protocol_id=protocol_id)
+        if sample_id:
+            queryset = queryset.filter(sample_id=sample_id)
 
         queryset = queryset.filter(is_deleted=is_deleted)
 
@@ -644,4 +803,60 @@ def check_status_api(request):
         return Response(
             {"status": "offline"},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+
+@permission_classes([AllowAny])
+class SampleViewSet(viewsets.ModelViewSet):
+    serializer_class = SampleSerializer
+
+    def get_queryset(self):
+        queryset = Sample.objects.filter(is_deleted=False).select_related(
+            "laboratory", "department"
+        )
+
+        laboratory_id = self.request.query_params.get("laboratory")
+        if laboratory_id:
+            queryset = queryset.filter(laboratory_id=laboratory_id)
+
+        department_id = self.request.query_params.get("department")
+        if department_id:
+            queryset = queryset.filter(department_id=department_id)
+
+        # Поиск по регистрационному номеру или объекту испытаний
+        search = self.request.query_params.get("search")
+        if search:
+            queryset = queryset.filter(
+                Q(registration_number__icontains=search)
+                | Q(test_object__icontains=search)
+            )
+
+        return queryset.order_by("-created_at")
+
+    def perform_create(self, serializer):
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
+
+    def perform_update(self, serializer):
+        user = getattr(self.request, "decoded_token", {})
+        serializer.save(user=user)
+
+    @action(detail=True, methods=["post"])
+    def mark_deleted(self, request, pk=None):
+        sample = self.get_object()
+        user = getattr(request, "decoded_token", {})
+
+        # Помечаем как удаленные все связанные расчеты
+        Calculation.objects.filter(sample=sample).update(
+            is_deleted=True,
+            deleted_at=timezone.now(),
+            deleted_by=user.get("preferred_username") if user else None,
+        )
+
+        sample.mark_as_deleted(user=user)
+        return Response(
+            {
+                "status": "success",
+                "message": "Проба и связанные расчеты помечены как удаленные",
+            }
         )

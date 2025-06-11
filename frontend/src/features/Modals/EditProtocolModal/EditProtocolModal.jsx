@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Input, DatePicker, Select, message, Checkbox, Table, Button, Spin } from 'antd';
+import { Input, DatePicker, Select, message, Spin, Table } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
@@ -41,17 +40,15 @@ const isValidDate = dateString => {
   );
 };
 
-const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
-  const [activeTab, setActiveTab] = useState('calculations');
-  const [isAnimating, setIsAnimating] = useState(false);
+const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
+  console.log('Protocol prop:', protocol);
+
   const [formData, setFormData] = useState({
     test_protocol_number: '',
     test_protocol_date: null,
     is_accredited: false,
-    test_object: '',
     laboratory_location: '',
     sampling_act_number: '',
-    registration_number: '',
     sampling_date: null,
     receiving_date: null,
     excel_template: undefined,
@@ -69,14 +66,8 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
   const [branches, setBranches] = useState([]);
   const [samplingLocations, setSamplingLocations] = useState([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
-  const [showCalculations, setShowCalculations] = useState(false);
-  const [calculations, setCalculations] = useState([]);
-  const [calculationsLoading, setCalculationsLoading] = useState(false);
-  const [availableMethodsLoading, setAvailableMethodsLoading] = useState(false);
-  const [isConfirmModalVisible, setIsConfirmModalVisible] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState(null);
-  const navigate = useNavigate();
 
   const [branchSearchValue, setBranchSearchValue] = useState('');
   const [locationSearchValue, setLocationSearchValue] = useState('');
@@ -91,6 +82,11 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
   const [departments, setDepartments] = useState([]);
   const [laboratoriesLoading, setLaboratoriesLoading] = useState(false);
   const [departmentsLoading, setDepartmentsLoading] = useState(false);
+
+  const [activeTab, setActiveTab] = useState('calculations');
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [calculations, setCalculations] = useState([]);
+  const [calculationsLoading, setCalculationsLoading] = useState(false);
 
   const fetchLaboratories = async () => {
     try {
@@ -144,7 +140,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       });
       setBranchSearchValue(protocol.branch || '');
       setLocationSearchValue(protocol.sampling_location_detail || '');
-      fetchCalculations(protocol.id);
 
       // Загружаем шаблоны, если есть лаборатория
       if (protocol.laboratory) {
@@ -169,25 +164,23 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
   // useEffect для обработки условий отбора
   useEffect(() => {
     if (protocol && templates.length > 0) {
-      const initialSelectionConditions = protocol.selection_conditions || [];
-      const templateSelectionConditions =
-        templates.find(t => t.id === protocol.excel_template)?.selection_conditions || [];
+      const template = templates.find(t => t.id === protocol.excel_template);
+      console.log('Found template:', template);
+      console.log('Protocol selection conditions:', protocol.selection_conditions);
 
-      // Объединяем условия из шаблона со значениями из протокола
-      const mergedConditions = templateSelectionConditions.map(templateCondition => {
-        const existingCondition = initialSelectionConditions.find(
-          c => c.name === templateCondition.name
-        );
-        return {
-          ...templateCondition,
-          value: existingCondition ? existingCondition.value : null,
-        };
-      });
+      if (template && template.selection_conditions) {
+        // Преобразуем объект условий отбора в массив
+        const conditionsArray = template.selection_conditions.map(condition => ({
+          ...condition,
+          value: protocol.selection_conditions?.[condition.name] || null,
+        }));
 
-      setFormData(prev => ({
-        ...prev,
-        selection_conditions: mergedConditions,
-      }));
+        console.log('Setting initial selection conditions:', conditionsArray);
+        setFormData(prev => ({
+          ...prev,
+          selection_conditions: conditionsArray,
+        }));
+      }
     }
   }, [protocol, templates]);
 
@@ -319,11 +312,17 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
 
       setLoading(true);
 
+      // Преобразуем массив условий отбора в объект
+      const selectionConditionsObject =
+        formData.selection_conditions?.reduce((acc, condition) => {
+          acc[condition.name] = condition.value;
+          return acc;
+        }, {}) || {};
+
       const updateData = {
         test_protocol_number: formData.test_protocol_number || '',
         test_protocol_date: formData.test_protocol_date?.format('YYYY-MM-DD') || null,
         is_accredited: formData.is_accredited || false,
-        test_object: formData.test_object || '',
         laboratory_location: formData.laboratory_location || '',
         sampling_date: formData.sampling_date?.format('YYYY-MM-DD') || null,
         receiving_date: formData.receiving_date?.format('YYYY-MM-DD') || null,
@@ -334,7 +333,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
         // Явно указываем department и excel_template как null если нет подразделений
         department: departments.length > 0 ? formData.department : null,
         excel_template: formData.excel_template || null,
-        selection_conditions: formData.selection_conditions || [],
+        selection_conditions: selectionConditionsObject,
       };
 
       // Удаляем undefined значения из объекта
@@ -343,8 +342,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
           delete updateData[key];
         }
       });
-
-      console.log('Отправляемые данные:', updateData);
 
       await axios.patch(
         `${import.meta.env.VITE_API_URL}/api/protocols/${protocol.id}/`,
@@ -383,211 +380,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     }
   };
 
-  const formatInputData = inputData => {
-    return Object.entries(inputData)
-      .map(([key, value]) => {
-        // Форматируем числовое значение
-        let formattedValue = value;
-        if (!isNaN(value)) {
-          // Если это отрицательное число
-          if (parseFloat(value) < 0) {
-            formattedValue = value.toString().replace('-', '-').replace('.', ',');
-          } else {
-            formattedValue = value.toString().replace('.', ',');
-          }
-        }
-        return `${key} = ${formattedValue}`;
-      })
-      .join('\n');
-  };
-
-  const formatMeasurementError = error => {
-    if (!error || error === '-') return '-';
-    return `±${error.toString().replace('.', ',')}`;
-  };
-
-  const fetchCalculations = async protocolId => {
-    try {
-      setCalculationsLoading(true);
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/calculations/`, {
-        params: {
-          protocol: protocolId,
-          is_deleted: false,
-        },
-      });
-
-      const formattedCalculations = response.data.map(calc => {
-        // Форматируем название метода с учетом группы
-        let methodName = calc.research_method.name;
-        if (calc.research_method.is_group_member && calc.research_method.groups?.length > 0) {
-          const groupName = calc.research_method.groups[0].name;
-          const methodNameLower = methodName.charAt(0).toLowerCase() + methodName.slice(1);
-          methodName = `${groupName} ${methodNameLower}`;
-        }
-
-        // Форматируем отрицательные значения в результате
-        let formattedResult = calc.result;
-        if (formattedResult && !isNaN(formattedResult)) {
-          const numValue = parseFloat(formattedResult);
-          if (numValue < 0) {
-            formattedResult = `минус ${Math.abs(numValue).toString().replace('.', ',')}`;
-          } else {
-            formattedResult = formattedResult.toString().replace('.', ',');
-          }
-        }
-
-        return {
-          key: calc.id,
-          methodName,
-          unit: calc.unit || '-',
-          inputData: formatInputData(calc.input_data),
-          result: formattedResult,
-          measurementError: formatMeasurementError(calc.measurement_error),
-          equipment: calc.equipment || [],
-          executor: calc.executor || '-',
-        };
-      });
-
-      setCalculations(formattedCalculations);
-    } catch (error) {
-      console.error('Ошибка при загрузке результатов расчетов:', error);
-      message.error('Не удалось загрузить результаты расчетов');
-    } finally {
-      setCalculationsLoading(false);
-    }
-  };
-
-  const handleAddCalculation = async () => {
-    try {
-      setAvailableMethodsLoading(true);
-      // Сначала получаем страницу исследований для данного протокола
-      const researchPageResponse = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/research-pages/`,
-        {
-          params: {
-            laboratory_id: protocol.laboratory,
-            department_id: protocol.department || null,
-            type: 'oil_products',
-          },
-        }
-      );
-
-      const researchPage = researchPageResponse.data.find(page => page.type === 'oil_products');
-      if (!researchPage) {
-        throw new Error('Страница исследований не найдена');
-      }
-
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/research-methods/available-methods/`,
-        {
-          params: {
-            protocol_id: protocol.id,
-            research_page_id: researchPage.id,
-          },
-        }
-      );
-
-      // Сохраняем методы в sessionStorage перед редиректом
-      sessionStorage.setItem('available_methods', JSON.stringify(response.data));
-
-      // Выполняем редирект на страницу методов исследования
-      navigate(
-        `/research-method?protocol_id=${protocol.id}&laboratory=${protocol.laboratory}${protocol.department ? `&department=${protocol.department}` : ''}`
-      );
-
-      onClose();
-    } catch (error) {
-      console.error('Ошибка при загрузке доступных методов:', error);
-      message.error('Не удалось загрузить список доступных методов');
-    } finally {
-      setAvailableMethodsLoading(false);
-    }
-  };
-
-  const calculationColumns = [
-    {
-      title: 'Метод',
-      dataIndex: 'methodName',
-      key: 'methodName',
-      width: '15%',
-    },
-    {
-      title: 'Ед. измерения',
-      dataIndex: 'unit',
-      key: 'unit',
-      width: '8%',
-    },
-    {
-      title: 'Входные данные',
-      dataIndex: 'inputData',
-      key: 'inputData',
-      width: '20%',
-      render: inputData => {
-        if (!inputData || Object.keys(inputData).length === 0) return '-';
-        return (
-          <div
-            style={{
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              lineHeight: '1.5',
-            }}
-          >
-            {inputData}
-          </div>
-        );
-      },
-    },
-    {
-      title: 'Результат',
-      dataIndex: 'result',
-      key: 'result',
-      width: '12%',
-    },
-    {
-      title: 'Погрешность',
-      dataIndex: 'measurementError',
-      key: 'measurementError',
-      width: '12%',
-    },
-    {
-      title: 'Приборы',
-      dataIndex: 'equipment',
-      key: 'equipment',
-      width: '20%',
-      render: equipment => {
-        if (!equipment || equipment.length === 0) return '-';
-        return (
-          <div>
-            {equipment.map((eq, index) => (
-              <div key={eq.id} className="equipment-item">
-                <span className="equipment-name">{eq.name}</span>
-                <span className="equipment-serial"> (Зав.№{eq.serial_number})</span>
-              </div>
-            ))}
-          </div>
-        );
-      },
-    },
-    {
-      title: 'Исполнитель',
-      dataIndex: 'executor',
-      key: 'executor',
-      width: '13%',
-    },
-  ];
-
-  const handleTabChange = tab => {
-    if (tab !== activeTab) {
-      setIsAnimating(true);
-      setTimeout(() => {
-        setActiveTab(tab);
-        setTimeout(() => {
-          setIsAnimating(false);
-        }, 50);
-      }, 300);
-    }
-  };
-
   const handleGenerateProtocol = async () => {
     try {
       setIsGenerating(true);
@@ -622,7 +414,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
       window.URL.revokeObjectURL(url);
 
       message.success('Протокол успешно сформирован');
-      setIsConfirmModalVisible(false);
     } catch (error) {
       console.error('Ошибка при формировании протокола:', error);
       setError('Произошла ошибка при формировании протокола');
@@ -635,15 +426,12 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     try {
       const selectedTemplate = templates.find(t => t.id === value);
       if (selectedTemplate && selectedTemplate.selection_conditions) {
-        // Если у протокола уже есть условия отбора, сохраняем их значения
-        const existingConditions = formData.selection_conditions || [];
-        const conditionsWithValues = selectedTemplate.selection_conditions.map(condition => {
-          const existingCondition = existingConditions.find(ec => ec.name === condition.name);
-          return {
-            ...condition,
-            value: existingCondition ? existingCondition.value : null,
-          };
-        });
+        // Добавляем поле value к каждому условию
+        const conditionsWithValues = selectedTemplate.selection_conditions.map(condition => ({
+          ...condition,
+          value: null,
+        }));
+        console.log('Setting selection conditions:', conditionsWithValues);
         setFormData(prev => ({
           ...prev,
           excel_template: value,
@@ -713,15 +501,183 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
     }
   };
 
+  const fetchCalculations = async protocolId => {
+    try {
+      setCalculationsLoading(true);
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/protocols/${protocolId}/calculations/`
+      );
+
+      const formattedCalculations = response.data.map(calc => {
+        let methodName = calc.research_method.name;
+        if (calc.research_method.is_group_member && calc.research_method.groups?.length > 0) {
+          const groupName = calc.research_method.groups[0].name;
+          const methodNameLower = methodName.charAt(0).toLowerCase() + methodName.slice(1);
+          methodName = `${groupName} ${methodNameLower}`;
+        }
+
+        let formattedResult = calc.result;
+        if (
+          formattedResult &&
+          !isNaN(formattedResult.replace(',', '.')) &&
+          formattedResult.match(/^-?\d*[.,]?\d*$/)
+        ) {
+          const numValue = parseFloat(formattedResult.replace(',', '.'));
+          if (numValue < 0) {
+            formattedResult = `минус ${Math.abs(numValue).toString().replace('.', ',')}`;
+          } else {
+            formattedResult = formattedResult.toString().replace('.', ',');
+          }
+        }
+
+        return {
+          key: calc.key,
+          methodName,
+          unit: calc.unit,
+          inputData: formatInputData(calc.input_data),
+          result: formattedResult,
+          measurementError: formatMeasurementError(calc.measurement_error),
+          equipment: calc.equipment,
+          executor: calc.executor,
+          sampleNumber: calc.sample.registration_number,
+        };
+      });
+
+      setCalculations(formattedCalculations);
+    } catch (error) {
+      console.error('Ошибка при загрузке результатов расчетов:', error);
+      message.error('Не удалось загрузить результаты расчетов');
+    } finally {
+      setCalculationsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (protocol?.id) {
+      fetchCalculations(protocol.id);
+    }
+  }, [protocol?.id]);
+
+  const formatInputData = inputData => {
+    return Object.entries(inputData)
+      .map(([key, value]) => {
+        let formattedValue = value;
+        if (!isNaN(value)) {
+          if (parseFloat(value) < 0) {
+            formattedValue = value.toString().replace('-', '-').replace('.', ',');
+          } else {
+            formattedValue = value.toString().replace('.', ',');
+          }
+        }
+        return `${key} = ${formattedValue}`;
+      })
+      .join('\n');
+  };
+
+  const formatMeasurementError = error => {
+    if (!error || error === '-') return '-';
+    return `±${error.toString().replace('.', ',')}`;
+  };
+
+  const calculationColumns = [
+    {
+      title: 'Номер пробы',
+      dataIndex: 'sampleNumber',
+      key: 'sampleNumber',
+      width: '8%',
+    },
+    {
+      title: 'Метод',
+      dataIndex: 'methodName',
+      key: 'methodName',
+      width: '15%',
+    },
+    {
+      title: 'Ед. изм.',
+      dataIndex: 'unit',
+      key: 'unit',
+      width: '6%',
+    },
+    {
+      title: 'Входные данные',
+      dataIndex: 'inputData',
+      key: 'inputData',
+      width: '33%',
+      render: inputData => {
+        if (!inputData || Object.keys(inputData).length === 0) return '-';
+        return (
+          <div
+            style={{
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              lineHeight: '1.5',
+            }}
+          >
+            {inputData}
+          </div>
+        );
+      },
+    },
+    {
+      title: 'Результат',
+      dataIndex: 'result',
+      key: 'result',
+      width: '5%',
+    },
+    {
+      title: 'Погр.',
+      dataIndex: 'measurementError',
+      key: 'measurementError',
+      width: '5%',
+    },
+    {
+      title: 'Приборы',
+      dataIndex: 'equipment',
+      key: 'equipment',
+      width: '20%',
+      render: equipment => {
+        if (!equipment || equipment.length === 0) return '-';
+        return (
+          <div>
+            {equipment.map((eq, index) => (
+              <div key={index} className="equipment-item">
+                <span className="equipment-name">{eq.name}</span>
+                <span className="equipment-serial"> (Зав.№{eq.serial_number})</span>
+              </div>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      title: 'Исполнитель',
+      dataIndex: 'executor',
+      key: 'executor',
+      width: '8%',
+    },
+  ];
+
+  const handleTabChange = tab => {
+    if (tab !== activeTab) {
+      setIsAnimating(true);
+      setTimeout(() => {
+        setActiveTab(tab);
+        setTimeout(() => {
+          setIsAnimating(false);
+        }, 50);
+      }, 300);
+    }
+  };
+
   return (
     <Modal
-      header="Детали протокола"
+      header="Редактирование протокола"
       onClose={onClose}
       onSave={activeTab === 'edit' ? handleSave : null}
       loading={loading}
-      onGenerate={() => setIsConfirmModalVisible(true)}
+      onGenerate={handleGenerateProtocol}
       generateLoading={isGenerating}
-      style={{ width: activeTab === 'calculations' ? '900px' : '600px' }}
+      style={{ width: activeTab === 'calculations' ? '1200px' : '600px' }}
     >
       <div className="edit-protocol-form">
         <div className="tabs">
@@ -744,15 +700,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
         <div className={`tab-content ${isAnimating ? 'entering' : ''}`}>
           {activeTab === 'calculations' ? (
             <div className="calculations-table">
-              <div style={{ marginBottom: '16px', display: 'flex', gap: '8px' }}>
-                <Button
-                  type="primary"
-                  onClick={handleAddCalculation}
-                  loading={availableMethodsLoading}
-                >
-                  Добавить расчет
-                </Button>
-              </div>
               <Table
                 columns={calculationColumns}
                 dataSource={calculations}
@@ -762,7 +709,7 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
               />
             </div>
           ) : (
-            <>
+            <div className="edit-protocol-form">
               <div className="form-group">
                 <label>Номер протокола испытаний</label>
                 <Input
@@ -792,31 +739,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                   allowClear={true}
                   superNextIcon={null}
                   superPrevIcon={null}
-                  onKeyDown={e => {
-                    // Разрешаем цифры, точки, backspace и delete
-                    if (!/[\d\.]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete') {
-                      e.preventDefault();
-                    }
-                  }}
-                  onInput={e => {
-                    const input = e.target;
-                    const cursorPosition = input.selectionStart;
-                    const formatted = formatDateInput(input.value);
-
-                    const dotsBeforeCursor = (
-                      input.value.slice(0, cursorPosition).match(/\./g) || []
-                    ).length;
-                    input.value = formatted;
-                    const newDotsBeforeCursor = (
-                      formatted.slice(0, cursorPosition).match(/\./g) || []
-                    ).length;
-                    const newPosition = cursorPosition + (newDotsBeforeCursor - dotsBeforeCursor);
-                    input.setSelectionRange(newPosition, newPosition);
-
-                    if (formatted.length === 10 && isValidDate(formatted)) {
-                      handleInputChange('test_protocol_date')(dayjs(formatted, 'DD.MM.YYYY'));
-                    }
-                  }}
                 />
                 {errors.test_protocol_date && (
                   <div className="error-message">{errors.test_protocol_date}</div>
@@ -839,16 +761,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                 <Input
                   value={formData.sampling_act_number}
                   placeholder="Введите номер акта отбора"
-                  disabled
-                  style={{ width: '100%', background: '#f5f5f5' }}
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Регистрационный номер</label>
-                <Input
-                  value={formData.registration_number}
-                  placeholder="Введите регистрационный номер"
                   disabled
                   style={{ width: '100%', background: '#f5f5f5' }}
                 />
@@ -968,23 +880,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
               </div>
 
               <div className="form-group">
-                <label>
-                  Объект испытаний <span className="required">*</span>
-                </label>
-                <Select
-                  value={formData.test_object}
-                  onChange={value => handleInputChange('test_object')(value)}
-                  placeholder="Выберите объект испытаний"
-                  status={errors.test_object ? 'error' : ''}
-                  style={{ width: '100%' }}
-                >
-                  <Option value="дегазированный конденсат">дегазированный конденсат</Option>
-                  <Option value="нефть">нефть</Option>
-                </Select>
-                {errors.test_object && <div className="error-message">{errors.test_object}</div>}
-              </div>
-
-              <div className="form-group">
                 <label>Дата отбора пробы</label>
                 <DatePicker
                   locale={locale}
@@ -1002,31 +897,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                   allowClear={true}
                   superNextIcon={null}
                   superPrevIcon={null}
-                  onKeyDown={e => {
-                    // Разрешаем цифры, точки, backspace и delete
-                    if (!/[\d\.]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete') {
-                      e.preventDefault();
-                    }
-                  }}
-                  onInput={e => {
-                    const input = e.target;
-                    const cursorPosition = input.selectionStart;
-                    const formatted = formatDateInput(input.value);
-
-                    const dotsBeforeCursor = (
-                      input.value.slice(0, cursorPosition).match(/\./g) || []
-                    ).length;
-                    input.value = formatted;
-                    const newDotsBeforeCursor = (
-                      formatted.slice(0, cursorPosition).match(/\./g) || []
-                    ).length;
-                    const newPosition = cursorPosition + (newDotsBeforeCursor - dotsBeforeCursor);
-                    input.setSelectionRange(newPosition, newPosition);
-
-                    if (formatted.length === 10 && isValidDate(formatted)) {
-                      handleInputChange('sampling_date')(dayjs(formatted, 'DD.MM.YYYY'));
-                    }
-                  }}
                 />
                 {errors.sampling_date && (
                   <div className="error-message">{errors.sampling_date}</div>
@@ -1051,31 +921,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                   allowClear={true}
                   superNextIcon={null}
                   superPrevIcon={null}
-                  onKeyDown={e => {
-                    // Разрешаем цифры, точки, backspace и delete
-                    if (!/[\d\.]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete') {
-                      e.preventDefault();
-                    }
-                  }}
-                  onInput={e => {
-                    const input = e.target;
-                    const cursorPosition = input.selectionStart;
-                    const formatted = formatDateInput(input.value);
-
-                    const dotsBeforeCursor = (
-                      input.value.slice(0, cursorPosition).match(/\./g) || []
-                    ).length;
-                    input.value = formatted;
-                    const newDotsBeforeCursor = (
-                      formatted.slice(0, cursorPosition).match(/\./g) || []
-                    ).length;
-                    const newPosition = cursorPosition + (newDotsBeforeCursor - dotsBeforeCursor);
-                    input.setSelectionRange(newPosition, newPosition);
-
-                    if (formatted.length === 10 && isValidDate(formatted)) {
-                      handleInputChange('receiving_date')(dayjs(formatted, 'DD.MM.YYYY'));
-                    }
-                  }}
                 />
                 {errors.receiving_date && (
                   <div className="error-message">{errors.receiving_date}</div>
@@ -1127,7 +972,6 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                 </div>
               )}
 
-              {/* Показываем шаблон только если выбрана лаборатория и подразделение (если требуется) */}
               {formData.laboratory && (!departments.length || formData.department) && (
                 <>
                   <div className="form-group">
@@ -1167,27 +1011,10 @@ const EditProtocolModal = ({ isOpen, onClose, onSuccess, protocol }) => {
                   )}
                 </>
               )}
-            </>
+            </div>
           )}
         </div>
       </div>
-
-      {isConfirmModalVisible && (
-        <Modal
-          header="Подтверждение формирования"
-          onClose={() => setIsConfirmModalVisible(false)}
-          onSave={handleGenerateProtocol}
-          style={{ width: '500px', margin: '0 auto', left: '50%' }}
-          loading={isGenerating}
-        >
-          <div className="save-protocol-calculation-form">
-            <p className="confirmation-message">
-              Вы уверены, что хотите сформировать протокол № {formData.test_protocol_number}?
-            </p>
-            {error && <p className="error-message">{error}</p>}
-          </div>
-        </Modal>
-      )}
     </Modal>
   );
 };

@@ -135,17 +135,23 @@ def format_decimal_ru(value):
         return str(value)
 
 
-def get_object_suffix(test_object):
+def get_object_suffix(test_objects):
     """
-    Определяет суффикс для номера протокола на основе объекта испытаний.
+    Определяет суффикс для номера протокола на основе объектов испытаний.
+    Если есть несколько объектов, проверяет каждый.
     """
-    if not test_object:
+    if not test_objects:
         return ""
-    test_object_lower = test_object.lower()
-    if "конденсат" in test_object_lower:
-        return "дк"
-    elif "нефть" in test_object_lower:
-        return "н"
+
+    # Разделяем строку с объектами по запятой и приводим к нижнему регистру
+    objects = [obj.strip().lower() for obj in test_objects.split(",")]
+
+    # Проверяем каждый объект
+    for test_object in objects:
+        if "конденсат" in test_object:
+            return "дк"
+        elif "нефть" in test_object:
+            return "н"
     return ""
 
 
@@ -160,9 +166,17 @@ def format_protocol_number(protocol, excel_template):
     if not protocol.is_accredited:
         return protocol.test_protocol_number
 
-    suffix = get_object_suffix(protocol.test_object)
+    # Получаем все объекты испытаний из проб протокола
+    test_objects = ", ".join(
+        [sample.test_object for sample in protocol.samples.filter(is_deleted=False)]
+    )
 
-    base_number = f"{protocol.test_protocol_number}/07/{suffix}"
+    suffix = get_object_suffix(test_objects)
+    base_number = (
+        f"{protocol.test_protocol_number}/07/{suffix}"
+        if suffix
+        else f"{protocol.test_protocol_number}/07"
+    )
 
     # Если есть дата протокола, добавляем её
     if protocol.test_protocol_date:

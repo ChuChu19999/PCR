@@ -38,8 +38,8 @@ export default function App() {
       try {
         const tokenData = await KeycloakService.init();
         setIsAuthenticated(true);
-        setUsername(tokenData.fullName);
-        console.log('username в App.jsx:', tokenData.fullName);
+        setUsername(tokenData.full_name);
+        console.log('username в App.jsx:', tokenData.full_name);
 
         // Добавляем интерсептор axios после инициализации Keycloak
         axios.interceptors.request.use(async config => {

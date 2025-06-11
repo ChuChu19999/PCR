@@ -863,22 +863,18 @@ const OilProductsPage = () => {
     }
 
     try {
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/get-registration-numbers/`,
-        {
-          params: {
-            laboratory_id: laboratoryId,
-            department_id: isDepartment ? id : null,
-            method_id: currentMethod?.id,
-            partial_number: value,
-          },
-        }
-      );
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/samples/`, {
+        params: {
+          laboratory_id: laboratoryId,
+          department_id: isDepartment ? id : null,
+          search: value,
+        },
+      });
 
       if (Array.isArray(response.data)) {
-        const options = response.data.map(number => ({
-          value: number,
-          label: number,
+        const options = response.data.map(sample => ({
+          value: sample.registration_number,
+          label: `${sample.registration_number} - ${sample.test_object}`,
         }));
         setRegistrationOptions(options);
       }
@@ -890,7 +886,7 @@ const OilProductsPage = () => {
 
   const handleLoadRegistrationData = async () => {
     if (!registrationNumber || !currentMethod) {
-      message.warning('Введите регистрационный номер');
+      message.warning('Введите регистрационный номер пробы');
       return;
     }
 
@@ -901,44 +897,53 @@ const OilProductsPage = () => {
     }));
 
     try {
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/get-registration-numbers/`,
+      // Получаем данные пробы
+      const samplesResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/samples/`, {
+        params: {
+          laboratory_id: laboratoryId,
+          department_id: isDepartment ? id : null,
+          search: registrationNumber,
+        },
+      });
+
+      if (!samplesResponse.data.length) {
+        throw new Error('Проба не найдена');
+      }
+
+      const sample = samplesResponse.data[0];
+
+      // Получаем последний расчет для этой пробы и метода
+      const calculationsResponse = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/calculations/`,
         {
           params: {
-            laboratory_id: laboratoryId,
-            method_id: currentMethod.id,
-            registration_number: registrationNumber,
-            department_id: isDepartment ? id : null,
+            sample_id: sample.id,
+            research_method: currentMethod.id,
           },
         }
       );
 
-      console.log('Полученные данные от сервера:', response.data);
-
-      if (response.data) {
+      if (calculationsResponse.data.length > 0) {
+        const calculation = calculationsResponse.data[0];
         const initialValues = {};
 
-        // Обрабатываем поля ввода
-        Object.entries(response.data).forEach(([fieldName, value]) => {
-          if (fieldName === 'laboratory_activity_date') {
-            console.log('Найдена дата лабораторной деятельности:', value);
-            const date = dayjs(value);
-            console.log('Дата после преобразования в dayjs:', date);
-            console.log('Дата валидна:', date.isValid());
-            console.log('Дата в формате DD.MM.YYYY:', date.format('DD.MM.YYYY'));
-            if (date.isValid()) {
-              setLaboratoryActivityDate(date);
-              console.log('Дата установлена в состояние');
+        // Заполняем поля ввода данными из расчета
+        Object.entries(calculation.input_data).forEach(([fieldName, value]) => {
+          currentMethod.input_data.fields.forEach(field => {
+            if (field.name === fieldName) {
+              const formFieldName = `${currentMethod.id}_${field.name}`;
+              initialValues[formFieldName] = value.toString().replace('.', ',');
             }
-          } else {
-            currentMethod.input_data.fields.forEach(field => {
-              if (field.name === fieldName) {
-                const formFieldName = `${currentMethod.id}_${field.name}`;
-                initialValues[formFieldName] = value.toString().replace('.', ',');
-              }
-            });
-          }
+          });
         });
+
+        // Устанавливаем дату лабораторной деятельности
+        if (calculation.laboratory_activity_date) {
+          const date = dayjs(calculation.laboratory_activity_date);
+          if (date.isValid()) {
+            setLaboratoryActivityDate(date);
+          }
+        }
 
         // Обновляем значения формы
         form.setFieldsValue(initialValues);
@@ -948,10 +953,16 @@ const OilProductsPage = () => {
         }));
 
         message.success('Данные успешно загружены');
+      } else {
+        message.info('Для данной пробы еще не было расчетов по этому методу');
+        setLockedMethods(prev => ({
+          ...prev,
+          [currentMethod.id]: false,
+        }));
       }
     } catch (error) {
       console.error('Ошибка при получении данных:', error);
-      message.error('Не удалось загрузить данные по указанному номеру');
+      message.error(error.message || 'Не удалось загрузить данные по указанному номеру');
       setLockedMethods(prev => ({
         ...prev,
         [currentMethod.id]: false,

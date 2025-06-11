@@ -86,7 +86,7 @@ const ResearchMethodPage = () => {
   const [availableMethods, setAvailableMethods] = useState(null);
   const [laboratoryId] = useState(searchParams.get('laboratory'));
   const [departmentId] = useState(searchParams.get('department'));
-  const [protocolId] = useState(searchParams.get('protocol_id'));
+  const [sampleId] = useState(searchParams.get('sample_id'));
   const [selectedTab, setSelectedTab] = useState(0);
   const [currentMethod, setCurrentMethod] = useState(null);
   const [form] = Form.useForm();
@@ -97,27 +97,27 @@ const ResearchMethodPage = () => {
   const [lockedMethods, setLockedMethods] = useState({});
   const [laboratoryActivityDate, setLaboratoryActivityDate] = useState(null);
   const [dateError, setDateError] = useState('');
-  const [protocolData, setProtocolData] = useState(null);
+  const [sampleData, setSampleData] = useState(null);
   const inputRefs = React.useRef({});
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isConfirmProtocolModalOpen, setIsConfirmProtocolModalOpen] = useState(false);
 
   useEffect(() => {
     try {
-      // Получаем данные протокола
-      const fetchProtocolData = async () => {
+      // Получаем данные пробы
+      const fetchSampleData = async () => {
         try {
           const response = await axios.get(
-            `${import.meta.env.VITE_API_URL}/api/protocols/${protocolId}/`
+            `${import.meta.env.VITE_API_URL}/api/samples/${sampleId}/`
           );
-          setProtocolData(response.data);
+          setSampleData(response.data);
         } catch (error) {
-          console.error('Ошибка при загрузке данных протокола:', error);
+          console.error('Ошибка при загрузке данных пробы:', error);
         }
       };
 
-      if (protocolId) {
-        fetchProtocolData();
+      if (sampleId) {
+        fetchSampleData();
       }
 
       // Получаем данные из sessionStorage
@@ -126,22 +126,21 @@ const ResearchMethodPage = () => {
         const parsedMethods = JSON.parse(methodsData);
         setAvailableMethods(parsedMethods);
 
-        // Выбираем первый доступный метод и проверяем его структуру
-        if (parsedMethods.individual_methods?.length > 0) {
-          const firstMethod = parsedMethods.individual_methods[0];
-          if (!firstMethod.input_data) {
-            firstMethod.input_data = { fields: [] };
+        // Выбираем первый доступный метод
+        if (parsedMethods.methods?.length > 0) {
+          const firstMethod = parsedMethods.methods[0];
+          if (firstMethod.is_group && firstMethod.methods?.length > 0) {
+            const firstGroupMethod = firstMethod.methods[0];
+            if (!firstGroupMethod.input_data) {
+              firstGroupMethod.input_data = { fields: [] };
+            }
+            setCurrentMethod(firstGroupMethod);
+          } else {
+            if (!firstMethod.input_data) {
+              firstMethod.input_data = { fields: [] };
+            }
+            setCurrentMethod(firstMethod);
           }
-          setCurrentMethod(firstMethod);
-        } else if (
-          parsedMethods.groups?.length > 0 &&
-          parsedMethods.groups[0].methods?.length > 0
-        ) {
-          const firstGroupMethod = parsedMethods.groups[0].methods[0];
-          if (!firstGroupMethod.input_data) {
-            firstGroupMethod.input_data = { fields: [] };
-          }
-          setCurrentMethod(firstGroupMethod);
         }
 
         // Очищаем данные из sessionStorage после использования
@@ -169,32 +168,32 @@ const ResearchMethodPage = () => {
               throw new Error('Страница исследований не найдена');
             }
 
+            // Получаем доступные методы для пробы
             const response = await axios.get(
               `${import.meta.env.VITE_API_URL}/api/research-methods/available-methods/`,
               {
                 params: {
-                  protocol_id: protocolId,
+                  sample_id: sampleId,
                   research_page_id: researchPage.id,
                 },
               }
             );
 
             setAvailableMethods(response.data);
-            if (response.data.individual_methods?.length > 0) {
-              const firstMethod = response.data.individual_methods[0];
-              if (!firstMethod.input_data) {
-                firstMethod.input_data = { fields: [] };
+            if (response.data.methods?.length > 0) {
+              const firstMethod = response.data.methods[0];
+              if (firstMethod.is_group && firstMethod.methods?.length > 0) {
+                const firstGroupMethod = firstMethod.methods[0];
+                if (!firstGroupMethod.input_data) {
+                  firstGroupMethod.input_data = { fields: [] };
+                }
+                setCurrentMethod(firstGroupMethod);
+              } else {
+                if (!firstMethod.input_data) {
+                  firstMethod.input_data = { fields: [] };
+                }
+                setCurrentMethod(firstMethod);
               }
-              setCurrentMethod(firstMethod);
-            } else if (
-              response.data.groups?.length > 0 &&
-              response.data.groups[0].methods?.length > 0
-            ) {
-              const firstGroupMethod = response.data.groups[0].methods[0];
-              if (!firstGroupMethod.input_data) {
-                firstGroupMethod.input_data = { fields: [] };
-              }
-              setCurrentMethod(firstGroupMethod);
             }
           } catch (error) {
             console.error('Ошибка при загрузке методов:', error);
@@ -210,7 +209,7 @@ const ResearchMethodPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [protocolId]);
+  }, [sampleId]);
 
   useEffect(() => {
     const values = form.getFieldsValue();
@@ -220,7 +219,12 @@ const ResearchMethodPage = () => {
   const handleCalculate = async methodId => {
     try {
       setIsCalculating(true);
-      const methodDetails = currentMethod;
+
+      // Получаем актуальные данные метода
+      const methodDetailsResponse = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/research-methods/${methodId}/`
+      );
+      const methodDetails = methodDetailsResponse.data;
 
       const inputData = {};
       methodDetails.input_data.fields.forEach(field => {
@@ -272,7 +276,7 @@ const ResearchMethodPage = () => {
       }));
     } catch (error) {
       console.error('Ошибка при расчете:', error);
-      message.error(error.message || 'Ошибка при расчете');
+      message.error(error.response?.data?.error || error.message || 'Ошибка при расчете');
     } finally {
       setIsCalculating(false);
     }
@@ -533,7 +537,7 @@ const ResearchMethodPage = () => {
   const handleGenerateProtocol = async () => {
     try {
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/generate-protocol-excel/?protocol_id=${protocolId}`,
+        `${import.meta.env.VITE_API_URL}/api/generate-sample-excel/?sample_id=${sampleId}`,
         {
           responseType: 'blob',
         }
@@ -543,42 +547,30 @@ const ResearchMethodPage = () => {
       const link = document.createElement('a');
       link.href = url;
 
-      // Формируем имя файла на основе данных протокола
-      let filename;
-      if (protocolData.is_accredited && protocolData.test_protocol_date) {
-        const date = dayjs(protocolData.test_protocol_date).format('DD.MM.YYYY');
-        filename = `Протокол_${protocolData.test_protocol_number}_от_${date}.xlsx`;
-      } else {
-        filename = `Протокол_${protocolData.test_protocol_number}.xlsx`;
-      }
+      // Формируем имя файла на основе данных пробы
+      const filename = `Проба_${sampleData.registration_number}.xlsx`;
 
       // Очищаем имя файла от недопустимых символов
-      filename = filename.replace(/[^\wа-яА-Я\s\.\-_]/g, '');
+      const cleanedFilename = filename.replace(/[^\wа-яА-Я\s\.\-_]/g, '');
 
-      link.setAttribute('download', filename);
+      link.setAttribute('download', cleanedFilename);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
 
       setIsConfirmProtocolModalOpen(false);
-      message.success('Протокол успешно сформирован');
+      message.success('Отчет по пробе успешно сформирован');
     } catch (error) {
-      console.error('Ошибка при формировании протокола:', error);
-      message.error('Не удалось сформировать протокол');
+      console.error('Ошибка при формировании отчета:', error);
+      message.error('Не удалось сформировать отчет');
     }
   };
 
   if (isLoading) {
     return (
       <ResearchMethodPageWrapper>
-        <Layout
-          title={
-            protocolData
-              ? `Протокол № ${protocolData.test_protocol_number || protocolData.registration_number}`
-              : 'Загрузка...'
-          }
-        >
+        <Layout title={sampleData ? `Проба № ${sampleData.registration_number}` : 'Загрузка...'}>
           <div style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}>
             <LoadingCard />
           </div>
@@ -597,14 +589,11 @@ const ResearchMethodPage = () => {
     );
   }
 
-  const hasNoMethods =
-    !availableMethods?.individual_methods?.length && !availableMethods?.groups?.length;
+  const hasNoMethods = !availableMethods?.methods?.length;
 
   return (
     <ResearchMethodPageWrapper>
-      <Layout
-        title={protocolData ? `Протокол № ${protocolData.test_protocol_number}` : 'Загрузка...'}
-      >
+      <Layout title={sampleData ? `Проба № ${sampleData.registration_number}` : 'Загрузка...'}>
         <Form
           form={form}
           onFinish={onFinish}
@@ -688,16 +677,7 @@ const ResearchMethodPage = () => {
                     paddingRight: '4px',
                   }}
                 >
-                  {[
-                    ...(availableMethods?.individual_methods || []).map(method => ({
-                      ...method,
-                      is_group: false,
-                    })),
-                    ...(availableMethods?.groups || []).map(group => ({
-                      ...group,
-                      is_group: true,
-                    })),
-                  ].map((method, index) => (
+                  {availableMethods?.methods.map((method, index) => (
                     <div
                       key={method.id}
                       onClick={() => {
@@ -709,11 +689,6 @@ const ResearchMethodPage = () => {
                               firstMethod.input_data = { fields: [] };
                             }
                             setCurrentMethod(firstMethod);
-                            // Устанавливаем индекс с учетом количества обычных методов
-                            setSelectedTab(
-                              availableMethods.individual_methods.length +
-                                availableMethods.groups.findIndex(g => g.id === method.id)
-                            );
                           }
                         } else {
                           // Если это обычный метод
@@ -721,11 +696,8 @@ const ResearchMethodPage = () => {
                             method.input_data = { fields: [] };
                           }
                           setCurrentMethod(method);
-                          // Устанавливаем индекс в пределах обычных методов
-                          setSelectedTab(
-                            availableMethods.individual_methods.findIndex(m => m.id === method.id)
-                          );
                         }
+                        setSelectedTab(index);
                       }}
                       style={{
                         padding: '8px 12px',
@@ -896,27 +868,18 @@ const ResearchMethodPage = () => {
                         )}
                       </div>
                     </div>
-                    {protocolData && (
+                    {sampleData && (
                       <Button
                         type="primary"
                         onClick={() => setIsConfirmProtocolModalOpen(true)}
                         style={{ fontFamily: 'HeliosCondC' }}
                       >
-                        Сформировать протокол
+                        Сформировать отчет
                       </Button>
                     )}
                   </div>
 
-                  {[
-                    ...(availableMethods?.individual_methods || []).map(method => ({
-                      ...method,
-                      is_group: false,
-                    })),
-                    ...(availableMethods?.groups || []).map(group => ({
-                      ...group,
-                      is_group: true,
-                    })),
-                  ].map((method, index) => (
+                  {availableMethods?.methods.map((method, index) => (
                     <TabPanel key={`panel-${method.id}`} value={selectedTab} index={index}>
                       {currentMethod && (
                         <div className="calculation-form">
@@ -1260,7 +1223,7 @@ const ResearchMethodPage = () => {
             onClose={handleCloseSaveModal}
             calculationResult={lastCalculationResult[currentMethod.id]}
             currentMethod={currentMethod}
-            protocolId={protocolId}
+            sampleId={sampleId}
             laboratoryId={laboratoryId}
             departmentId={departmentId}
             laboratoryActivityDate={laboratoryActivityDate}
@@ -1268,11 +1231,11 @@ const ResearchMethodPage = () => {
           />
         )}
 
-        {/* Добавляем модальное окно подтверждения */}
+        {/* Модальное окно подтверждения */}
         <ConfirmProtocolModal
           isOpen={isConfirmProtocolModalOpen}
           onClose={() => setIsConfirmProtocolModalOpen(false)}
-          protocolNumber={protocolData?.test_protocol_number}
+          sampleNumber={sampleData?.registration_number}
           onConfirm={handleGenerateProtocol}
         />
       </Layout>

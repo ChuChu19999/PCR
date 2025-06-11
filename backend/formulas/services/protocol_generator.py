@@ -7,11 +7,20 @@ from django.shortcuts import get_object_or_404
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Font, Alignment
 from openpyxl.cell.cell import MergedCell
+from openpyxl.worksheet.page import PageMargins
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from ..models import ExcelTemplate, Protocol, Calculation, Equipment
+from ..models import (
+    ExcelTemplate,
+    Protocol,
+    Calculation,
+    Equipment,
+    Sample,
+    ResearchObject,
+    ResearchObjectMethod,
+)
 from ..utils.excel_utils import (
     A4_HEIGHT_POINTS,
     DEFAULT_ROW_HEIGHT,
@@ -46,31 +55,112 @@ def generate_protocol_excel(request):
             )
 
         if registration_number:
-            protocol = Protocol.objects.filter(
+            # Ищем пробу по регистрационному номеру
+            sample = Sample.objects.filter(
                 registration_number=registration_number, is_deleted=False
             ).first()
+            if not sample:
+                return Response(
+                    {
+                        "error": f"Проба с регистрационным номером {registration_number} не найдена"
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            protocol = sample.protocol
             if not protocol:
                 return Response(
                     {
-                        "error": f"Протокол с регистрационным номером {registration_number} не найден"
+                        "error": f"Для пробы с регистрационным номером {registration_number} не найден протокол"
                     },
                     status=status.HTTP_404_NOT_FOUND,
                 )
         else:
             protocol = Protocol.objects.get(id=protocol_id)
 
-        calculations = Calculation.objects.filter(protocol=protocol).order_by(
-            "laboratory_activity_date"
-        )
-
-        if not calculations.exists():
+        # Получаем все пробы протокола
+        samples = Sample.objects.filter(protocol=protocol, is_deleted=False)
+        if not samples.exists():
             return Response(
-                {"error": "Для протокола не найдены расчеты"},
+                {"error": "Для протокола не найдены пробы"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        min_date = calculations.first().laboratory_activity_date
-        max_date = calculations.last().laboratory_activity_date
+        # Собираем все расчеты из всех проб
+        calculations = []
+        for sample in samples:
+            sample_calculations = Calculation.objects.filter(
+                sample=sample, is_deleted=False
+            ).order_by("laboratory_activity_date")
+            calculations.extend(sample_calculations)
+
+        if not calculations:
+            return Response(
+                {"error": "Для проб протокола не найдены расчеты"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Получаем данные из available_methods для сравнения
+        research_page = ResearchObject.objects.filter(
+            laboratory_id=protocol.laboratory_id,
+            department_id=protocol.department_id,
+            type="oil_products",
+            is_deleted=False,
+        ).first()
+
+        if not research_page:
+            logger.error(
+                "Не найдена страница исследований для сравнения порядка методов"
+            )
+        else:
+            # Получаем методы как в available_methods
+            research_methods_from_api = (
+                ResearchObjectMethod.objects.filter(
+                    research_object=research_page, is_active=True, is_deleted=False
+                )
+                .select_related("research_method")
+                .order_by("sort_order", "created_at")
+            )
+
+            logger.info("=== СРАВНЕНИЕ ПОРЯДКА МЕТОДОВ ===")
+            logger.info("\nМетоды из available_methods:")
+            for rom in research_methods_from_api:
+                logger.info(
+                    f"ID: {rom.research_method_id}, Method: {rom.research_method.name}, sort_order: {rom.sort_order}"
+                )
+
+            logger.info("\nТекущие расчеты до сортировки:")
+            for calc in calculations:
+                logger.info(
+                    f"ID: {calc.research_method_id}, Method: {calc.research_method.name}"
+                )
+
+            # Создаем словарь для сортировки
+            method_order = {
+                rom.research_method_id: rom.sort_order
+                for rom in research_methods_from_api
+            }
+            logger.info("\nСловарь сортировки:")
+            for method_id, sort_order in method_order.items():
+                logger.info(f"Method ID: {method_id}, sort_order: {sort_order}")
+
+            # Сортируем расчеты
+            calculations.sort(
+                key=lambda x: (
+                    method_order.get(x.research_method_id, float("inf")),
+                    x.research_method.name,
+                )
+            )
+
+            logger.info("\nРасчеты после сортировки:")
+            for calc in calculations:
+                logger.info(
+                    f"ID: {calc.research_method_id}, Method: {calc.research_method.name}, sort_order: {method_order.get(calc.research_method_id, 'не найден')}"
+                )
+
+            logger.info("=== КОНЕЦ СРАВНЕНИЯ ===\n")
+
+        min_date = calculations[0].laboratory_activity_date
+        max_date = calculations[-1].laboratory_activity_date
 
         laboratory_activity_dates = (
             f"{min_date.strftime('%d.%m.%Y')}-{max_date.strftime('%d.%m.%Y')}"
@@ -79,8 +169,9 @@ def generate_protocol_excel(request):
             laboratory_activity_dates = min_date.strftime("%d.%m.%Y")
 
         if not protocol.excel_template:
-            return JsonResponse(
-                {"error": "Для протокола не выбран шаблон Excel"}, status=400
+            return Response(
+                {"error": "Для протокола не выбран шаблон Excel"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Загружаем шаблон
@@ -92,16 +183,27 @@ def generate_protocol_excel(request):
         executors = list(set([calc.executor for calc in calculations if calc.executor]))
         executors_str = ", ".join(executors)
 
+        # Формируем строки с уникальными регистрационными номерами и объектами испытаний
+        unique_registration_numbers = set()
+        unique_test_objects = set()
+
+        for sample in samples:
+            unique_registration_numbers.add(sample.registration_number)
+            unique_test_objects.add(sample.test_object)
+
+        registration_numbers = ", ".join(sorted(unique_registration_numbers))
+        test_objects = ", ".join(sorted(unique_test_objects))
+
         # Подготавливаем данные для замены в шаблоне
         replacements = {
             "{test_protocol_number}": protocol.test_protocol_number or "",
-            "{test_object}": protocol.test_object or "",
+            "{registration_number}": registration_numbers,
+            "{test_object}": test_objects,
             "{laboratory_location}": protocol.laboratory_location or "",
             "{branch}": protocol.branch or "",
             "{sampling_location_detail}": protocol.sampling_location_detail or "",
             "{phone}": protocol.phone or "",
             "{sampling_act_number}": protocol.sampling_act_number or "",
-            "{registration_number}": protocol.registration_number or "",
             "{sampling_date}": (
                 protocol.sampling_date.strftime("%d.%m.%Y")
                 if protocol.sampling_date
@@ -117,12 +219,32 @@ def generate_protocol_excel(request):
             "{subd}": protocol.branch,
             "{sampling_location}": protocol.sampling_location_detail,
             "{tel}": protocol.phone,
-            "{res_object}": protocol.test_object,
+            "{res_object}": test_objects,
             "{laboratory_activity_dates}": laboratory_activity_dates,
         }
 
         # Обработка условий отбора
-        selection_conditions = protocol.selection_conditions or []
+        selection_conditions = protocol.selection_conditions or {}
+        selection_conditions_list = []
+
+        # Преобразуем selection_conditions в список, если это словарь
+        if isinstance(selection_conditions, dict):
+            for name, data in selection_conditions.items():
+                if isinstance(data, dict):
+                    selection_conditions_list.append(
+                        {
+                            "name": name,
+                            "value": data.get("value"),
+                            "unit": data.get("unit"),
+                        }
+                    )
+                else:
+                    selection_conditions_list.append(
+                        {"name": name, "value": data, "unit": ""}
+                    )
+        elif isinstance(selection_conditions, list):
+            selection_conditions_list = selection_conditions
+
         has_filled_conditions = False
         rows_to_delete = set()
 
@@ -158,8 +280,8 @@ def generate_protocol_excel(request):
                         or unit_tag in cell.value
                     ):
                         has_condition_tags = True
-                        if i <= len(selection_conditions):
-                            condition = selection_conditions[i - 1]
+                        if i <= len(selection_conditions_list):
+                            condition = selection_conditions_list[i - 1]
                             if condition.get("value") is not None:
                                 all_tags_empty = False
                                 cell_value = cell.value
@@ -242,7 +364,7 @@ def generate_protocol_excel(request):
 
         if start_row and end_row:
             template_row = start_row + 1
-            rows_needed = calculations.count()
+            rows_needed = len(calculations)
 
             logger.info(
                 f"Найдены границы таблицы 1: start_row={start_row}, end_row={end_row}"
@@ -288,8 +410,9 @@ def generate_protocol_excel(request):
                         for group in groups:
                             logger.info(f"  - Группа: id={group.id}, name={group.name}")
                 else:
-                    logger.info(f"  - Метод НЕ имеет атрибута groups")
+                    logger.info(f"  - Метод НЕ имеет атрибут groups")
 
+            # Сначала собираем все методы в группы или как одиночные
             for calc in calculations:
                 group = None
                 group_id = None
@@ -310,6 +433,9 @@ def generate_protocol_excel(request):
                             "name": group_name,
                             "calculations": [],
                             "methods": [],
+                            "sort_order": method_order.get(
+                                calc.research_method_id, float("inf")
+                            ),
                         }
                         logger.info(f"Создана новая группа для расчетов: {group_name}")
 
@@ -317,6 +443,17 @@ def generate_protocol_excel(request):
                     grouped_calculations[group_id]["methods"].append(
                         calc.research_method
                     )
+                    # Обновляем sort_order группы минимальным значением из её методов
+                    current_sort_order = method_order.get(
+                        calc.research_method_id, float("inf")
+                    )
+                    if (
+                        current_sort_order
+                        < grouped_calculations[group_id]["sort_order"]
+                    ):
+                        grouped_calculations[group_id][
+                            "sort_order"
+                        ] = current_sort_order
                     logger.info(
                         f"Метод {calc.research_method.name} добавлен в группу {group_name}"
                     )
@@ -327,11 +464,66 @@ def generate_protocol_excel(request):
                     )
 
             logger.info(
-                f"Итоговые сгруппированные методы: {[(k, v['name'], [m.name for m in v['methods']]) for k, v in grouped_calculations.items()]}"
+                f"Итоговые сгруппированные методы: {[(k, v['name'], [m.name for m in v['methods']], v['sort_order']) for k, v in grouped_calculations.items()]}"
             )
             logger.info(
                 f"Итоговые одиночные методы: {[c.research_method.name for c in standalone_calculations]}"
             )
+
+            # Проверяем методы на наличие "конденсат" и "нефть"
+            def check_method_name(method_name):
+                return (
+                    "конденсат" in method_name.lower() or "нефть" in method_name.lower()
+                )
+
+            # Модифицируем группировку если нужно
+            modified_grouped_calculations = {}
+            for group_id, group_data in sorted(
+                grouped_calculations.items(), key=lambda x: x[1]["sort_order"]
+            ):
+                logger.info(f"Проверка группы: {group_data['name']}")
+
+                # Проверяем каждый метод в группе
+                for calc in group_data["calculations"]:
+                    method_name = calc.research_method.name
+                    logger.info(f"Проверка метода в группе: {method_name}")
+
+                    if check_method_name(method_name):
+                        logger.info(
+                            f"Найден метод с ключевым словом (конденсат/нефть): {method_name}"
+                        )
+                        # Создаем копию первого расчета группы
+                        group_calc = copy(group_data["calculations"][0])
+                        # Меняем название метода на название группы
+                        group_calc.research_method.name = group_data["name"]
+                        # Сохраняем sort_order группы
+                        group_calc.research_method.sort_order = group_data["sort_order"]
+                        logger.info(
+                            f"Группа будет выведена как одиночный метод с названием: {group_data['name']} и sort_order: {group_data['sort_order']}"
+                        )
+                        standalone_calculations.append(group_calc)
+                        break
+                else:
+                    # Если не нашли методы с ключевыми словами, оставляем группу как есть
+                    logger.info(f"Группа {group_data['name']} остается без изменений")
+                    modified_grouped_calculations[group_id] = group_data
+
+            grouped_calculations = modified_grouped_calculations
+
+            # Сортируем одиночные методы по sort_order
+            standalone_calculations.sort(
+                key=lambda x: method_order.get(x.research_method_id, float("inf"))
+            )
+
+            logger.info(f"Итоговое количество групп: {len(grouped_calculations)}")
+            logger.info(
+                f"Итоговое количество одиночных методов: {len(standalone_calculations)}"
+            )
+            logger.info("Отсортированные одиночные методы:")
+            for calc in standalone_calculations:
+                logger.info(
+                    f"  - {calc.research_method.name} (sort_order: {method_order.get(calc.research_method_id, 'не задан')})"
+                )
 
             # Вычисляем последнюю строку таблицы и правильное количество строк для вставки
             total_rows = 0
@@ -491,7 +683,7 @@ def generate_protocol_excel(request):
                         if "{id_method}" in cell.value:
                             cell.value = cell.value.replace("{id_method}", "1")
                         elif "{name_method}" in cell.value:
-                            cell.value = f"{group_data['name']}:"
+                            cell.value = f"{group_data['name']}"
                         elif "{unit}" in cell.value:
                             # Выводим единицу измерения на уровне группы
                             cell.value = cell.value.replace(
@@ -696,7 +888,7 @@ def generate_protocol_excel(request):
                                     f"Установлен ID метода {idx} для группы {group_data['name']}"
                                 )
                             elif "{name_method}" in cell.value:
-                                cell.value = f"{group_data['name']}:"
+                                cell.value = f"{group_data['name']}"
                                 logger.info(
                                     f"Установлено название группы: {group_data['name']}"
                                 )
@@ -951,6 +1143,8 @@ def generate_protocol_excel(request):
                     for equipment_item in calc.equipment_data:
                         if isinstance(equipment_item, dict) and "id" in equipment_item:
                             equipment_ids.add(equipment_item["id"])
+                        elif isinstance(equipment_item, int):  # Поддержка числовых ID
+                            equipment_ids.add(equipment_item)
 
             # Получаем все оборудование из базы данных
             if equipment_ids:
@@ -1244,6 +1438,66 @@ def generate_protocol_excel(request):
         target_worksheet = target_workbook.active
         target_worksheet.title = "Лист1"
 
+        # Копируем настройки страницы из шаблона
+        source_page_setup = source_worksheet.page_setup
+        source_page_margins = source_worksheet.page_margins
+
+        for sheet in target_workbook.worksheets:
+            if (
+                hasattr(source_page_setup, "orientation")
+                and source_page_setup.orientation is not None
+            ):
+                sheet.page_setup.orientation = source_page_setup.orientation
+            if (
+                hasattr(source_page_setup, "paperSize")
+                and source_page_setup.paperSize is not None
+            ):
+                sheet.page_setup.paperSize = source_page_setup.paperSize
+
+            # Устанавливаем базовые настройки страницы для масштабирования
+            sheet.page_setup.fitToPage = True
+            sheet.page_setup.fitToWidth = 1
+            sheet.page_setup.fitToHeight = 0
+
+            # Копируем поля страницы
+            if source_page_margins:
+                sheet.page_margins = PageMargins(
+                    left=(
+                        source_page_margins.left
+                        if hasattr(source_page_margins, "left")
+                        else 0.591
+                    ),
+                    right=(
+                        source_page_margins.right
+                        if hasattr(source_page_margins, "right")
+                        else 0.394
+                    ),
+                    top=(
+                        source_page_margins.top
+                        if hasattr(source_page_margins, "top")
+                        else 0.433
+                    ),
+                    bottom=(
+                        source_page_margins.bottom
+                        if hasattr(source_page_margins, "bottom")
+                        else 0.354
+                    ),
+                )
+
+                # Копируем header и footer только если они есть в шаблоне
+                if hasattr(source_page_margins, "header"):
+                    sheet.page_margins.header = source_page_margins.header
+                if hasattr(source_page_margins, "footer"):
+                    sheet.page_margins.footer = source_page_margins.footer
+            else:
+                # Устанавливаем стандартные поля если их нет в шаблоне
+                sheet.page_margins = PageMargins(
+                    left=0.591,  # 1.5 см
+                    right=0.394,  # 1.0 см
+                    top=0.433,  # 1.1 см
+                    bottom=0.354,  # 0.9 см
+                )
+
         # Копируем размеры столбцов
         for column in source_worksheet.column_dimensions:
             target_worksheet.column_dimensions[column] = copy(
@@ -1471,7 +1725,71 @@ def generate_protocol_excel(request):
                 # Создаем новый лист для следующей части данных
                 current_sheet = target_workbook.create_sheet(f"Лист {sheet_index + 1}")
 
-                # Копируем размеры столбцов на новый лист
+                # Копируем настройки страницы
+                if (
+                    hasattr(source_worksheet.page_setup, "orientation")
+                    and source_worksheet.page_setup.orientation is not None
+                ):
+                    current_sheet.page_setup.orientation = (
+                        source_worksheet.page_setup.orientation
+                    )
+                if (
+                    hasattr(source_worksheet.page_setup, "paperSize")
+                    and source_worksheet.page_setup.paperSize is not None
+                ):
+                    current_sheet.page_setup.paperSize = (
+                        source_worksheet.page_setup.paperSize
+                    )
+
+                # Устанавливаем базовые настройки страницы для масштабирования
+                current_sheet.page_setup.fitToPage = True
+                current_sheet.page_setup.fitToWidth = 1
+                current_sheet.page_setup.fitToHeight = 0
+
+                # Копируем поля страницы
+                if source_worksheet.page_margins:
+                    current_sheet.page_margins = PageMargins(
+                        left=(
+                            source_worksheet.page_margins.left
+                            if hasattr(source_worksheet.page_margins, "left")
+                            else 0.591
+                        ),
+                        right=(
+                            source_worksheet.page_margins.right
+                            if hasattr(source_worksheet.page_margins, "right")
+                            else 0.394
+                        ),
+                        top=(
+                            source_worksheet.page_margins.top
+                            if hasattr(source_worksheet.page_margins, "top")
+                            else 0.433
+                        ),
+                        bottom=(
+                            source_worksheet.page_margins.bottom
+                            if hasattr(source_worksheet.page_margins, "bottom")
+                            else 0.354
+                        ),
+                    )
+
+                    # Копируем header и footer только если они есть в шаблоне
+                    if hasattr(source_worksheet.page_margins, "header"):
+                        current_sheet.page_margins.header = (
+                            source_worksheet.page_margins.header
+                        )
+                    if hasattr(source_worksheet.page_margins, "footer"):
+                        current_sheet.page_margins.footer = (
+                            source_worksheet.page_margins.footer
+                        )
+                else:
+                    # Устанавливаем стандартные поля если их нет в шаблоне
+                    current_sheet.page_margins = PageMargins(
+                        left=0.591,  # 1.5 см
+                        right=0.394,  # 1.0 см
+                        top=0.433,  # 1.1 см
+                        bottom=0.354,  # 0.9 см
+                    )
+
+                # Копируем размеры столбцов
                 for column in source_worksheet.column_dimensions:
                     current_sheet.column_dimensions[column] = copy(
                         source_worksheet.column_dimensions[column]
@@ -1569,7 +1887,17 @@ def generate_protocol_excel(request):
         target_workbook.save(final_output)
         final_output.seek(0)
 
-        safe_filename = f"Protocol_{protocol.registration_number.replace(' ', '_')}"
+        # Формируем имя файла из номера протокола или регистрационных номеров проб
+        if protocol.test_protocol_number:
+            safe_filename = f"Protocol_{protocol.test_protocol_number}"
+        else:
+            # Берем регистрационные номера из проб
+            registration_numbers = [
+                sample.registration_number
+                for sample in protocol.samples.filter(is_deleted=False)
+            ]
+            safe_filename = f"Protocol_{'-'.join(registration_numbers)}"
+
         safe_filename = "".join(
             c for c in safe_filename if c.isalnum() or c in ("_", "-", ".")
         )

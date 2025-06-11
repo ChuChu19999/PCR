@@ -83,7 +83,7 @@ const KeycloakService = {
 
   // Получить ФИО пользователя
   getUsername: () => {
-    return keycloak.tokenParsed?.fullName;
+    return keycloak.tokenParsed?.full_name;
   },
 
   // Запустить автообновление токена

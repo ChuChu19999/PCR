@@ -8,6 +8,7 @@ from .views.views import (
     ResearchObjectViewSet,
     ProtocolViewSet,
     CalculationViewSet,
+    SampleViewSet,
     check_status_api,
 )
 from .views.excel_views import (
@@ -25,7 +26,7 @@ from .api.calculation_api import (
     get_registration_numbers,
 )
 from .api.fixtures_api import get_fixtures
-from .api.protocol_api import get_sampling_locations, get_branches
+from .api.protocol_api import get_sampling_locations, get_branches, search_protocols
 from .services.protocol_generator import generate_protocol_excel
 
 
@@ -40,6 +41,7 @@ router.register(
 )
 router.register(r"research-pages", ResearchObjectViewSet, basename="research-page")
 router.register(r"protocols", ProtocolViewSet, basename="protocol")
+router.register(r"samples", SampleViewSet, basename="sample")
 router.register(r"calculations", CalculationViewSet, basename="calculation")
 router.register(r"excel-templates", ExcelTemplateViewSet, basename="excel-template")
 router.register(r"equipment", EquipmentViewSet, basename="equipment")
@@ -82,5 +84,10 @@ urlpatterns = [
         "get-branches/",
         get_branches,
         name="get_branches",
+    ),
+    path(
+        "search-protocols/",
+        search_protocols,
+        name="search_protocols",
     ),
 ]

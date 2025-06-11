@@ -3,7 +3,11 @@ import { Form, Input } from 'antd';
 import './SelectionConditionsForm.css';
 
 const SelectionConditionsForm = ({ conditions, onChange }) => {
-  if (!conditions || conditions.length === 0) {
+  console.log('SelectionConditionsForm conditions:', conditions);
+  console.log('Type of conditions:', typeof conditions);
+  console.log('Is Array?', Array.isArray(conditions));
+
+  if (!conditions || !Array.isArray(conditions) || conditions.length === 0) {
     return null;
   }
 

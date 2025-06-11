@@ -53,7 +53,7 @@ class CustomJWTAuthentication(BaseAuthentication):
             logger.error(f"Invalid token: {e}")
             raise AuthenticationFailed("Invalid token")
 
-        username = decoded_token.get("preferred_username")
+        username = decoded_token.get("ad_login")
         if not username:
             logger.error("Username is missing in the token")
             raise AuthenticationFailed("Username is missing in the token")

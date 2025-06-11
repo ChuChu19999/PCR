@@ -10,6 +10,7 @@ from .models import (
     ExcelTemplate,
     Protocol,
     Equipment,
+    Sample,
 )
 
 
@@ -39,11 +40,11 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
-            "fullName",
-            "hashSnils",
+            "full_name",
+            "hsnils",
             "is_staff",
-            "preferred_username",
-            "departmentNumber",
+            "ad_login",
+            "department_number",
         )
 
 
@@ -657,34 +658,58 @@ class ExcelTemplateSerializer(BaseModelSerializer):
         return data
 
 
+class SampleSerializer(BaseModelSerializer):
+    laboratory_name = serializers.CharField(source="laboratory.name", read_only=True)
+    department_name = serializers.CharField(source="department.name", read_only=True)
+    protocol_number = serializers.CharField(
+        source="protocol.test_protocol_number", read_only=True
+    )
+
+    class Meta:
+        model = Sample
+        fields = (
+            "id",
+            "registration_number",
+            "test_object",
+            "protocol",
+            "protocol_number",
+            "laboratory",
+            "laboratory_name",
+            "department",
+            "department_name",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+            "deleted_at",
+        )
+        read_only_fields = ("created_at", "updated_at", "is_deleted", "deleted_at")
+
+    def validate(self, data):
+        if data.get("department"):
+            if data["department"].laboratory != data["laboratory"]:
+                raise serializers.ValidationError(
+                    {
+                        "department": "Подразделение должно принадлежать выбранной лаборатории"
+                    }
+                )
+        return data
+
+    def validate_registration_number(self, value):
+        if not value:
+            raise serializers.ValidationError(
+                "Регистрационный номер не может быть пустым"
+            )
+        return value.strip()
+
+
 class ProtocolSerializer(BaseModelSerializer):
     laboratory_name = serializers.CharField(source="laboratory.name", read_only=True)
     department_name = serializers.CharField(source="department.name", read_only=True)
+    samples = SampleSerializer(many=True, read_only=True)
 
     def validate_selection_conditions(self, value):
-        if value is not None:
-            if not isinstance(value, list):
-                raise serializers.ValidationError("Условия отбора должны быть списком")
-
-            for condition in value:
-                if not isinstance(condition, dict):
-                    raise serializers.ValidationError(
-                        "Каждое условие должно быть объектом"
-                    )
-
-                if "name" not in condition or "unit" not in condition:
-                    raise serializers.ValidationError(
-                        "Каждое условие должно содержать поля 'name' и 'unit'"
-                    )
-
-                if "value" in condition and condition["value"] is not None:
-                    try:
-                        float(condition["value"])
-                    except (ValueError, TypeError):
-                        raise serializers.ValidationError(
-                            "Значение условия должно быть числом или null"
-                        )
-
+        if value is not None and not isinstance(value, dict):
+            raise serializers.ValidationError("Условия отбора должны быть объектом")
         return value
 
     class Meta:
@@ -693,13 +718,11 @@ class ProtocolSerializer(BaseModelSerializer):
             "id",
             "test_protocol_number",
             "test_protocol_date",
-            "test_object",
             "laboratory_location",
             "branch",
             "sampling_location_detail",
             "phone",
             "sampling_act_number",
-            "registration_number",
             "sampling_date",
             "receiving_date",
             "selection_conditions",
@@ -709,6 +732,7 @@ class ProtocolSerializer(BaseModelSerializer):
             "department",
             "department_name",
             "is_accredited",
+            "samples",
             "created_at",
             "updated_at",
             "is_deleted",
@@ -717,63 +741,21 @@ class ProtocolSerializer(BaseModelSerializer):
         read_only_fields = ("created_at", "updated_at", "is_deleted", "deleted_at")
 
     def validate(self, data):
-        if (
-            data.get("department")
-            and data["department"].laboratory != data["laboratory"]
-        ):
-            raise serializers.ValidationError(
-                {
-                    "department": "Подразделение должно принадлежать выбранной лаборатории"
-                }
-            )
-
+        if data.get("department"):
+            if data["department"].laboratory != data["laboratory"]:
+                raise serializers.ValidationError(
+                    {
+                        "department": "Подразделение должно принадлежать выбранной лаборатории"
+                    }
+                )
         return data
-
-    def validate_registration_number(self, value):
-        request = self.context.get("request")
-        if not request:
-            return value
-
-        laboratory = (
-            self.instance.laboratory
-            if self.instance
-            else self.initial_data.get("laboratory")
-        )
-        department = (
-            self.instance.department
-            if self.instance
-            else self.initial_data.get("department")
-        )
-
-        if not laboratory:
-            return value
-
-        # Проверяем существование протокола с таким же регистрационным номером
-        existing_protocols = Protocol.objects.filter(
-            registration_number=value,
-            laboratory=laboratory,
-            department=department,
-            is_deleted=False,
-        )
-
-        # Исключаем текущий протокол при обновлении
-        if self.instance:
-            existing_protocols = existing_protocols.exclude(pk=self.instance.pk)
-
-        if existing_protocols.exists():
-            raise serializers.ValidationError(
-                "Протокол с таким регистрационным номером уже существует для данной лаборатории"
-                + (" и подразделения" if department else "")
-            )
-
-        return value
 
 
 class CalculationSerializer(BaseModelSerializer):
-    protocol = ProtocolSerializer(read_only=True)
-    protocol_id = serializers.PrimaryKeyRelatedField(
-        source="protocol",
-        queryset=Protocol.objects.filter(is_deleted=False),
+    sample = SampleSerializer(read_only=True)
+    sample_id = serializers.PrimaryKeyRelatedField(
+        source="sample",
+        queryset=Sample.objects.filter(is_deleted=False),
         write_only=True,
     )
     laboratory_activity_date = serializers.DateField(
@@ -827,8 +809,8 @@ class CalculationSerializer(BaseModelSerializer):
             "input_data",
             "equipment_data",
             "equipment",
-            "protocol",
-            "protocol_id",
+            "sample",
+            "sample_id",
             "result",
             "measurement_error",
             "unit",

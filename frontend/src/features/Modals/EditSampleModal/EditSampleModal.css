@@ -1,0 +1,199 @@
+.edit-sample-form {
+  padding: 0px;
+  padding-bottom: 20px;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  padding-right: 15px;
+  margin-right: -15px;
+  position: relative;
+}
+
+.edit-sample-form .form-group {
+  margin-bottom: 16px;
+}
+
+.edit-sample-form .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.edit-sample-form label {
+  display: block;
+  margin-bottom: 8px;
+  color: #333333;
+  font-weight: 500;
+}
+
+.edit-sample-form .required {
+  color: #ff4d4f;
+  margin-left: 2px;
+}
+
+.edit-sample-form .ant-input,
+.edit-sample-form .ant-select,
+.edit-sample-form .ant-picker {
+  width: 100%;
+  border-radius: 8px;
+  font-size: 13px;
+  border-color: #d9d9d9;
+}
+
+.edit-sample-form .ant-select .ant-select-selector {
+  border-radius: 8px !important;
+}
+
+.edit-sample-form .ant-input[disabled] {
+  color: rgba(0, 0, 0, 0.65);
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.edit-sample-form .error-message {
+  color: #ff4d4f;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* Стили для выпадающих списков */
+.edit-sample-form .ant-select-dropdown {
+  font-size: 13px;
+}
+
+.edit-sample-form .ant-select-dropdown * {
+  font-family: 'HeliosCondC';
+  font-size: 13px;
+}
+
+.edit-sample-form .ant-select-item {
+  padding: 6px 12px;
+  color: #333333;
+}
+
+/* Стили для disabled полей */
+.edit-sample-form .ant-input[disabled],
+.edit-sample-form .ant-select-disabled .ant-select-selector {
+  color: rgba(0, 0, 0, 0.65) !important;
+  background-color: #f5f5f5 !important;
+  cursor: not-allowed !important;
+}
+
+.edit-sample-form .ant-select-selection-item {
+  color: #333333 !important;
+}
+
+.edit-sample-form .ant-select-dropdown .ant-select-item-option-content {
+  color: #333333;
+}
+
+/* Стили для таблицы расчетов */
+.calculations-table .ant-table-thead > tr > th {
+  background: #0079c2;
+  color: #ffffff;
+  font-weight: 600;
+  padding: 12px 16px;
+  border: none;
+}
+
+.calculations-table .ant-table-tbody > tr > td {
+  padding: 12px 16px;
+  color: #333333;
+  font-size: 13px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.calculations-table .ant-table-tbody > tr:nth-child(even) {
+  background-color: #f8fafd;
+}
+
+.calculations-table .ant-table-tbody > tr:hover > td {
+  background-color: #e6f4ff !important;
+  cursor: default;
+}
+
+.equipment-item {
+  padding: 6px 8px;
+  background-color: #f8fafd;
+  border: 1px solid #e6e9ed;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.equipment-item:last-child {
+  margin-bottom: 0;
+}
+
+.equipment-item:hover {
+  background-color: #f0f5ff;
+  border-color: #d6e4ff;
+}
+
+.equipment-item .equipment-name {
+  font-weight: 500;
+  color: #333;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.equipment-item .equipment-serial {
+  color: #666;
+  font-size: 12px;
+  display: block;
+}
+
+/* Стили для табов */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid #d9d9d9;
+  margin-bottom: 16px;
+}
+
+.tab {
+  padding: 8px 16px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-size: 14px;
+  color: #666;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.tab:hover {
+  color: #1890ff;
+}
+
+.tab.active {
+  color: #1890ff;
+  font-weight: 500;
+}
+
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: #1890ff;
+}
+
+.tab-content {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+
+.tab-content.entering {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* Общий стиль для форм */
+.edit-sample-form,
+.edit-sample-form *,
+.ant-select-dropdown * {
+  font-family: 'HeliosCondC';
+}

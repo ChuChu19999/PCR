@@ -21,19 +21,23 @@ const formatDate = (dateString, isAccredited) => {
   });
 };
 
-const getObjectSuffix = testObject => {
-  if (!testObject) return '';
-  const testObjectLower = testObject.toLowerCase();
-  if (testObjectLower.includes('конденсат')) return 'дк';
-  if (testObjectLower.includes('нефть')) return 'н';
+const getObjectSuffix = samples => {
+  if (!samples || !samples.length) return '';
+
+  // Проверяем все объекты испытаний из проб
+  for (const sample of samples) {
+    const testObjectLower = sample.test_object.toLowerCase();
+    if (testObjectLower.includes('конденсат')) return 'дк';
+    if (testObjectLower.includes('нефть')) return 'н';
+  }
   return '';
 };
 
-const formatProtocolNumber = (number, date, isAccredited, testObject) => {
+const formatProtocolNumber = (number, date, isAccredited, samples) => {
   if (!number && !date) return '-';
   if (!isAccredited) return number || '-';
 
-  const suffix = getObjectSuffix(testObject);
+  const suffix = getObjectSuffix(samples);
   const formattedDate = formatDate(date, isAccredited);
 
   if (!number) return `от ${formattedDate}`;
@@ -202,12 +206,7 @@ const ProtocolsPage = () => {
       },
       ...getColumnSearchProps('test_protocol_number', '№ протокола'),
       render: (text, record) =>
-        formatProtocolNumber(
-          text,
-          record.test_protocol_date,
-          record.is_accredited,
-          record.test_object
-        ),
+        formatProtocolNumber(text, record.test_protocol_date, record.is_accredited, record.samples),
     },
     {
       title: 'Рег. номер',

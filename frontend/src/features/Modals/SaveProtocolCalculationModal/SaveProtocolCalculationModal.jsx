@@ -18,7 +18,7 @@ const SaveProtocolCalculationModal = ({
   isOpen,
   onClose,
   onSuccess,
-  protocolId,
+  sampleId,
   calculationResult,
   currentMethod,
   laboratoryActivityDate,
@@ -44,7 +44,7 @@ const SaveProtocolCalculationModal = ({
       console.log('SaveProtocolCalculationModal - входящие данные:', {
         calculationResult,
         currentMethod,
-        protocolId,
+        sampleId,
         laboratoryActivityDate,
         laboratoryId,
         departmentId,
@@ -54,7 +54,7 @@ const SaveProtocolCalculationModal = ({
     isOpen,
     calculationResult,
     currentMethod,
-    protocolId,
+    sampleId,
     laboratoryActivityDate,
     laboratoryId,
     departmentId,
@@ -129,24 +129,42 @@ const SaveProtocolCalculationModal = ({
         laboratory_activity_date: calculationResult.laboratory_activity_date
           ? dayjs(calculationResult.laboratory_activity_date).format('YYYY-MM-DD')
           : laboratoryActivityDate.format('YYYY-MM-DD'),
-        laboratory: laboratoryId,
-        department: departmentId,
-        protocol_id: protocolId,
-        research_method: currentMethod.id,
+        laboratory: parseInt(laboratoryId, 10),
+        department: departmentId ? parseInt(departmentId, 10) : null,
+        sample_id: parseInt(sampleId, 10),
+        research_method: parseInt(currentMethod.id, 10),
         executor: trimmedExecutor,
-        result: result,
-        measurement_error: measurement_error,
+        result: result.toString(),
+        measurement_error: measurement_error ? measurement_error.toString() : null,
       };
 
-      console.log('Подготовленные данные для отправки:', {
-        selectedEquipment,
-        equipmentData: requestData.equipment_data,
-        fullRequestData: requestData,
-      });
+      // Проверяем корректность преобразования ID
+      if (
+        isNaN(requestData.laboratory) ||
+        isNaN(requestData.sample_id) ||
+        isNaN(requestData.research_method)
+      ) {
+        setError('Ошибка в формате ID лаборатории, пробы или метода исследования');
+        return;
+      }
+
+      // Проверяем корректность department ID если он есть
+      if (departmentId && isNaN(requestData.department)) {
+        setError('Ошибка в формате ID подразделения');
+        return;
+      }
+
+      console.log('=== ДАННЫЕ ДЛЯ ОТПРАВКИ НА СЕРВЕР ===');
+      console.log('1. Основные данные:');
+      console.log('- ID пробы:', sampleId);
+      console.log('- ID лаборатории:', laboratoryId);
+      console.log('- ID подразделения:', departmentId);
+      console.log('- ID метода исследования:', currentMethod.id);
+      console.log('- Единица измерения:', currentMethod.unit);
 
       const requiredFields = {
         Результат: requestData.result,
-        'ID протокола': requestData.protocol_id,
+        'ID пробы': requestData.sample_id,
         'ID метода': requestData.research_method,
         'ID лаборатории': requestData.laboratory,
         Дата: requestData.laboratory_activity_date,
@@ -304,13 +322,13 @@ const SaveProtocolCalculationModal = ({
               </>
             )}
           </Form.Item>
-        </Form>
 
-        {error && (
-          <p className="error-message" style={{ color: '#ff4d4f', marginTop: '8px' }}>
-            {error}
-          </p>
-        )}
+          {error && (
+            <p className="error-message" style={{ color: '#ff4d4f', marginTop: '8px' }}>
+              {error}
+            </p>
+          )}
+        </Form>
       </div>
     </Modal>
   );

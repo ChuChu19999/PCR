@@ -46,10 +46,8 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
     test_protocol_number: '',
     test_protocol_date: null,
     is_accredited: false,
-    test_object: '',
     laboratory_location: '',
     sampling_act_number: '',
-    registration_number: '',
     sampling_date: null,
     receiving_date: null,
     excel_template: undefined,
@@ -240,13 +238,7 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
 
   const validateForm = () => {
     const newErrors = {};
-    const requiredFields = [
-      'sampling_act_number',
-      'registration_number',
-      'test_object',
-      'excel_template',
-      'laboratory',
-    ];
+    const requiredFields = ['sampling_act_number', 'excel_template', 'laboratory'];
 
     requiredFields.forEach(field => {
       if (!formData[field]) {
@@ -302,15 +294,20 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
       console.log('Текущее состояние формы:', formData);
       console.log('Условия отбора для отправки:', formData.selection_conditions);
 
+      // Преобразуем массив условий отбора в объект
+      const selectionConditionsObject =
+        formData.selection_conditions?.reduce((acc, condition) => {
+          acc[condition.name] = condition.value;
+          return acc;
+        }, {}) || {};
+
       const protocolData = {
         test_protocol_number: formData.test_protocol_number,
         test_protocol_date: formData.test_protocol_date
           ? formData.test_protocol_date.format('YYYY-MM-DD')
           : null,
-        test_object: formData.test_object || 'дегазированный конденсат',
         laboratory_location: formData.laboratory_location,
         sampling_act_number: formData.sampling_act_number,
-        registration_number: formData.registration_number,
         sampling_date: formData.sampling_date ? formData.sampling_date.format('YYYY-MM-DD') : null,
         receiving_date: formData.receiving_date
           ? formData.receiving_date.format('YYYY-MM-DD')
@@ -321,7 +318,7 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
         branch: formData.branch,
         sampling_location_detail: formData.sampling_location_detail,
         phone: formData.phone || '',
-        selection_conditions: formData.selection_conditions,
+        selection_conditions: selectionConditionsObject,
         is_accredited: formData.is_accredited,
       };
 
@@ -515,22 +512,6 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
         </div>
 
         <div className="form-group">
-          <label>
-            Регистрационный номер <span className="required">*</span>
-          </label>
-          <Input
-            value={formData.registration_number}
-            onChange={handleInputChange('registration_number')}
-            placeholder="Введите регистрационный номер"
-            status={errors.registration_number ? 'error' : ''}
-            style={{ width: '100%' }}
-          />
-          {errors.registration_number && (
-            <div className="error-message">{errors.registration_number}</div>
-          )}
-        </div>
-
-        <div className="form-group">
           <label>Филиал</label>
           <div className="search-container" ref={branchSearchRef}>
             <Input
@@ -638,23 +619,6 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
             placeholder="Введите место осуществления лабораторной деятельности"
             style={{ width: '100%' }}
           />
-        </div>
-
-        <div className="form-group">
-          <label>
-            Объект испытаний <span className="required">*</span>
-          </label>
-          <Select
-            value={formData.test_object}
-            onChange={value => handleInputChange('test_object')(value)}
-            placeholder="Выберите объект испытаний"
-            status={errors.test_object ? 'error' : ''}
-            style={{ width: '100%' }}
-          >
-            <Option value="дегазированный конденсат">дегазированный конденсат</Option>
-            <Option value="нефть">нефть</Option>
-          </Select>
-          {errors.test_object && <div className="error-message">{errors.test_object}</div>}
         </div>
 
         <div className="form-group">

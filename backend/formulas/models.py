@@ -55,16 +55,16 @@ class BaseModel(models.Model):
 
 
 class CustomUser(AbstractUser):
-    fullName = models.CharField(
+    full_name = models.CharField(
         verbose_name="ФИО", max_length=120, null=True, blank=True
     )
-    hashSnils = models.CharField(
+    hsnils = models.CharField(
         verbose_name="HSNILS", max_length=32, null=True, blank=True
     )
-    preferred_username = models.CharField(
+    ad_login = models.CharField(
         verbose_name="AdLogin", max_length=120, null=True, blank=True
     )
-    departmentNumber = models.IntegerField(
+    department_number = models.IntegerField(
         verbose_name="Организационная единица", null=True, blank=True
     )
 
@@ -409,6 +409,79 @@ class ResearchMethodGroup(BaseModel):
         return self.name
 
 
+class Sample(BaseModel):
+    registration_number = models.CharField(
+        max_length=50,
+        verbose_name="Регистрационный номер",
+        help_text="Регистрационный номер пробы",
+    )
+    test_object = models.CharField(
+        max_length=255,
+        verbose_name="Объект испытаний",
+        help_text="Объект испытаний",
+    )
+    protocol = models.ForeignKey(
+        "Protocol",
+        on_delete=models.CASCADE,
+        related_name="samples",
+        verbose_name="Протокол",
+        help_text="Протокол, к которому привязана проба",
+        null=True,
+        blank=True,
+    )
+    laboratory = models.ForeignKey(
+        Laboratory,
+        on_delete=models.CASCADE,
+        related_name="samples",
+        verbose_name="Лаборатория",
+        help_text="Лаборатория, к которой привязана проба",
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        related_name="samples",
+        verbose_name="Подразделение",
+        help_text="Подразделение, к которому привязана проба",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = "Проба"
+        verbose_name_plural = "Пробы"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["registration_number"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["updated_at"]),
+            models.Index(fields=["laboratory"]),
+            models.Index(fields=["department"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["registration_number", "laboratory", "department"],
+                condition=models.Q(is_deleted=False),
+                name="unique_sample_registration_number_per_lab_dept",
+            ),
+        ]
+
+    def __str__(self):
+        department_info = f" ({self.department.name})" if self.department else ""
+        return f"Проба {self.registration_number} - {self.laboratory.name}{department_info}"
+
+    def clean(self):
+        if self.department and self.department.laboratory != self.laboratory:
+            raise ValidationError(
+                {
+                    "department": "Подразделение должно принадлежать выбранной лаборатории"
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+
 class Protocol(BaseModel):
     test_protocol_number = models.CharField(
         max_length=100,
@@ -427,11 +500,6 @@ class Protocol(BaseModel):
         verbose_name="Аккредитован",
         help_text="Признак аккредитации протокола",
         default=False,
-    )
-    test_object = models.CharField(
-        max_length=255,
-        verbose_name="Объект испытаний",
-        help_text="Объект испытаний",
     )
     laboratory_location = models.CharField(
         max_length=255,
@@ -465,11 +533,6 @@ class Protocol(BaseModel):
         max_length=50,
         verbose_name="Номер акта отбора",
         help_text="Номер акта отбора пробы",
-    )
-    registration_number = models.CharField(
-        max_length=50,
-        verbose_name="Регистрационный номер",
-        help_text="Регистрационный номер пробы",
     )
     sampling_date = models.DateField(
         verbose_name="Дата отбора пробы",
@@ -521,7 +584,6 @@ class Protocol(BaseModel):
         ordering = ("-created_at",)
         indexes = [
             models.Index(fields=["test_protocol_number"]),
-            models.Index(fields=["registration_number"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["updated_at"]),
             models.Index(fields=["laboratory"]),
@@ -529,16 +591,9 @@ class Protocol(BaseModel):
             models.Index(fields=["branch"]),
             models.Index(fields=["sampling_location_detail"]),
         ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["registration_number", "laboratory", "department"],
-                condition=models.Q(is_deleted=False),
-                name="unique_registration_number_per_lab_dept",
-            ),
-        ]
 
     def __str__(self):
-        return f"Протокол {self.test_protocol_number} ({self.registration_number})"
+        return f"Протокол {self.test_protocol_number}"
 
 
 class Calculation(BaseModel):
@@ -584,14 +639,12 @@ class Calculation(BaseModel):
         verbose_name="Дата лабораторной деятельности",
         help_text="Дата проведения лабораторного исследования",
     )
-    protocol = models.ForeignKey(
-        Protocol,
+    sample = models.ForeignKey(
+        Sample,
         on_delete=models.CASCADE,
         related_name="calculations",
-        verbose_name="Протокол",
-        help_text="Протокол испытаний",
-        null=True,
-        blank=True,
+        verbose_name="Проба",
+        help_text="Проба, для которой производится расчет",
     )
     laboratory = models.ForeignKey(
         Laboratory,
@@ -630,9 +683,9 @@ class Calculation(BaseModel):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["protocol", "research_method"],
+                fields=["sample", "research_method"],
                 condition=models.Q(is_deleted=False),
-                name="unique_protocol_method",
+                name="unique_sample_method",
             )
         ]
 

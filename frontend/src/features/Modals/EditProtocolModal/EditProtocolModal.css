@@ -69,63 +69,6 @@
   margin-left: 2px;
 }
 
-/* Стили для таблицы расчетов */
-.calculations-table .ant-table-thead > tr > th {
-  background: #0079c2;
-  color: #ffffff;
-  font-weight: 600;
-  padding: 12px 16px;
-  border: none;
-}
-
-.calculations-table .ant-table-tbody > tr > td {
-  padding: 12px 16px;
-  color: #333333;
-  font-size: 13px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.calculations-table .ant-table-tbody > tr:nth-child(even) {
-  background-color: #f8fafd;
-}
-
-.calculations-table .ant-table-tbody > tr:hover > td {
-  background-color: #e6f4ff !important;
-  cursor: default;
-}
-
-.equipment-item {
-  padding: 6px 8px;
-  background-color: #f8fafd;
-  border: 1px solid #e6e9ed;
-  border-radius: 6px;
-  margin-bottom: 6px;
-  font-size: 13px;
-  transition: all 0.2s ease;
-}
-
-.equipment-item:last-child {
-  margin-bottom: 0;
-}
-
-.equipment-item:hover {
-  background-color: #f0f5ff;
-  border-color: #d6e4ff;
-}
-
-.equipment-item .equipment-name {
-  font-weight: 500;
-  color: #333;
-  display: block;
-  margin-bottom: 2px;
-}
-
-.equipment-item .equipment-serial {
-  color: #666;
-  font-size: 12px;
-  display: block;
-}
-
 /* Стили для компонентов выбора даты */
 .edit-protocol-form .ant-picker {
   width: 100%;
@@ -215,94 +158,91 @@
   cursor: not-allowed !important;
 }
 
-/* Стили для табов */
-.tabs {
-  display: flex;
-  border-bottom: 1px solid #d9d9d9;
-  margin-bottom: 16px;
-}
-
-.tab {
-  padding: 8px 16px;
-  cursor: pointer;
-  border: none;
-  background: none;
-  font-size: 14px;
-  color: #666;
+/* Стили для поиска */
+.search-container {
   position: relative;
-  transition: all 0.3s ease;
+  z-index: 1001;
 }
 
-.tab:hover {
-  color: #1890ff;
-}
-
-.tab.active {
-  color: #1890ff;
-  font-weight: 500;
-}
-
-.tab.active::after {
-  content: '';
+.search-dropdown {
   position: absolute;
-  bottom: -1px;
+  top: 100%;
   left: 0;
   width: 100%;
-  height: 2px;
-  background-color: #1890ff;
+  max-height: calc(3 * 36px);
+  overflow-y: auto;
+  background-color: #fff;
+  border: 1px solid #d9d9d9;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1002;
 }
 
-.tab-content {
-  opacity: 1;
-  transform: translateY(0);
-  transition:
-    opacity 0.3s ease,
-    transform 0.3s ease;
+.search-option {
+  padding: 8px 12px;
+  height: 36px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  font-family: 'HeliosCondC';
+  font-size: 13px;
+  color: #333333;
+  background-color: #fff;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-.tab-content.entering {
-  opacity: 0;
-  transform: translateY(10px);
+.search-option:last-child {
+  border-bottom: none;
 }
 
-/* Новые стили для DatePicker */
-.custom-date-picker {
-  border-color: #d9d9d9;
-}
-
-.custom-date-picker:hover {
-  border-color: #0066cc !important;
-}
-
-.custom-date-picker-root .ant-picker-focused {
-  border-color: #0066cc !important;
-  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2) !important;
-}
-
-.custom-date-picker .ant-picker-suffix {
-  color: #0066cc !important;
-}
-
-.custom-date-picker-popup .ant-picker-cell-in-view.ant-picker-cell-selected .ant-picker-cell-inner {
-  background: #0066cc !important;
-}
-
-.custom-date-picker-popup
-  .ant-picker-cell-in-view.ant-picker-cell-today
-  .ant-picker-cell-inner::before {
-  border-color: #0066cc !important;
-}
-
-.form-group.disabled input,
-.form-group.disabled .ant-picker,
-.form-group.disabled .ant-select-selector {
+.search-option:hover {
   background-color: #f5f5f5;
-  cursor: not-allowed;
-  color: rgba(0, 0, 0, 0.25);
 }
 
-.form-group.disabled label {
-  color: rgba(0, 0, 0, 0.45);
+.search-loading {
+  padding: 8px 12px;
+  height: 36px;
+  text-align: center;
+  background-color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Стили для скроллбара в выпадающем списке */
+.search-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.search-dropdown::-webkit-scrollbar-track {
+  background: #fff;
+  border-radius: 0;
+}
+
+.search-dropdown::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+}
+
+.search-dropdown::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
+}
+
+/* Обеспечиваем, чтобы другие элементы формы не перекрывали выпадающий список */
+.form-group {
+  position: relative;
+  z-index: 1;
+}
+
+.form-group:has(.search-container) {
+  z-index: 2;
+}
+
+/* Когда дропдаун открыт, увеличиваем z-index родительской группы */
+.form-group:has(.search-dropdown) {
+  z-index: 3;
 }
 
 /* Общий стиль для форм */
@@ -310,29 +250,6 @@
 .edit-protocol-form *,
 .ant-select-dropdown * {
   font-family: 'HeliosCondC';
-}
-
-.calculations-table .ant-btn {
-  min-width: 180px;
-}
-
-/* Стили для модального окна подтверждения */
-.ant-modal-confirm .ant-modal-confirm-btns {
-  margin-top: 24px;
-}
-
-.ant-modal-confirm .ant-modal-confirm-content {
-  margin-top: 16px;
-  font-size: 16px;
-}
-
-.ant-modal-confirm .ant-modal-confirm-title {
-  font-size: 18px;
-  font-weight: 500;
-}
-
-.save-protocol-calculation-form {
-  padding: 0;
 }
 
 .confirmation-message {
@@ -422,89 +339,109 @@
   cursor: not-allowed;
 }
 
-/* Стили для поиска */
-.search-container {
-  position: relative;
-  z-index: 1001;
+/* Стили для таблицы расчетов */
+.calculations-table .ant-table-thead > tr > th {
+  background: #0079c2;
+  color: #ffffff;
+  font-weight: 600;
+  padding: 12px 16px;
+  border: none;
 }
 
-.search-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  width: 100%;
-  max-height: calc(3 * 36px); /* Высота трех элементов (36px каждый) */
-  overflow-y: auto;
-  background-color: #fff;
-  border: 1px solid #d9d9d9;
-  border-radius: 0 0 8px 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  z-index: 1002;
-}
-
-.search-option {
-  padding: 8px 12px;
-  height: 36px; /* Фиксированная высота для каждого элемента */
-  cursor: pointer;
-  transition: background-color 0.3s;
-  font-family: 'HeliosCondC';
-  font-size: 13px;
+.calculations-table .ant-table-tbody > tr > td {
+  padding: 12px 16px;
   color: #333333;
-  background-color: #fff;
-  display: flex;
-  align-items: center;
-  box-sizing: border-box;
+  font-size: 13px;
   border-bottom: 1px solid #f0f0f0;
 }
 
-.search-option:last-child {
-  border-bottom: none;
+.calculations-table .ant-table-tbody > tr:nth-child(even) {
+  background-color: #f8fafd;
 }
 
-.search-option:hover {
-  background-color: #f5f5f5;
+.calculations-table .ant-table-tbody > tr:hover > td {
+  background-color: #e6f4ff !important;
+  cursor: default;
 }
 
-.search-loading {
-  padding: 8px 12px;
-  height: 36px;
-  text-align: center;
-  background-color: #fff;
+.equipment-item {
+  padding: 6px 8px;
+  background-color: #f8fafd;
+  border: 1px solid #e6e9ed;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.equipment-item:last-child {
+  margin-bottom: 0;
+}
+
+.equipment-item:hover {
+  background-color: #f0f5ff;
+  border-color: #d6e4ff;
+}
+
+.equipment-item .equipment-name {
+  font-weight: 500;
+  color: #333;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.equipment-item .equipment-serial {
+  color: #666;
+  font-size: 12px;
+  display: block;
+}
+
+/* Стили для табов */
+.tabs {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  border-bottom: 1px solid #d9d9d9;
+  margin-bottom: 16px;
 }
 
-/* Стили для скроллбара в выпадающем списке */
-.search-dropdown::-webkit-scrollbar {
-  width: 6px;
-}
-
-.search-dropdown::-webkit-scrollbar-track {
-  background: #fff;
-  border-radius: 0;
-}
-
-.search-dropdown::-webkit-scrollbar-thumb {
-  background: #d9d9d9;
-  border-radius: 3px;
-}
-
-.search-dropdown::-webkit-scrollbar-thumb:hover {
-  background: #bfbfbf;
-}
-
-/* Обеспечиваем, чтобы другие элементы формы не перекрывали выпадающий список */
-.form-group {
+.tab {
+  padding: 8px 16px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-size: 14px;
+  color: #666;
   position: relative;
-  z-index: 1;
+  transition: all 0.3s ease;
 }
 
-.form-group:has(.search-container) {
-  z-index: 2;
+.tab:hover {
+  color: #1890ff;
 }
 
-/* Когда дропдаун открыт, увеличиваем z-index родительской группы */
-.form-group:has(.search-dropdown) {
-  z-index: 3;
+.tab.active {
+  color: #1890ff;
+  font-weight: 500;
+}
+
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: #1890ff;
+}
+
+.tab-content {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+
+.tab-content.entering {
+  opacity: 0;
+  transform: translateY(10px);
 }

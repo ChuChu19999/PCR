@@ -10,10 +10,10 @@ from ..models import (
     ResearchObject,
     ResearchMethod,
     ResearchObjectMethod,
-    Protocol,
+    Sample,
     Calculation,
 )
-from ..serializers import ProtocolSerializer, CalculationSerializer
+from ..serializers import CalculationSerializer, SampleSerializer
 from ..utils.formula_utils import (
     round_result,
     evaluate_formula,
@@ -568,16 +568,16 @@ def save_calculation(request):
     """
     try:
         data = request.data
-        protocol_data = None
+        sample_data = None
         calculation_data = None
 
         logger.info(f"Получены данные для сохранения расчета: {data}")
         logger.info(f"Значение поля executor: {data.get('executor')}")
         logger.info(f"Данные об оборудовании: {data.get('equipment_data')}")
 
-        if "protocol_id" in data:
+        if "sample_id" in data:
             existing_calculation = Calculation.objects.filter(
-                protocol_id=data["protocol_id"],
+                sample_id=data["sample_id"],
                 research_method_id=data.get("research_method"),
                 is_deleted=False,
             ).first()
@@ -585,7 +585,7 @@ def save_calculation(request):
             if existing_calculation:
                 return Response(
                     {
-                        "error": "Для данного протокола уже существует расчет по этому методу исследования"
+                        "error": "Для данной пробы уже существует расчет по этому методу исследования"
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
@@ -599,7 +599,7 @@ def save_calculation(request):
                 "laboratory": data.get("laboratory"),
                 "department": data.get("department"),
                 "research_method_id": data.get("research_method"),
-                "protocol_id": data["protocol_id"],
+                "sample_id": data["sample_id"],
                 "laboratory_activity_date": data.get("laboratory_activity_date"),
                 "executor": data.get("executor"),
             }
@@ -608,34 +608,29 @@ def save_calculation(request):
                 f"Подготовленные данные для создания расчета: {calculation_data}"
             )
         else:
-            # Создаем новый протокол
-            protocol_data = {
-                "test_protocol_number": data.get("test_protocol_number"),
-                "sampling_act_number": data.get("sampling_act_number"),
+            # Создаем новую пробу
+            sample_data = {
                 "registration_number": data.get("registration_number"),
-                "sampling_location": data.get("sampling_location"),
-                "sampling_date": data.get("sampling_date"),
-                "receiving_date": data.get("receiving_date"),
-                "laboratory_activity_dates": data.get("laboratory_activity_dates"),
-                "executor": data.get("executor"),
-                "excel_template": data.get("excel_template"),
+                "test_object": data.get("test_object"),
+                "laboratory": data.get("laboratory"),
+                "department": data.get("department"),
             }
 
-            protocol_serializer = ProtocolSerializer(data=protocol_data)
-            if protocol_serializer.is_valid():
-                protocol = protocol_serializer.save()
+            sample_serializer = SampleSerializer(data=sample_data)
+            if sample_serializer.is_valid():
+                sample = sample_serializer.save()
                 existing_calculation = Calculation.objects.filter(
-                    protocol_id=protocol.id,
+                    sample_id=sample.id,
                     research_method_id=data.get("research_method"),
                     is_deleted=False,
                 ).first()
 
                 if existing_calculation:
-                    # Удаляем созданный протокол, так как расчет не может быть создан
-                    protocol.delete()
+                    # Удаляем созданную пробу, так как расчет не может быть создан
+                    sample.delete()
                     return Response(
                         {
-                            "error": "Для данного протокола уже существует расчет по этому методу исследования"
+                            "error": "Для данной пробы уже существует расчет по этому методу исследования"
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
@@ -649,13 +644,13 @@ def save_calculation(request):
                     "laboratory": data.get("laboratory"),
                     "department": data.get("department"),
                     "research_method_id": data.get("research_method"),
-                    "protocol_id": protocol.id,
+                    "sample_id": sample.id,
                     "laboratory_activity_date": data.get("laboratory_activity_date"),
                     "executor": data.get("executor"),
                 }
             else:
                 return Response(
-                    protocol_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                    sample_serializer.errors, status=status.HTTP_400_BAD_REQUEST
                 )
 
         calculation_serializer = CalculationSerializer(data=calculation_data)
@@ -667,9 +662,9 @@ def save_calculation(request):
                     calculation_serializer.data, status=status.HTTP_201_CREATED
                 )
             except IntegrityError:
-                if protocol_data:
+                if sample_data:
                     # Если это был новый протокол, удаляем его
-                    Protocol.objects.filter(id=calculation_data["protocol_id"]).delete()
+                    Sample.objects.filter(id=calculation_data["sample_id"]).delete()
                 return Response(
                     {
                         "error": "Для данного протокола уже существует расчет по этому методу исследования"
@@ -688,63 +683,36 @@ def save_calculation(request):
 @permission_classes([AllowAny])
 def get_registration_numbers(request):
     """
-    Получает список регистрационных номеров для указанного метода и лаборатории.
+    Получает список регистрационных номеров проб для указанной лаборатории и подразделения.
     """
-    laboratory_id = request.GET.get("laboratory_id")
-    department_id = request.GET.get("department_id")
-    method_id = request.GET.get("method_id")
-    registration_number = request.GET.get("registration_number")
-    partial_number = request.GET.get("partial_number")
+    try:
+        laboratory_id = request.query_params.get("laboratory")
+        department_id = request.query_params.get("department")
+        search = request.query_params.get("search", "")
 
-    if not laboratory_id:
-        return Response({"error": "Необходимо указать laboratory_id"}, status=400)
-
-    protocols = Protocol.objects.filter(
-        calculations__laboratory_id=laboratory_id, is_deleted=False
-    ).distinct()
-
-    if department_id:
-        protocols = protocols.filter(calculations__department_id=department_id)
-
-    # Если это поиск для автодополнения
-    if partial_number is not None:
-        if method_id:
-            protocols = protocols.filter(calculations__research_method_id=method_id)
-        protocols = protocols.filter(registration_number__icontains=partial_number)
-        registration_numbers = protocols.values_list(
-            "registration_number", flat=True
-        ).distinct()
-        return Response(list(registration_numbers))
-
-    # Если это запрос конкретных данных
-    if registration_number and method_id:
-        try:
-            calculation = (
-                Calculation.objects.filter(
-                    research_method_id=method_id,
-                    protocol__registration_number=registration_number,
-                    laboratory_id=laboratory_id,
-                    is_deleted=False,
-                )
-                .order_by("-created_at")
-                .first()
+        if not laboratory_id:
+            return Response(
+                {"error": "Не указан ID лаборатории"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-            if calculation:
-                response_data = calculation.input_data.copy()
-                response_data["laboratory_activity_date"] = (
-                    calculation.laboratory_activity_date.isoformat()
-                    if calculation.laboratory_activity_date
-                    else None
-                )
-                return Response(response_data)
-            return Response({})
-        except Exception as e:
-            return Response({"error": str(e)}, status=400)
+        queryset = Sample.objects.filter(
+            laboratory_id=laboratory_id,
+            is_deleted=False,
+        )
 
-    return Response(
-        {
-            "error": "Для получения данных необходимо указать method_id и registration_number"
-        },
-        status=400,
-    )
+        if department_id:
+            queryset = queryset.filter(department_id=department_id)
+
+        if search:
+            queryset = queryset.filter(registration_number__icontains=search)
+
+        samples = queryset.values("id", "registration_number", "test_object").order_by(
+            "-created_at"
+        )[:10]
+
+        return Response(samples)
+
+    except Exception as e:
+        logger.error(f"Ошибка при получении регистрационных номеров: {str(e)}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

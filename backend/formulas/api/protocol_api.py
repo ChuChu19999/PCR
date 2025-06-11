@@ -6,6 +6,37 @@ from ..models import Protocol
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+def search_protocols(request):
+    """
+    Поиск протоколов по тексту с поддержкой автодополнения
+    """
+    search_query = request.query_params.get("search", "")
+    laboratory_id = request.query_params.get("laboratory")
+    department_id = request.query_params.get("department")
+
+    if len(search_query) < 1:
+        return Response([])
+
+    queryset = Protocol.objects.filter(is_deleted=False)
+
+    if laboratory_id:
+        queryset = queryset.filter(laboratory_id=laboratory_id)
+
+    if department_id:
+        queryset = queryset.filter(department_id=department_id)
+
+    protocols = (
+        queryset.filter(test_protocol_number__icontains=search_query)
+        .values("id", "test_protocol_number")
+        .distinct()
+        .order_by("test_protocol_number")[:10]
+    )
+
+    return Response(list(protocols))
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
 def get_sampling_locations(request):
     """
     Получает список мест отбора проб с поддержкой поиска по частичному совпадению
