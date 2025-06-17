@@ -186,7 +186,9 @@ const AddCalculationModal = ({ isOpen, onClose, researchPageId, onSuccess, objec
         }
       );
 
-      const { individual_methods = [], groups = [] } = response.data;
+      const individual_methods = response.data.methods.filter(method => !method.is_group);
+      const groups = response.data.methods.filter(method => method.is_group);
+
       setAvailableMethods({ individual_methods });
       setMethodGroups(groups);
     } catch (error) {

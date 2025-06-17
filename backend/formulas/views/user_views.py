@@ -49,11 +49,11 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 
         response_data = {
             "personnelNumber": decoded_token.get("personnelNumber"),
-            "departmentNumber": decoded_token.get("departmentNumber"),
-            "fullName": decoded_token.get("fullName"),
-            "preferred_username": decoded_token.get("preferred_username"),
+            "department_number": decoded_token.get("departmentNumber"),
+            "full_name": decoded_token.get("fullName"),
+            "ad_login": decoded_token.get("preferred_username"),
             "email": decoded_token.get("email"),
-            "hashSnils": decoded_token.get("hashSnils"),
+            "hsnils": decoded_token.get("hashSnils"),
             "is_staff": is_staff,
         }
         serializer = self.get_serializer(data=response_data)
