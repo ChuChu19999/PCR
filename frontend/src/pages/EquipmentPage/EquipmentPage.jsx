@@ -199,6 +199,8 @@ const EquipmentPage = () => {
   };
 
   const handleShow = async () => {
+    if (!selectedLaboratory) return;
+
     setLoading(true);
     try {
       const params = {

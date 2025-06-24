@@ -96,11 +96,10 @@ const ProtocolsPage = () => {
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [columnsState, setColumnsState] = useState({
-    test_protocol_number: { width: 150 },
-    registration_number: { width: 150 },
-    test_object: { width: 200 },
-    sampling_date: { width: 150 },
-    receiving_date: { width: 150 },
+    test_protocol_number: { width: 200 },
+    sampling_act_number: { width: 150 },
+    is_accredited: { width: 100 },
+    created_at: { width: 150 },
   });
 
   const handleSearch = (selectedKeys, confirm, dataIndex) => {
@@ -199,48 +198,33 @@ const ProtocolsPage = () => {
       dataIndex: 'test_protocol_number',
       key: 'test_protocol_number',
       width: columnsState.test_protocol_number.width,
-      sorter: (a, b) => {
-        const numA = a.test_protocol_number || '';
-        const numB = b.test_protocol_number || '';
-        return numA.localeCompare(numB);
-      },
-      ...getColumnSearchProps('test_protocol_number', '№ протокола'),
+      ...getColumnSearchProps('test_protocol_number', 'Номеру протокола'),
       render: (text, record) =>
         formatProtocolNumber(text, record.test_protocol_date, record.is_accredited, record.samples),
     },
     {
-      title: 'Рег. номер',
-      dataIndex: 'registration_number',
-      key: 'registration_number',
-      width: columnsState.registration_number.width,
-      sorter: (a, b) => a.registration_number.localeCompare(b.registration_number),
-      ...getColumnSearchProps('registration_number', 'Рег. номеру'),
+      title: 'Номер акта отбора',
+      dataIndex: 'sampling_act_number',
+      key: 'sampling_act_number',
+      width: columnsState.sampling_act_number.width,
+      ...getColumnSearchProps('sampling_act_number', 'Номеру акта отбора'),
+      render: text => text || '-',
     },
     {
-      title: 'Объект испытаний',
-      dataIndex: 'test_object',
-      key: 'test_object',
-      width: columnsState.test_object.width,
-      sorter: (a, b) => a.test_object.localeCompare(b.test_object),
-      ...getColumnSearchProps('test_object', 'Объекту испытаний'),
+      title: 'Аккредитован',
+      dataIndex: 'is_accredited',
+      key: 'is_accredited',
+      width: columnsState.is_accredited.width,
+      render: value => (value ? '✓' : '-'),
     },
     {
-      title: 'Дата отбора пробы',
-      dataIndex: 'sampling_date',
-      key: 'sampling_date',
-      width: columnsState.sampling_date.width,
-      sorter: (a, b) => new Date(a.sampling_date) - new Date(b.sampling_date),
-      ...getColumnSearchProps('sampling_date', 'Дате отбора'),
-      render: (text, record) => formatDate(text, record.is_accredited),
-    },
-    {
-      title: 'Дата получения пробы',
-      dataIndex: 'receiving_date',
-      key: 'receiving_date',
-      width: columnsState.receiving_date.width,
-      sorter: (a, b) => new Date(a.receiving_date) - new Date(b.receiving_date),
-      ...getColumnSearchProps('receiving_date', 'Дате получения'),
-      render: (text, record) => formatDate(text, record.is_accredited),
+      title: 'Дата создания',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: columnsState.created_at.width,
+      sorter: (a, b) => new Date(a.created_at) - new Date(b.created_at),
+      ...getColumnSearchProps('created_at', 'Дате создания'),
+      render: text => formatDate(text, true),
     },
   ].map((col, index) => ({
     ...col,
@@ -374,11 +358,7 @@ const ProtocolsPage = () => {
                   >
                     Создать
                   </Button>
-                  <Button
-                    type="primary"
-                    icon={<EditOutlined />}
-                    onClick={() => setIsTemplateModalOpen(true)}
-                  >
+                  <Button type="primary" onClick={() => setIsTemplateModalOpen(true)}>
                     Редактировать шаблон
                   </Button>
                 </Space>

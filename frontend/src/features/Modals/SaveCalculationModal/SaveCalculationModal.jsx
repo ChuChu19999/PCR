@@ -298,37 +298,6 @@ const SaveCalculationModal = ({
             )}
           </Form.Item>
 
-          {selectedSample && (
-            <div className="selected-protocol-info">
-              <div className="info-row">
-                <span className="info-label">Регистрационный номер:</span>
-                <span className="info-value">{selectedSample.registration_number}</span>
-              </div>
-              <div className="info-row">
-                <span className="info-label">Объект испытаний:</span>
-                <span className="info-value">{selectedSample.test_object}</span>
-              </div>
-              {selectedSample.protocol && (
-                <>
-                  <div className="info-row">
-                    <span className="info-label">Номер протокола:</span>
-                    <span className="info-value">{selectedSample.protocol_number}</span>
-                  </div>
-                  <div className="info-row">
-                    <span className="info-label">Лаборатория:</span>
-                    <span className="info-value">{selectedSample.laboratory_name}</span>
-                  </div>
-                  {selectedSample.department_name && (
-                    <div className="info-row">
-                      <span className="info-label">Подразделение:</span>
-                      <span className="info-value">{selectedSample.department_name}</span>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
           {errors.general && <div className="error-message general-error">{errors.general}</div>}
         </Form>
       </div>

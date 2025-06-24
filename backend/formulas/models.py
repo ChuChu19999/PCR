@@ -420,6 +420,25 @@ class Sample(BaseModel):
         verbose_name="Объект испытаний",
         help_text="Объект испытаний",
     )
+    sampling_location_detail = models.CharField(
+        max_length=255,
+        verbose_name="Место отбора пробы",
+        help_text="Место отбора пробы",
+        null=True,
+        blank=True,
+    )
+    sampling_date = models.DateField(
+        verbose_name="Дата отбора пробы",
+        help_text="Дата отбора пробы",
+        null=True,
+        blank=True,
+    )
+    receiving_date = models.DateField(
+        verbose_name="Дата получения пробы",
+        help_text="Дата получения пробы в лабораторию",
+        null=True,
+        blank=True,
+    )
     protocol = models.ForeignKey(
         "Protocol",
         on_delete=models.CASCADE,
@@ -456,6 +475,7 @@ class Sample(BaseModel):
             models.Index(fields=["updated_at"]),
             models.Index(fields=["laboratory"]),
             models.Index(fields=["department"]),
+            models.Index(fields=["sampling_location_detail"]),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -515,13 +535,6 @@ class Protocol(BaseModel):
         null=True,
         blank=True,
     )
-    sampling_location_detail = models.CharField(
-        max_length=255,
-        verbose_name="Место отбора пробы",
-        help_text="Место отбора пробы",
-        null=True,
-        blank=True,
-    )
     phone = models.CharField(
         max_length=20,
         verbose_name="Телефон",
@@ -533,18 +546,6 @@ class Protocol(BaseModel):
         max_length=50,
         verbose_name="Номер акта отбора",
         help_text="Номер акта отбора пробы",
-    )
-    sampling_date = models.DateField(
-        verbose_name="Дата отбора пробы",
-        help_text="Дата отбора пробы",
-        null=True,
-        blank=True,
-    )
-    receiving_date = models.DateField(
-        verbose_name="Дата получения пробы",
-        help_text="Дата получения пробы в лабораторию",
-        null=True,
-        blank=True,
     )
     selection_conditions = models.JSONField(
         null=True,
@@ -589,7 +590,6 @@ class Protocol(BaseModel):
             models.Index(fields=["laboratory"]),
             models.Index(fields=["department"]),
             models.Index(fields=["branch"]),
-            models.Index(fields=["sampling_location_detail"]),
         ]
 
     def __str__(self):

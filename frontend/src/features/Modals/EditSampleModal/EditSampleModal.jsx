@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Input, Select, message, Table, Button, Spin } from 'antd';
+import { Input, Select, message, Table, Button, Spin, DatePicker } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Modal from '../ui/Modal';
 import './EditSampleModal.css';
+import dayjs from 'dayjs';
 
 const { Option } = Select;
 
@@ -17,6 +18,9 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
     protocol: sample.protocol || null,
     laboratory: sample.laboratory || null,
     department: sample.department || null,
+    sampling_location_detail: sample.sampling_location_detail || '',
+    sampling_date: sample.sampling_date || null,
+    receiving_date: sample.receiving_date || null,
   });
 
   const [loading, setLoading] = useState(false);
@@ -30,9 +34,17 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
   const [calculations, setCalculations] = useState([]);
   const [calculationsLoading, setCalculationsLoading] = useState(false);
   const [availableMethodsLoading, setAvailableMethodsLoading] = useState(false);
-  const [protocolSearchValue, setProtocolSearchValue] = useState('');
+  const [protocolSearchValue, setProtocolSearchValue] = useState(sample.test_protocol_number);
   const [protocolsDropdownVisible, setProtocolsDropdownVisible] = useState(false);
   const protocolSearchRef = useRef(null);
+  const [locationSearchValue, setLocationSearchValue] = useState(
+    sample.sampling_location_detail || ''
+  );
+  const [locationsDropdownVisible, setLocationsDropdownVisible] = useState(false);
+  const locationSearchRef = useRef(null);
+  const [samplingLocations, setSamplingLocations] = useState([]);
+  const [locationsLoading, setLocationsLoading] = useState(false);
+  const [locale, setLocale] = useState('ru');
 
   useEffect(() => {
     fetchLaboratories();
@@ -133,7 +145,7 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
       const response = await axios.get(
         `${import.meta.env.VITE_API_URL}/api/protocols/${protocolId}/`
       );
-      setProtocolSearchValue(response.data.test_protocol_number || 'Протокол без номера');
+      setProtocolSearchValue(response.data.test_protocol_number);
     } catch (error) {
       console.error('Ошибка при загрузке информации о протоколе:', error);
       message.error('Не удалось загрузить информацию о протоколе');
@@ -493,6 +505,29 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
     }
   };
 
+  const searchLocations = async query => {
+    try {
+      setLocationsLoading(true);
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/get-sampling-locations/`,
+        {
+          params: {
+            search: query,
+            laboratory: formData.laboratory,
+            department: formData.department,
+          },
+        }
+      );
+      setSamplingLocations(response.data);
+    } catch (error) {
+      console.error('Ошибка при поиске места отбора пробы:', error);
+      message.error('Не удалось найти место отбора пробы');
+      setSamplingLocations([]);
+    } finally {
+      setLocationsLoading(false);
+    }
+  };
+
   return (
     <Modal
       header="Редактирование пробы"
@@ -540,7 +575,7 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
               />
             </div>
           ) : (
-            <>
+            <div className="edit-form-content">
               <div className="form-group">
                 <label>
                   Регистрационный номер <span className="required">*</span>
@@ -565,13 +600,59 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
                   value={formData.test_object}
                   onChange={value => handleInputChange('test_object')(value)}
                   placeholder="Выберите объект испытаний"
-                  status={errors.test_object ? 'error' : ''}
                   style={{ width: '100%' }}
                 >
                   <Option value="дегазированный конденсат">дегазированный конденсат</Option>
                   <Option value="нефть">нефть</Option>
                 </Select>
                 {errors.test_object && <div className="error-message">{errors.test_object}</div>}
+              </div>
+
+              <div className="form-group">
+                <label>Протокол</label>
+                <div className="search-container" ref={protocolSearchRef}>
+                  <Input
+                    value={protocolSearchValue}
+                    onChange={e => {
+                      const value = e.target.value;
+                      setProtocolSearchValue(value);
+                      handleProtocolSearch(value);
+                    }}
+                    onFocus={() => {
+                      if (protocolSearchValue && protocolSearchValue.length >= 1) {
+                        setProtocolsDropdownVisible(true);
+                      }
+                    }}
+                    placeholder="Введите номер протокола"
+                    disabled={!formData.laboratory}
+                    status={errors.protocol ? 'error' : ''}
+                    style={{ width: '100%' }}
+                  />
+                  {protocolsDropdownVisible && protocols.length > 0 && (
+                    <div className="search-dropdown">
+                      {protocolsLoading ? (
+                        <div className="search-loading">
+                          <Spin size="small" />
+                        </div>
+                      ) : (
+                        protocols.map(protocol => (
+                          <div
+                            key={protocol.id}
+                            className="search-option"
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, protocol: protocol.id }));
+                              setProtocolSearchValue(protocol.test_protocol_number);
+                              setProtocolsDropdownVisible(false);
+                            }}
+                          >
+                            {protocol.test_protocol_number}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                {errors.protocol && <div className="error-message">{errors.protocol}</div>}
               </div>
 
               <div className="form-group">
@@ -620,54 +701,107 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
               )}
 
               <div className="form-group">
-                <label>Протокол</label>
-                <div className="search-container" ref={protocolSearchRef}>
+                <label>Место отбора пробы</label>
+                <div className="search-container" ref={locationSearchRef}>
                   <Input
-                    value={protocolSearchValue}
+                    value={locationSearchValue}
                     onChange={e => {
                       const value = e.target.value;
-                      setProtocolSearchValue(value);
-                      handleProtocolSearch(value);
-                    }}
-                    onFocus={() => {
-                      if (protocolSearchValue && protocolSearchValue.length >= 1) {
-                        setProtocolsDropdownVisible(true);
+                      setLocationSearchValue(value);
+                      setFormData(prev => ({ ...prev, sampling_location_detail: value }));
+                      if (value.length >= 2) {
+                        searchLocations(value);
+                        setLocationsDropdownVisible(true);
+                      } else {
+                        setLocationsDropdownVisible(false);
                       }
                     }}
-                    placeholder="Введите номер протокола"
-                    disabled={!formData.laboratory}
-                    status={errors.protocol ? 'error' : ''}
+                    onFocus={() => {
+                      if (locationSearchValue && locationSearchValue.length >= 2) {
+                        searchLocations(locationSearchValue);
+                        setLocationsDropdownVisible(true);
+                      }
+                    }}
+                    placeholder="Введите место отбора пробы"
                     style={{ width: '100%' }}
                   />
-                  {protocolsDropdownVisible && protocols.length > 0 && (
+                  {locationsDropdownVisible && samplingLocations.length > 0 && (
                     <div className="search-dropdown">
-                      {protocolsLoading ? (
+                      {locationsLoading ? (
                         <div className="search-loading">
                           <Spin size="small" />
                         </div>
                       ) : (
-                        protocols.map(protocol => (
+                        samplingLocations.map((location, index) => (
                           <div
-                            key={protocol.id}
+                            key={index}
                             className="search-option"
                             onClick={() => {
-                              setFormData(prev => ({ ...prev, protocol: protocol.id }));
-                              setProtocolSearchValue(
-                                protocol.test_protocol_number || 'Протокол без номера'
-                              );
-                              setProtocolsDropdownVisible(false);
+                              setFormData(prev => ({
+                                ...prev,
+                                sampling_location_detail: location,
+                              }));
+                              setLocationSearchValue(location);
+                              setLocationsDropdownVisible(false);
                             }}
                           >
-                            {protocol.test_protocol_number || 'Протокол без номера'}
+                            {location}
                           </div>
                         ))
                       )}
                     </div>
                   )}
                 </div>
-                {errors.protocol && <div className="error-message">{errors.protocol}</div>}
               </div>
-            </>
+
+              <div className="form-group">
+                <label>Дата отбора пробы</label>
+                <DatePicker
+                  locale={locale}
+                  format="DD.MM.YYYY"
+                  value={formData.sampling_date ? dayjs(formData.sampling_date) : null}
+                  onChange={value => handleInputChange('sampling_date')(value)}
+                  placeholder="ДД.ММ.ГГГГ"
+                  style={{ width: '100%' }}
+                  status={errors.sampling_date ? 'error' : ''}
+                  className="custom-date-picker"
+                  rootClassName="custom-date-picker-root"
+                  popupClassName="custom-date-picker-popup"
+                  inputReadOnly={false}
+                  showToday={false}
+                  allowClear={true}
+                  superNextIcon={null}
+                  superPrevIcon={null}
+                />
+                {errors.sampling_date && (
+                  <div className="error-message">{errors.sampling_date}</div>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label>Дата получения пробы</label>
+                <DatePicker
+                  locale={locale}
+                  format="DD.MM.YYYY"
+                  value={formData.receiving_date ? dayjs(formData.receiving_date) : null}
+                  onChange={value => handleInputChange('receiving_date')(value)}
+                  placeholder="ДД.ММ.ГГГГ"
+                  style={{ width: '100%' }}
+                  status={errors.receiving_date ? 'error' : ''}
+                  className="custom-date-picker"
+                  rootClassName="custom-date-picker-root"
+                  popupClassName="custom-date-picker-popup"
+                  inputReadOnly={false}
+                  showToday={false}
+                  allowClear={true}
+                  superNextIcon={null}
+                  superPrevIcon={null}
+                />
+                {errors.receiving_date && (
+                  <div className="error-message">{errors.receiving_date}</div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>

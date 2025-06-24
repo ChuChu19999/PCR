@@ -6,6 +6,7 @@ import Layout from '../../shared/ui/Layout/Layout';
 import SamplesPageWrapper from './SamplesPageWrapper';
 import CreateSampleModal from '../../features/Modals/CreateSampleModal/CreateSampleModal';
 import EditSampleModal from '../../features/Modals/EditSampleModal/EditSampleModal';
+import dayjs from 'dayjs';
 
 const { Option } = Select;
 
@@ -32,6 +33,14 @@ const SamplesPage = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedSample, setSelectedSample] = useState(null);
   const [form] = Form.useForm();
+  const [columnsState, setColumnsState] = useState({
+    registration_number: { width: 200 },
+    test_object: { width: 200 },
+    sampling_location_detail: { width: 200 },
+    sampling_date: { width: 150 },
+    receiving_date: { width: 150 },
+    created_at: { width: 150 },
+  });
 
   const handleSearch = (selectedKeys, confirm, dataIndex) => {
     confirm();
@@ -103,15 +112,33 @@ const SamplesPage = () => {
       title: 'Объект испытаний',
       dataIndex: 'test_object',
       key: 'test_object',
-      sorter: (a, b) => a.test_object.localeCompare(b.test_object),
-      ...getColumnSearchProps('test_object', 'объекту испытаний'),
+      width: columnsState.test_object.width,
+      ...getColumnSearchProps('test_object', 'Объекту испытаний'),
     },
     {
-      title: 'Номер протокола',
-      dataIndex: 'protocol_number',
-      key: 'protocol_number',
-      sorter: (a, b) => (a.protocol_number || '').localeCompare(b.protocol_number || ''),
-      ...getColumnSearchProps('protocol_number', 'номеру протокола'),
+      title: 'Место отбора пробы',
+      dataIndex: 'sampling_location_detail',
+      key: 'sampling_location_detail',
+      width: columnsState.sampling_location_detail.width,
+      ...getColumnSearchProps('sampling_location_detail', 'Месту отбора'),
+    },
+    {
+      title: 'Дата отбора пробы',
+      dataIndex: 'sampling_date',
+      key: 'sampling_date',
+      width: columnsState.sampling_date.width,
+      sorter: (a, b) => new Date(a.sampling_date) - new Date(b.sampling_date),
+      ...getColumnSearchProps('sampling_date', 'Дате отбора'),
+      render: text => (text ? dayjs(text).format('DD.MM.YYYY') : '-'),
+    },
+    {
+      title: 'Дата получения пробы',
+      dataIndex: 'receiving_date',
+      key: 'receiving_date',
+      width: columnsState.receiving_date.width,
+      sorter: (a, b) => new Date(a.receiving_date) - new Date(b.receiving_date),
+      ...getColumnSearchProps('receiving_date', 'Дате получения'),
+      render: text => (text ? dayjs(text).format('DD.MM.YYYY') : '-'),
     },
     {
       title: 'Дата создания',
@@ -185,6 +212,8 @@ const SamplesPage = () => {
   };
 
   const handleShow = async () => {
+    if (!selectedLaboratory) return;
+
     setLoading(true);
     try {
       const params = {

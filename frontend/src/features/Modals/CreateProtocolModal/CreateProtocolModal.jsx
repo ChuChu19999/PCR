@@ -308,15 +308,10 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
           : null,
         laboratory_location: formData.laboratory_location,
         sampling_act_number: formData.sampling_act_number,
-        sampling_date: formData.sampling_date ? formData.sampling_date.format('YYYY-MM-DD') : null,
-        receiving_date: formData.receiving_date
-          ? formData.receiving_date.format('YYYY-MM-DD')
-          : null,
         excel_template: formData.excel_template,
         laboratory: formData.laboratory,
         department: formData.department,
         branch: formData.branch,
-        sampling_location_detail: formData.sampling_location_detail,
         phone: formData.phone || '',
         selection_conditions: selectionConditionsObject,
         is_accredited: formData.is_accredited,
@@ -557,51 +552,6 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
         </div>
 
         <div className="form-group">
-          <label>Место отбора пробы</label>
-          <div className="search-container" ref={locationSearchRef}>
-            <Input
-              value={locationSearchValue}
-              onChange={e => {
-                const value = e.target.value;
-                setLocationSearchValue(value);
-                setFormData(prev => ({ ...prev, sampling_location_detail: value }));
-                searchLocations(value);
-              }}
-              onFocus={() => {
-                if (locationSearchValue && locationSearchValue.length >= 2) {
-                  setLocationsDropdownVisible(true);
-                }
-              }}
-              placeholder="Введите место отбора пробы"
-              style={{ width: '100%' }}
-            />
-            {locationsDropdownVisible && samplingLocations.length > 0 && (
-              <div className="search-dropdown">
-                {locationsLoading ? (
-                  <div className="search-loading">
-                    <Spin size="small" />
-                  </div>
-                ) : (
-                  samplingLocations.map((location, index) => (
-                    <div
-                      key={index}
-                      className="search-option"
-                      onClick={() => {
-                        setFormData(prev => ({ ...prev, sampling_location_detail: location }));
-                        setLocationSearchValue(location);
-                        setLocationsDropdownVisible(false);
-                      }}
-                    >
-                      {location}
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="form-group">
           <label>Телефон</label>
           <Input
             value={formData.phone}
@@ -619,96 +569,6 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
             placeholder="Введите место осуществления лабораторной деятельности"
             style={{ width: '100%' }}
           />
-        </div>
-
-        <div className="form-group">
-          <label>Дата отбора пробы</label>
-          <DatePicker
-            locale={locale}
-            format="DD.MM.YYYY"
-            value={formData.sampling_date}
-            onChange={handleInputChange('sampling_date')}
-            placeholder="ДД.ММ.ГГГГ"
-            style={{ width: '100%' }}
-            status={errors.sampling_date ? 'error' : ''}
-            className="custom-date-picker"
-            rootClassName="custom-date-picker-root"
-            popupClassName="custom-date-picker-popup"
-            inputReadOnly={false}
-            showToday={false}
-            allowClear={true}
-            superNextIcon={null}
-            superPrevIcon={null}
-            onKeyDown={e => {
-              // Разрешаем цифры, точки, backspace и delete
-              if (!/[\d\.]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete') {
-                e.preventDefault();
-              }
-            }}
-            onInput={e => {
-              const input = e.target;
-              const cursorPosition = input.selectionStart;
-              const formatted = formatDateInput(input.value);
-
-              const dotsBeforeCursor = (input.value.slice(0, cursorPosition).match(/\./g) || [])
-                .length;
-              input.value = formatted;
-              const newDotsBeforeCursor = (formatted.slice(0, cursorPosition).match(/\./g) || [])
-                .length;
-              const newPosition = cursorPosition + (newDotsBeforeCursor - dotsBeforeCursor);
-              input.setSelectionRange(newPosition, newPosition);
-
-              if (formatted.length === 10 && isValidDate(formatted)) {
-                handleInputChange('sampling_date')(dayjs(formatted, 'DD.MM.YYYY'));
-              }
-            }}
-          />
-          {errors.sampling_date && <div className="error-message">{errors.sampling_date}</div>}
-        </div>
-
-        <div className="form-group">
-          <label>Дата получения пробы</label>
-          <DatePicker
-            locale={locale}
-            format="DD.MM.YYYY"
-            value={formData.receiving_date}
-            onChange={handleInputChange('receiving_date')}
-            placeholder="ДД.ММ.ГГГГ"
-            style={{ width: '100%' }}
-            status={errors.receiving_date ? 'error' : ''}
-            className="custom-date-picker"
-            rootClassName="custom-date-picker-root"
-            popupClassName="custom-date-picker-popup"
-            inputReadOnly={false}
-            showToday={false}
-            allowClear={true}
-            superNextIcon={null}
-            superPrevIcon={null}
-            onKeyDown={e => {
-              // Разрешаем цифры, точки, backspace и delete
-              if (!/[\d\.]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete') {
-                e.preventDefault();
-              }
-            }}
-            onInput={e => {
-              const input = e.target;
-              const cursorPosition = input.selectionStart;
-              const formatted = formatDateInput(input.value);
-
-              const dotsBeforeCursor = (input.value.slice(0, cursorPosition).match(/\./g) || [])
-                .length;
-              input.value = formatted;
-              const newDotsBeforeCursor = (formatted.slice(0, cursorPosition).match(/\./g) || [])
-                .length;
-              const newPosition = cursorPosition + (newDotsBeforeCursor - dotsBeforeCursor);
-              input.setSelectionRange(newPosition, newPosition);
-
-              if (formatted.length === 10 && isValidDate(formatted)) {
-                handleInputChange('receiving_date')(dayjs(formatted, 'DD.MM.YYYY'));
-              }
-            }}
-          />
-          {errors.receiving_date && <div className="error-message">{errors.receiving_date}</div>}
         </div>
 
         <div className="form-group">

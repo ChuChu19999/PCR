@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Input, Select, message, Spin } from 'antd';
+import { Input, Select, message, Spin, DatePicker } from 'antd';
 import axios from 'axios';
 import Modal from '../ui/Modal';
 import './CreateSampleModal.css';
+import dayjs from 'dayjs';
 
 const { Option } = Select;
 
@@ -13,6 +14,9 @@ const CreateSampleModal = ({ onClose, onSuccess }) => {
     protocol: null,
     laboratory: null,
     department: null,
+    sampling_location_detail: '',
+    sampling_date: null,
+    receiving_date: null,
   });
 
   const [loading, setLoading] = useState(false);
@@ -26,6 +30,12 @@ const CreateSampleModal = ({ onClose, onSuccess }) => {
   const [protocolSearchValue, setProtocolSearchValue] = useState('');
   const [protocolsDropdownVisible, setProtocolsDropdownVisible] = useState(false);
   const protocolSearchRef = useRef(null);
+  const [locationSearchValue, setLocationSearchValue] = useState('');
+  const [locationsDropdownVisible, setLocationsDropdownVisible] = useState(false);
+  const locationSearchRef = useRef(null);
+  const [samplingLocations, setSamplingLocations] = useState([]);
+  const [locationsLoading, setLocationsLoading] = useState(false);
+  const [locale] = useState(dayjs.locale());
 
   useEffect(() => {
     fetchLaboratories();
@@ -52,6 +62,19 @@ const CreateSampleModal = ({ onClose, onSuccess }) => {
     const handleClickOutside = event => {
       if (protocolSearchRef.current && !protocolSearchRef.current.contains(event.target)) {
         setProtocolsDropdownVisible(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = event => {
+      if (locationSearchRef.current && !locationSearchRef.current.contains(event.target)) {
+        setLocationsDropdownVisible(false);
       }
     };
 
@@ -169,6 +192,29 @@ const CreateSampleModal = ({ onClose, onSuccess }) => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const searchLocations = async query => {
+    try {
+      setLocationsLoading(true);
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/get-sampling-locations/`,
+        {
+          params: {
+            search: query,
+            laboratory: formData.laboratory,
+            department: formData.department,
+          },
+        }
+      );
+      setSamplingLocations(response.data);
+    } catch (error) {
+      console.error('Ошибка при поиске места отбора пробы:', error);
+      message.error('Не удалось найти место отбора пробы');
+      setSamplingLocations([]);
+    } finally {
+      setLocationsLoading(false);
+    }
+  };
+
   const handleSave = async () => {
     try {
       if (!validateForm()) {
@@ -177,33 +223,25 @@ const CreateSampleModal = ({ onClose, onSuccess }) => {
 
       setLoading(true);
 
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/samples/`, formData);
+      const sampleData = {
+        registration_number: formData.registration_number,
+        test_object: formData.test_object,
+        sampling_location_detail: formData.sampling_location_detail,
+        sampling_date: formData.sampling_date ? formData.sampling_date.format('YYYY-MM-DD') : null,
+        receiving_date: formData.receiving_date
+          ? formData.receiving_date.format('YYYY-MM-DD')
+          : null,
+        laboratory: formData.laboratory,
+        department: formData.department,
+      };
+
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/samples/`, sampleData);
 
       message.success('Проба успешно создана');
       onSuccess();
     } catch (error) {
       console.error('Ошибка при создании пробы:', error);
-
-      if (error.response?.data) {
-        const serverErrors = error.response.data;
-        const newErrors = {};
-
-        Object.keys(serverErrors).forEach(field => {
-          if (Array.isArray(serverErrors[field])) {
-            newErrors[field] = serverErrors[field][0];
-          } else {
-            newErrors[field] = serverErrors[field];
-          }
-        });
-
-        setErrors(prev => ({ ...prev, ...newErrors }));
-
-        if (Object.keys(newErrors).length === 0 && error.response?.data?.error) {
-          message.error(error.response.data.error);
-        }
-      } else {
-        message.error('Произошла ошибка при создании пробы');
-      }
+      message.error(error.response?.data?.detail || 'Не удалось создать пробу');
     } finally {
       setLoading(false);
     }
@@ -242,13 +280,107 @@ const CreateSampleModal = ({ onClose, onSuccess }) => {
             value={formData.test_object}
             onChange={value => handleInputChange('test_object')(value)}
             placeholder="Выберите объект испытаний"
-            status={errors.test_object ? 'error' : ''}
             style={{ width: '100%' }}
           >
             <Option value="дегазированный конденсат">дегазированный конденсат</Option>
             <Option value="нефть">нефть</Option>
           </Select>
           {errors.test_object && <div className="error-message">{errors.test_object}</div>}
+        </div>
+
+        <div className="form-group">
+          <label>Место отбора пробы</label>
+          <div className="search-container" ref={locationSearchRef}>
+            <Input
+              value={locationSearchValue}
+              onChange={e => {
+                const value = e.target.value;
+                setLocationSearchValue(value);
+                setFormData(prev => ({ ...prev, sampling_location_detail: value }));
+                if (value.length >= 2) {
+                  searchLocations(value);
+                  setLocationsDropdownVisible(true);
+                } else {
+                  setLocationsDropdownVisible(false);
+                }
+              }}
+              onFocus={() => {
+                if (locationSearchValue && locationSearchValue.length >= 2) {
+                  searchLocations(locationSearchValue);
+                  setLocationsDropdownVisible(true);
+                }
+              }}
+              placeholder="Введите место отбора пробы"
+              style={{ width: '100%' }}
+            />
+            {locationsDropdownVisible && samplingLocations.length > 0 && (
+              <div className="search-dropdown">
+                {locationsLoading ? (
+                  <div className="search-loading">
+                    <Spin size="small" />
+                  </div>
+                ) : (
+                  samplingLocations.map((location, index) => (
+                    <div
+                      key={index}
+                      className="search-option"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, sampling_location_detail: location }));
+                        setLocationSearchValue(location);
+                        setLocationsDropdownVisible(false);
+                      }}
+                    >
+                      {location}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label>Дата отбора пробы</label>
+          <DatePicker
+            locale={locale}
+            format="DD.MM.YYYY"
+            value={formData.sampling_date ? dayjs(formData.sampling_date) : null}
+            onChange={value => handleInputChange('sampling_date')(value)}
+            placeholder="ДД.ММ.ГГГГ"
+            style={{ width: '100%' }}
+            status={errors.sampling_date ? 'error' : ''}
+            className="custom-date-picker"
+            rootClassName="custom-date-picker-root"
+            popupClassName="custom-date-picker-popup"
+            inputReadOnly={false}
+            showToday={false}
+            allowClear={true}
+            superNextIcon={null}
+            superPrevIcon={null}
+          />
+          {errors.sampling_date && <div className="error-message">{errors.sampling_date}</div>}
+        </div>
+
+        <div className="form-group">
+          <label>Дата получения пробы</label>
+          <DatePicker
+            locale={locale}
+            format="DD.MM.YYYY"
+            value={formData.receiving_date ? dayjs(formData.receiving_date) : null}
+            onChange={value => handleInputChange('receiving_date')(value)}
+            placeholder="ДД.ММ.ГГГГ"
+            style={{ width: '100%' }}
+            status={errors.receiving_date ? 'error' : ''}
+            className="custom-date-picker"
+            rootClassName="custom-date-picker-root"
+            popupClassName="custom-date-picker-popup"
+            inputReadOnly={false}
+            showToday={false}
+            allowClear={true}
+            superNextIcon={null}
+            superPrevIcon={null}
+          />
+          {errors.receiving_date && <div className="error-message">{errors.receiving_date}</div>}
         </div>
 
         <div className="form-group">
@@ -329,13 +461,11 @@ const CreateSampleModal = ({ onClose, onSuccess }) => {
                       className="search-option"
                       onClick={() => {
                         setFormData(prev => ({ ...prev, protocol: protocol.id }));
-                        setProtocolSearchValue(
-                          protocol.test_protocol_number || 'Протокол без номера'
-                        );
+                        setProtocolSearchValue(protocol.test_protocol_number);
                         setProtocolsDropdownVisible(false);
                       }}
                     >
-                      {protocol.test_protocol_number || 'Протокол без номера'}
+                      {protocol.test_protocol_number}
                     </div>
                   ))
                 )}

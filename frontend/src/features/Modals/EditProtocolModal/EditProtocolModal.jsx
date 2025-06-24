@@ -40,6 +40,88 @@ const isValidDate = dateString => {
   );
 };
 
+// Компонент для отображения результатов расчетов одной пробы
+const SampleCalculationsTable = ({ data, sampleNumber }) => {
+  const columns = [
+    {
+      title: 'Метод',
+      dataIndex: 'methodName',
+      key: 'methodName',
+      width: '15%',
+    },
+    {
+      title: 'Ед. изм.',
+      dataIndex: 'unit',
+      key: 'unit',
+      width: '6%',
+    },
+    {
+      title: 'Входные данные',
+      dataIndex: 'inputData',
+      key: 'inputData',
+      width: '33%',
+      render: inputData => {
+        if (!inputData || Object.keys(inputData).length === 0) return '-';
+        return (
+          <div
+            style={{
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              lineHeight: '1.5',
+            }}
+          >
+            {inputData}
+          </div>
+        );
+      },
+    },
+    {
+      title: 'Результат',
+      dataIndex: 'result',
+      key: 'result',
+      width: '5%',
+    },
+    {
+      title: 'Погр.',
+      dataIndex: 'measurementError',
+      key: 'measurementError',
+      width: '5%',
+    },
+    {
+      title: 'Приборы',
+      dataIndex: 'equipment',
+      key: 'equipment',
+      width: '20%',
+      render: equipment => {
+        if (!equipment || equipment.length === 0) return '-';
+        return (
+          <div>
+            {equipment.map((eq, index) => (
+              <div key={index} className="equipment-item">
+                <span className="equipment-name">{eq.name}</span>
+                <span className="equipment-serial"> (Зав.№{eq.serial_number})</span>
+              </div>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      title: 'Исполнитель',
+      dataIndex: 'executor',
+      key: 'executor',
+      width: '8%',
+    },
+  ];
+
+  return (
+    <div className="sample-calculations">
+      <h3 className="sample-title">Проба №{sampleNumber}</h3>
+      <Table columns={columns} dataSource={data} pagination={false} scroll={false} />
+    </div>
+  );
+};
+
 const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
   console.log('Protocol prop:', protocol);
 
@@ -49,11 +131,8 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
     is_accredited: false,
     laboratory_location: '',
     sampling_act_number: '',
-    sampling_date: null,
-    receiving_date: null,
     excel_template: undefined,
     branch: '',
-    sampling_location_detail: '',
     phone: '',
     laboratory: '',
     selection_conditions: null,
@@ -64,19 +143,14 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [branches, setBranches] = useState([]);
-  const [samplingLocations, setSamplingLocations] = useState([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState(null);
 
   const [branchSearchValue, setBranchSearchValue] = useState('');
-  const [locationSearchValue, setLocationSearchValue] = useState('');
   const [branchesDropdownVisible, setBranchesDropdownVisible] = useState(false);
-  const [locationsDropdownVisible, setLocationsDropdownVisible] = useState(false);
-  const [locationsLoading, setLocationsLoading] = useState(false);
 
   const branchSearchRef = useRef(null);
-  const locationSearchRef = useRef(null);
 
   const [laboratories, setLaboratories] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -134,12 +208,9 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
     if (protocol) {
       setFormData({
         ...protocol,
-        sampling_date: protocol.sampling_date ? dayjs(protocol.sampling_date) : null,
-        receiving_date: protocol.receiving_date ? dayjs(protocol.receiving_date) : null,
         test_protocol_date: protocol.test_protocol_date ? dayjs(protocol.test_protocol_date) : null,
       });
       setBranchSearchValue(protocol.branch || '');
-      setLocationSearchValue(protocol.sampling_location_detail || '');
 
       // Загружаем шаблоны, если есть лаборатория
       if (protocol.laboratory) {
@@ -188,9 +259,6 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
     const handleClickOutside = event => {
       if (branchSearchRef.current && !branchSearchRef.current.contains(event.target)) {
         setBranchesDropdownVisible(false);
-      }
-      if (locationSearchRef.current && !locationSearchRef.current.contains(event.target)) {
-        setLocationsDropdownVisible(false);
       }
     };
 
@@ -256,11 +324,7 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
       } else {
         fetchTemplates(formData.laboratory);
       }
-    } else if (
-      field === 'test_protocol_date' ||
-      field === 'sampling_date' ||
-      field === 'receiving_date'
-    ) {
+    } else if (field === 'test_protocol_date') {
       setFormData(prev => ({
         ...prev,
         [field]: value ? dayjs(value) : null,
@@ -282,20 +346,8 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
       setFormData(prev => ({
         ...prev,
         branch: value,
-        sampling_location_detail: '',
         phone: '',
       }));
-    } else if (field === 'sampling_location_detail') {
-      const selectedLocation = samplingLocations.find(
-        loc => loc.sampling_location_detail === value
-      );
-      if (selectedLocation) {
-        setFormData(prev => ({
-          ...prev,
-          sampling_location_detail: value,
-          phone: selectedLocation.phone || '',
-        }));
-      }
     }
   };
 
@@ -313,39 +365,32 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
       setLoading(true);
 
       // Преобразуем массив условий отбора в объект
-      const selectionConditionsObject =
-        formData.selection_conditions?.reduce((acc, condition) => {
-          acc[condition.name] = condition.value;
-          return acc;
-        }, {}) || {};
+      const selectionConditionsObject = Array.isArray(formData.selection_conditions)
+        ? formData.selection_conditions.reduce((acc, condition) => {
+            acc[condition.name] = condition.value;
+            return acc;
+          }, {})
+        : {};
 
-      const updateData = {
-        test_protocol_number: formData.test_protocol_number || '',
-        test_protocol_date: formData.test_protocol_date?.format('YYYY-MM-DD') || null,
-        is_accredited: formData.is_accredited || false,
-        laboratory_location: formData.laboratory_location || '',
-        sampling_date: formData.sampling_date?.format('YYYY-MM-DD') || null,
-        receiving_date: formData.receiving_date?.format('YYYY-MM-DD') || null,
-        branch: formData.branch || '',
-        sampling_location_detail: formData.sampling_location_detail || '',
+      const protocolData = {
+        test_protocol_number: formData.test_protocol_number,
+        test_protocol_date: formData.test_protocol_date
+          ? formData.test_protocol_date.format('YYYY-MM-DD')
+          : null,
+        laboratory_location: formData.laboratory_location,
+        sampling_act_number: formData.sampling_act_number,
+        excel_template: formData.excel_template,
+        laboratory: formData.laboratory,
+        department: formData.department,
+        branch: formData.branch,
         phone: formData.phone || '',
-        laboratory: formData.laboratory || null,
-        // Явно указываем department и excel_template как null если нет подразделений
-        department: departments.length > 0 ? formData.department : null,
-        excel_template: formData.excel_template || null,
         selection_conditions: selectionConditionsObject,
+        is_accredited: formData.is_accredited,
       };
-
-      // Удаляем undefined значения из объекта
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key] === undefined) {
-          delete updateData[key];
-        }
-      });
 
       await axios.patch(
         `${import.meta.env.VITE_API_URL}/api/protocols/${protocol.id}/`,
-        updateData
+        protocolData
       );
 
       message.success('Протокол успешно обновлен');
@@ -479,28 +524,6 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
     }
   };
 
-  const searchLocations = async searchText => {
-    if (!searchText || searchText.length < 2) {
-      setSamplingLocations([]);
-      setLocationsDropdownVisible(false);
-      return;
-    }
-
-    try {
-      setLocationsLoading(true);
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/get-sampling-locations/?search=${searchText}`
-      );
-      setSamplingLocations(response.data);
-      setLocationsDropdownVisible(true);
-    } catch (error) {
-      console.error('Ошибка при поиске мест отбора:', error);
-      message.error('Не удалось загрузить список мест отбора');
-    } finally {
-      setLocationsLoading(false);
-    }
-  };
-
   const fetchCalculations = async protocolId => {
     try {
       setCalculationsLoading(true);
@@ -578,6 +601,22 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
     if (!error || error === '-') return '-';
     return `±${error.toString().replace('.', ',')}`;
   };
+
+  // Группировка результатов по пробам
+  const groupedCalculations = React.useMemo(() => {
+    if (!calculations || calculations.length === 0) return {};
+
+    return calculations.reduce((acc, calc) => {
+      const sampleNumber = calc.sampleNumber;
+      if (!acc[sampleNumber]) {
+        acc[sampleNumber] = [];
+      }
+      // Создаем новый объект без поля sampleNumber
+      const { sampleNumber: _, ...calcWithoutSample } = calc;
+      acc[sampleNumber].push(calcWithoutSample);
+      return acc;
+    }, {});
+  }, [calculations]);
 
   const calculationColumns = [
     {
@@ -677,7 +716,7 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
       loading={loading}
       onGenerate={handleGenerateProtocol}
       generateLoading={isGenerating}
-      style={{ width: activeTab === 'calculations' ? '1200px' : '600px' }}
+      style={{ width: activeTab === 'calculations' ? '900px' : '600px' }}
     >
       <div className="edit-protocol-form">
         <div className="tabs">
@@ -699,14 +738,23 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
 
         <div className={`tab-content ${isAnimating ? 'entering' : ''}`}>
           {activeTab === 'calculations' ? (
-            <div className="calculations-table">
-              <Table
-                columns={calculationColumns}
-                dataSource={calculations}
-                loading={calculationsLoading}
-                pagination={false}
-                scroll={false}
-              />
+            <div className="calculations-container">
+              {calculationsLoading ? (
+                <div className="loading-state">
+                  <Spin size="large" />
+                  <p>Загрузка результатов...</p>
+                </div>
+              ) : Object.entries(groupedCalculations).length === 0 ? (
+                <div className="no-data-message">Нет данных для отображения</div>
+              ) : (
+                Object.entries(groupedCalculations).map(([sampleNumber, sampleData]) => (
+                  <SampleCalculationsTable
+                    key={sampleNumber}
+                    sampleNumber={sampleNumber}
+                    data={sampleData}
+                  />
+                ))
+              )}
             </div>
           ) : (
             <div className="edit-protocol-form">
@@ -812,54 +860,6 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
               </div>
 
               <div className="form-group">
-                <label>Место отбора пробы</label>
-                <div className="search-container" ref={locationSearchRef}>
-                  <Input
-                    value={locationSearchValue}
-                    onChange={e => {
-                      const value = e.target.value;
-                      setLocationSearchValue(value);
-                      setFormData(prev => ({ ...prev, sampling_location_detail: value }));
-                      searchLocations(value);
-                    }}
-                    onFocus={() => {
-                      if (locationSearchValue && locationSearchValue.length >= 2) {
-                        setLocationsDropdownVisible(true);
-                      }
-                    }}
-                    placeholder="Введите место отбора пробы"
-                    style={{ width: '100%' }}
-                  />
-                  {locationsDropdownVisible && samplingLocations.length > 0 && (
-                    <div className="search-dropdown">
-                      {locationsLoading ? (
-                        <div className="search-loading">
-                          <Spin size="small" />
-                        </div>
-                      ) : (
-                        samplingLocations.map((location, index) => (
-                          <div
-                            key={index}
-                            className="search-option"
-                            onClick={() => {
-                              setFormData(prev => ({
-                                ...prev,
-                                sampling_location_detail: location,
-                              }));
-                              setLocationSearchValue(location);
-                              setLocationsDropdownVisible(false);
-                            }}
-                          >
-                            {location}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="form-group">
                 <label>Телефон</label>
                 <Input
                   value={formData.phone}
@@ -877,54 +877,6 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol }) => {
                   placeholder="Введите место осуществления лабораторной деятельности"
                   style={{ width: '100%' }}
                 />
-              </div>
-
-              <div className="form-group">
-                <label>Дата отбора пробы</label>
-                <DatePicker
-                  locale={locale}
-                  format="DD.MM.YYYY"
-                  value={formData.sampling_date}
-                  onChange={handleInputChange('sampling_date')}
-                  placeholder="ДД.ММ.ГГГГ"
-                  style={{ width: '100%' }}
-                  status={errors.sampling_date ? 'error' : ''}
-                  className="custom-date-picker"
-                  rootClassName="custom-date-picker-root"
-                  popupClassName="custom-date-picker-popup"
-                  inputReadOnly={false}
-                  showToday={false}
-                  allowClear={true}
-                  superNextIcon={null}
-                  superPrevIcon={null}
-                />
-                {errors.sampling_date && (
-                  <div className="error-message">{errors.sampling_date}</div>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label>Дата получения пробы</label>
-                <DatePicker
-                  locale={locale}
-                  format="DD.MM.YYYY"
-                  value={formData.receiving_date}
-                  onChange={handleInputChange('receiving_date')}
-                  placeholder="ДД.ММ.ГГГГ"
-                  style={{ width: '100%' }}
-                  status={errors.receiving_date ? 'error' : ''}
-                  className="custom-date-picker"
-                  rootClassName="custom-date-picker-root"
-                  popupClassName="custom-date-picker-popup"
-                  inputReadOnly={false}
-                  showToday={false}
-                  allowClear={true}
-                  superNextIcon={null}
-                  superPrevIcon={null}
-                />
-                {errors.receiving_date && (
-                  <div className="error-message">{errors.receiving_date}</div>
-                )}
               </div>
 
               <div className="form-group">

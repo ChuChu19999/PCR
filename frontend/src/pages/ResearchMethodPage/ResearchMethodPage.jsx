@@ -495,6 +495,68 @@ const ResearchMethodPage = () => {
     setIsSaveModalOpen(false);
   };
 
+  const fetchAvailableMethods = async () => {
+    try {
+      // Получаем страницу исследований
+      const researchPageResponse = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/research-pages/`,
+        {
+          params: {
+            laboratory_id: laboratoryId,
+            department_id: departmentId || null,
+            type: 'oil_products',
+          },
+        }
+      );
+
+      const researchPage = researchPageResponse.data.find(page => page.type === 'oil_products');
+      if (!researchPage) {
+        throw new Error('Страница исследований не найдена');
+      }
+
+      // Получаем доступные методы для пробы
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/research-methods/available-methods/`,
+        {
+          params: {
+            sample_id: sampleId,
+            research_page_id: researchPage.id,
+          },
+        }
+      );
+
+      setAvailableMethods(response.data);
+
+      // Если текущий метод больше недоступен, выбираем первый доступный метод
+      const isCurrentMethodAvailable = response.data.methods.some(method =>
+        method.is_group
+          ? method.methods.some(m => m.id === currentMethod?.id)
+          : method.id === currentMethod?.id
+      );
+
+      if (!isCurrentMethodAvailable && response.data.methods.length > 0) {
+        const firstMethod = response.data.methods[0];
+        if (firstMethod.is_group && firstMethod.methods?.length > 0) {
+          const firstGroupMethod = firstMethod.methods[0];
+          if (!firstGroupMethod.input_data) {
+            firstGroupMethod.input_data = { fields: [] };
+          }
+          setCurrentMethod(firstGroupMethod);
+          setSelectedTab(0);
+        } else {
+          if (!firstMethod.input_data) {
+            firstMethod.input_data = { fields: [] };
+          }
+          setCurrentMethod(firstMethod);
+          setSelectedTab(0);
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка при загрузке методов:', error);
+      message.error('Не удалось обновить список методов');
+    }
+  };
+
   const handleSaveSuccess = async () => {
     setIsSaveModalOpen(false);
 
@@ -523,11 +585,8 @@ const ResearchMethodPage = () => {
 
     try {
       message.success('Результат расчета успешно сохранен');
-      // Добавляем небольшую задержку перед обновлением страницы,
-      // чтобы пользователь успел увидеть сообщение об успехе
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
+      // Обновляем список методов
+      await fetchAvailableMethods();
     } catch (error) {
       console.error('Ошибка при обновлении списка методов:', error);
       message.error('Не удалось обновить список методов');

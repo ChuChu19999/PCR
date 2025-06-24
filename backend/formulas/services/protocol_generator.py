@@ -201,23 +201,47 @@ def generate_protocol_excel(request):
             "{test_object}": test_objects,
             "{laboratory_location}": protocol.laboratory_location or "",
             "{branch}": protocol.branch or "",
-            "{sampling_location_detail}": protocol.sampling_location_detail or "",
+            "{sampling_location_detail}": ", ".join(
+                filter(None, [sample.sampling_location_detail for sample in samples])
+            )
+            or "",
             "{phone}": protocol.phone or "",
             "{sampling_act_number}": protocol.sampling_act_number or "",
-            "{sampling_date}": (
-                protocol.sampling_date.strftime("%d.%m.%Y")
-                if protocol.sampling_date
-                else ""
-            ),
-            "{receiving_date}": (
-                protocol.receiving_date.strftime("%d.%m.%Y")
-                if protocol.receiving_date
-                else ""
-            ),
+            "{sampling_date}": ", ".join(
+                filter(
+                    None,
+                    [
+                        (
+                            sample.sampling_date.strftime("%d.%m.%Y")
+                            if sample.sampling_date
+                            else ""
+                        )
+                        for sample in samples
+                    ],
+                )
+            )
+            or "",
+            "{receiving_date}": ", ".join(
+                filter(
+                    None,
+                    [
+                        (
+                            sample.receiving_date.strftime("%d.%m.%Y")
+                            if sample.receiving_date
+                            else ""
+                        )
+                        for sample in samples
+                    ],
+                )
+            )
+            or "",
             "{executor}": executors_str,
             "{lab_location}": protocol.laboratory_location or "",
             "{subd}": protocol.branch,
-            "{sampling_location}": protocol.sampling_location_detail,
+            "{sampling_location}": ", ".join(
+                filter(None, [sample.sampling_location_detail for sample in samples])
+            )
+            or "",
             "{tel}": protocol.phone,
             "{res_object}": test_objects,
             "{laboratory_activity_dates}": laboratory_activity_dates,
