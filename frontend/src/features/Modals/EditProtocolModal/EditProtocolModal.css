@@ -1,7 +1,5 @@
 .edit-protocol-form {
   padding: 0px;
-  padding-bottom: 20px;
-  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -476,7 +474,7 @@
 .ant-modal-body {
   flex: 1;
   padding: 24px;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .ant-modal-body::-webkit-scrollbar {
@@ -500,7 +498,7 @@
 /* Стили для контейнера расчетов */
 .calculations-container {
   overflow-y: auto;
-  max-height: calc(90vh - 200px);
+  max-height: calc(90vh - 250px);
 }
 
 .calculations-container::-webkit-scrollbar {
