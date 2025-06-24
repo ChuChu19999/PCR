@@ -463,9 +463,19 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
 
       setLoading(true);
 
+      const dataToSend = {
+        ...formData,
+        sampling_date: formData.sampling_date
+          ? dayjs(formData.sampling_date).format('YYYY-MM-DD')
+          : null,
+        receiving_date: formData.receiving_date
+          ? dayjs(formData.receiving_date).format('YYYY-MM-DD')
+          : null,
+      };
+
       const response = await axios.put(
         `${import.meta.env.VITE_API_URL}/api/samples/${sample.id}/`,
-        formData
+        dataToSend
       );
 
       message.success('Проба успешно обновлена');
