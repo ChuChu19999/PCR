@@ -325,7 +325,7 @@ const EquipmentPage = () => {
   // Показываем таблицу с приборами
   return (
     <EquipmentPageWrapper>
-      <Layout title={selectedLaboratory.name}>
+      <Layout title={selectedDepartment ? selectedDepartment.name : selectedLaboratory.name}>
         <div style={{ height: 'calc(100vh - 87px)', display: 'flex', flexDirection: 'column' }}>
           <div
             className="header-actions"
