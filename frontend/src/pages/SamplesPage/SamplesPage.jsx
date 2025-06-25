@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Select, Form, Button, Table, Space, Input } from 'antd';
+import { Table, Space, Input, message } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import Layout from '../../shared/ui/Layout/Layout';
 import SamplesPageWrapper from './SamplesPageWrapper';
 import CreateSampleModal from '../../features/Modals/CreateSampleModal/CreateSampleModal';
 import EditSampleModal from '../../features/Modals/EditSampleModal/EditSampleModal';
+import { Button } from '../../shared/ui/Button/Button';
+import LoadingCard from '../../features/Cards/ui/LoadingCard/LoadingCard';
 import dayjs from 'dayjs';
-
-const { Option } = Select;
+import './SamplesPage.css';
 
 const formatDate = dateString => {
   if (!dateString) return '-';
@@ -24,23 +25,31 @@ const SamplesPage = () => {
   const [laboratories, setLaboratories] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [selectedLaboratory, setSelectedLaboratory] = useState(null);
-  const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [samples, setSamples] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [searchedColumn, setSearchedColumn] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedSample, setSelectedSample] = useState(null);
-  const [form] = Form.useForm();
-  const [columnsState, setColumnsState] = useState({
-    registration_number: { width: 200 },
-    test_object: { width: 200 },
-    sampling_location_detail: { width: 200 },
-    sampling_date: { width: 150 },
-    receiving_date: { width: 150 },
-    created_at: { width: 150 },
-  });
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
+
+  // Загрузка списка лабораторий
+  useEffect(() => {
+    const fetchLaboratories = async () => {
+      try {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
+        setLaboratories(response.data || []);
+      } catch (error) {
+        console.error('Ошибка при загрузке лабораторий:', error);
+        message.error('Не удалось загрузить список лабораторий');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLaboratories();
+  }, []);
 
   const handleSearch = (selectedKeys, confirm, dataIndex) => {
     confirm();
@@ -85,7 +94,7 @@ const SamplesPage = () => {
     ),
     filterIcon: filtered => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     onFilter: (value, record) => {
-      if (dataIndex === 'created_at') {
+      if (dataIndex === 'sampling_date' || dataIndex === 'receiving_date') {
         return formatDate(record[dataIndex]).toLowerCase().includes(value.toLowerCase());
       }
       return record[dataIndex]
@@ -93,7 +102,7 @@ const SamplesPage = () => {
         : '';
     },
     render: (text, record) => {
-      if (dataIndex === 'created_at') {
+      if (dataIndex === 'sampling_date' || dataIndex === 'receiving_date') {
         return formatDate(text);
       }
       return text;
@@ -102,105 +111,44 @@ const SamplesPage = () => {
 
   const columns = [
     {
-      title: 'Регистрационный номер',
+      title: '№ пробы',
       dataIndex: 'registration_number',
       key: 'registration_number',
-      sorter: (a, b) => a.registration_number.localeCompare(b.registration_number),
-      ...getColumnSearchProps('registration_number', 'регистрационному номеру'),
+      ...getColumnSearchProps('registration_number', 'Номеру пробы'),
     },
     {
-      title: 'Объект испытаний',
+      title: 'Объект испытания',
       dataIndex: 'test_object',
       key: 'test_object',
-      width: columnsState.test_object.width,
-      ...getColumnSearchProps('test_object', 'Объекту испытаний'),
+      ...getColumnSearchProps('test_object', 'Объекту испытания'),
     },
     {
-      title: 'Место отбора пробы',
+      title: 'Место отбора',
       dataIndex: 'sampling_location_detail',
       key: 'sampling_location_detail',
-      width: columnsState.sampling_location_detail.width,
       ...getColumnSearchProps('sampling_location_detail', 'Месту отбора'),
     },
     {
-      title: 'Дата отбора пробы',
+      title: 'Дата отбора',
       dataIndex: 'sampling_date',
       key: 'sampling_date',
-      width: columnsState.sampling_date.width,
-      sorter: (a, b) => new Date(a.sampling_date) - new Date(b.sampling_date),
       ...getColumnSearchProps('sampling_date', 'Дате отбора'),
-      render: text => (text ? dayjs(text).format('DD.MM.YYYY') : '-'),
+      render: text => formatDate(text),
     },
     {
-      title: 'Дата получения пробы',
+      title: 'Дата поступления',
       dataIndex: 'receiving_date',
       key: 'receiving_date',
-      width: columnsState.receiving_date.width,
-      sorter: (a, b) => new Date(a.receiving_date) - new Date(b.receiving_date),
-      ...getColumnSearchProps('receiving_date', 'Дате получения'),
-      render: text => (text ? dayjs(text).format('DD.MM.YYYY') : '-'),
+      ...getColumnSearchProps('receiving_date', 'Дате поступления'),
+      render: text => formatDate(text),
     },
     {
       title: 'Дата создания',
       dataIndex: 'created_at',
       key: 'created_at',
-      sorter: (a, b) => new Date(a.created_at) - new Date(b.created_at),
-      ...getColumnSearchProps('created_at', 'дате создания'),
+      render: text => formatDate(text),
     },
   ];
-
-  // Загрузка списка лабораторий
-  useEffect(() => {
-    const fetchLaboratories = async () => {
-      try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
-        setLaboratories(response.data.filter(lab => !lab.is_deleted));
-      } catch (error) {
-        console.error('Ошибка при загрузке лабораторий:', error);
-      }
-    };
-
-    fetchLaboratories();
-  }, []);
-
-  // Загрузка подразделений при выборе лаборатории
-  useEffect(() => {
-    const fetchDepartments = async () => {
-      if (selectedLaboratory) {
-        try {
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/departments/`, {
-            params: { laboratory: selectedLaboratory },
-          });
-          // Фильтруем только неудаленные подразделения выбранной лаборатории
-          const filteredDepartments = response.data.filter(
-            dept => !dept.is_deleted && dept.laboratory === selectedLaboratory
-          );
-          setDepartments(filteredDepartments);
-        } catch (error) {
-          console.error('Ошибка при загрузке подразделений:', error);
-        }
-      } else {
-        setDepartments([]);
-      }
-      setSelectedDepartment(null);
-    };
-
-    fetchDepartments();
-  }, [selectedLaboratory]);
-
-  // Обработчики изменения выбора
-  const handleLaboratoryChange = value => {
-    setSelectedLaboratory(value);
-    form.setFieldsValue({ department: undefined });
-  };
-
-  const handleDepartmentChange = value => {
-    setSelectedDepartment(value);
-  };
-
-  const handleCreate = () => {
-    setIsCreateModalOpen(true);
-  };
 
   const handleCreateModalClose = () => {
     setIsCreateModalOpen(false);
@@ -208,19 +156,17 @@ const SamplesPage = () => {
 
   const handleCreateSuccess = () => {
     setIsCreateModalOpen(false);
-    handleShow(); // Обновляем список проб после успешного создания
+    loadSamples(selectedLaboratory.id, selectedDepartment?.id); // Обновляем список проб после успешного создания с учетом подразделения
   };
 
-  const handleShow = async () => {
-    if (!selectedLaboratory) return;
-
+  const loadSamples = async (laboratoryId, departmentId = null) => {
     setLoading(true);
     try {
       const params = {
-        laboratory: selectedLaboratory,
+        laboratory: laboratoryId,
       };
-      if (selectedDepartment) {
-        params.department = selectedDepartment;
+      if (departmentId) {
+        params.department = departmentId;
       }
       const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/samples/`, {
         params,
@@ -228,6 +174,7 @@ const SamplesPage = () => {
       setSamples(response.data);
     } catch (error) {
       console.error('Ошибка при загрузке проб:', error);
+      message.error('Не удалось загрузить список проб');
     } finally {
       setLoading(false);
     }
@@ -246,64 +193,147 @@ const SamplesPage = () => {
   const handleEditModalSuccess = () => {
     setIsEditModalOpen(false);
     setSelectedSample(null);
-    handleShow(); // Обновляем список проб после успешного редактирования
+    loadSamples(selectedLaboratory.id, selectedDepartment?.id); // Обновляем список проб после успешного редактирования с учетом подразделения
   };
 
-  return (
-    <Layout title="Пробы">
+  const handleLaboratoryClick = async laboratory => {
+    setLoading(true);
+    setSelectedLaboratory(laboratory);
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/departments/by_laboratory/?laboratory_id=${laboratory.id}`
+      );
+      const departmentsData = response.data.filter(dept => !dept.is_deleted) || [];
+      setDepartments(departmentsData);
+
+      if (departmentsData.length === 0) {
+        // Если нет подразделений, сразу загружаем пробы для лаборатории
+        await loadSamples(laboratory.id);
+      }
+    } catch (error) {
+      console.error('Ошибка при загрузке данных:', error);
+      message.error('Не удалось загрузить данные');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDepartmentClick = async department => {
+    setLoading(true);
+    setSelectedDepartment(department);
+    try {
+      await loadSamples(selectedLaboratory.id, department.id);
+    } catch (error) {
+      console.error('Ошибка при загрузке проб:', error);
+      message.error('Не удалось загрузить пробы');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBack = () => {
+    // Если мы на странице с таблицей проб и есть подразделения
+    if (selectedDepartment && departments.length > 0) {
+      // Возвращаемся к выбору подразделения
+      setSelectedDepartment(null);
+      setSamples([]);
+    } else {
+      // Возвращаемся к выбору лаборатории
+      setSelectedLaboratory(null);
+      setSelectedDepartment(null);
+      setDepartments([]);
+      setSamples([]);
+    }
+  };
+
+  if (loading) {
+    return (
       <SamplesPageWrapper>
-        <div style={{ height: 'calc(100vh - 87px)', display: 'flex', flexDirection: 'column' }}>
-          <div className="form" style={{ padding: '20px', flex: 'none' }}>
-            <Form form={form} layout="vertical">
-              <Form.Item label="Лаборатория" name="laboratory">
-                <Select
-                  placeholder="Выберите лабораторию"
-                  value={selectedLaboratory}
-                  onChange={handleLaboratoryChange}
-                  style={{ width: '100%' }}
+        <Layout title={selectedLaboratory ? selectedLaboratory.name : 'Пробы'}>
+          <div style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}>
+            <LoadingCard />
+          </div>
+        </Layout>
+      </SamplesPageWrapper>
+    );
+  }
+
+  // Если лаборатория не выбрана, показываем список лабораторий
+  if (!selectedLaboratory) {
+    return (
+      <SamplesPageWrapper>
+        <Layout title="Пробы">
+          <div className="laboratories-container">
+            <div className="laboratories-grid">
+              {laboratories.map(laboratory => (
+                <div
+                  key={laboratory.id}
+                  className="laboratory-card"
+                  onClick={() => handleLaboratoryClick(laboratory)}
                 >
-                  {laboratories.map(lab => (
-                    <Option key={lab.id} value={lab.id}>
-                      {lab.name}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
+                  <div className="laboratory-card-content">
+                    <h3>{laboratory.name}</h3>
+                    {laboratory.description && <p>{laboratory.description}</p>}
+                    {laboratory.full_name && (
+                      <div className="laboratory-info">
+                        <span>{laboratory.full_name}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Layout>
+      </SamplesPageWrapper>
+    );
+  }
 
-              {selectedLaboratory && departments.length > 0 && (
-                <Form.Item label="Подразделение" name="department">
-                  <Select
-                    placeholder="Выберите подразделение"
-                    value={selectedDepartment}
-                    onChange={handleDepartmentChange}
-                    allowClear
-                    style={{ width: '100%' }}
-                  >
-                    {departments.map(dept => (
-                      <Option key={dept.id} value={dept.id}>
-                        {dept.name}
-                      </Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-              )}
+  // Если есть подразделения и подразделение еще не выбрано, показываем список подразделений
+  if (departments.length > 0 && !selectedDepartment) {
+    return (
+      <SamplesPageWrapper>
+        <Layout title={selectedLaboratory.name}>
+          <div className="departments-container">
+            <div className="departments-header">
+              <Button title="Назад" onClick={handleBack} type="default" className="back-btn" />
+            </div>
+            <div className="departments-grid">
+              {departments.map(department => (
+                <div
+                  key={department.id}
+                  className="department-card"
+                  onClick={() => handleDepartmentClick(department)}
+                >
+                  <div className="department-card-content">
+                    <h3>{department.name}</h3>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Layout>
+      </SamplesPageWrapper>
+    );
+  }
 
-              <Form.Item>
-                <Space>
-                  <Button
-                    type="primary"
-                    onClick={handleShow}
-                    disabled={!selectedLaboratory}
-                    loading={loading}
-                  >
-                    Показать
-                  </Button>
-                  <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-                    Создать
-                  </Button>
-                </Space>
-              </Form.Item>
-            </Form>
+  // Показываем таблицу с пробами
+  return (
+    <SamplesPageWrapper>
+      <Layout title={selectedLaboratory.name}>
+        <div style={{ height: 'calc(100vh - 87px)', display: 'flex', flexDirection: 'column' }}>
+          <div
+            className="header-actions"
+            style={{ padding: '20px', display: 'flex', justifyContent: 'space-between' }}
+          >
+            <Button title="Назад" onClick={handleBack} type="default" className="back-btn" />
+            <Button
+              title="Создать"
+              onClick={() => setIsCreateModalOpen(true)}
+              buttonColor="#0066cc"
+              type="primary"
+              icon={<PlusOutlined />}
+            />
           </div>
 
           <div
@@ -341,20 +371,28 @@ const SamplesPage = () => {
             />
           </div>
         </div>
-      </SamplesPageWrapper>
 
-      {isCreateModalOpen && (
-        <CreateSampleModal onClose={handleCreateModalClose} onSuccess={handleCreateSuccess} />
-      )}
+        {isCreateModalOpen && (
+          <CreateSampleModal
+            onClose={handleCreateModalClose}
+            onSuccess={handleCreateSuccess}
+            laboratoryId={selectedLaboratory.id}
+            departmentId={selectedDepartment?.id}
+          />
+        )}
 
-      {isEditModalOpen && selectedSample && (
-        <EditSampleModal
-          onClose={handleEditModalClose}
-          onSuccess={handleEditModalSuccess}
-          sample={selectedSample}
-        />
-      )}
-    </Layout>
+        {isEditModalOpen && selectedSample && (
+          <EditSampleModal
+            isOpen={isEditModalOpen}
+            onClose={handleEditModalClose}
+            onSuccess={handleEditModalSuccess}
+            sample={selectedSample}
+            laboratoryId={selectedLaboratory.id}
+            departmentId={selectedDepartment?.id}
+          />
+        )}
+      </Layout>
+    </SamplesPageWrapper>
   );
 };
 

@@ -5,10 +5,15 @@ import axios from 'axios';
 import Modal from '../ui/Modal';
 import './EditSampleModal.css';
 import dayjs from 'dayjs';
+import 'dayjs/locale/ru';
+import locale from 'antd/es/date-picker/locale/ru_RU';
+
+// Устанавливаем русскую локаль для dayjs
+dayjs.locale('ru');
 
 const { Option } = Select;
 
-const EditSampleModal = ({ onClose, onSuccess, sample }) => {
+const EditSampleModal = ({ onClose, onSuccess, sample, laboratoryId, departmentId }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('calculations');
   const [isAnimating, setIsAnimating] = useState(false);
@@ -16,8 +21,6 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
     registration_number: sample.registration_number || '',
     test_object: sample.test_object || '',
     protocol: sample.protocol || null,
-    laboratory: sample.laboratory || null,
-    department: sample.department || null,
     sampling_location_detail: sample.sampling_location_detail || '',
     sampling_date: sample.sampling_date || null,
     receiving_date: sample.receiving_date || null,
@@ -25,11 +28,7 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const [laboratories, setLaboratories] = useState([]);
-  const [departments, setDepartments] = useState([]);
   const [protocols, setProtocols] = useState([]);
-  const [laboratoriesLoading, setLaboratoriesLoading] = useState(false);
-  const [departmentsLoading, setDepartmentsLoading] = useState(false);
   const [protocolsLoading, setProtocolsLoading] = useState(false);
   const [calculations, setCalculations] = useState([]);
   const [calculationsLoading, setCalculationsLoading] = useState(false);
@@ -44,10 +43,8 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
   const locationSearchRef = useRef(null);
   const [samplingLocations, setSamplingLocations] = useState([]);
   const [locationsLoading, setLocationsLoading] = useState(false);
-  const [locale, setLocale] = useState('ru');
 
   useEffect(() => {
-    fetchLaboratories();
     if (sample.id) {
       fetchCalculations(sample.id);
     }
@@ -57,26 +54,12 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
   }, [sample.id, sample.protocol]);
 
   useEffect(() => {
-    if (formData.laboratory) {
-      fetchDepartments(formData.laboratory);
-      fetchProtocols(formData.laboratory, formData.department);
-    } else {
-      setDepartments([]);
-      setProtocols([]);
-      setFormData(prev => ({ ...prev, department: null, protocol: null }));
-    }
-  }, [formData.laboratory]);
-
-  useEffect(() => {
-    if (formData.laboratory && formData.department) {
-      fetchProtocols(formData.laboratory, formData.department);
-    }
-  }, [formData.department]);
-
-  useEffect(() => {
     const handleClickOutside = event => {
       if (protocolSearchRef.current && !protocolSearchRef.current.contains(event.target)) {
         setProtocolsDropdownVisible(false);
+      }
+      if (locationSearchRef.current && !locationSearchRef.current.contains(event.target)) {
+        setLocationsDropdownVisible(false);
       }
     };
 
@@ -86,55 +69,98 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
     };
   }, []);
 
-  const fetchLaboratories = async () => {
-    try {
-      setLaboratoriesLoading(true);
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
-      setLaboratories(response.data.filter(lab => !lab.is_deleted));
-    } catch (error) {
-      console.error('Ошибка при загрузке лабораторий:', error);
-      message.error('Не удалось загрузить список лабораторий');
-    } finally {
-      setLaboratoriesLoading(false);
+  const handleInputChange = field => e => {
+    const value = e?.target ? e.target.value : e;
+    setFormData(prev => ({
+      ...prev,
+      [field]: value,
+    }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
 
-  const fetchDepartments = async laboratoryId => {
+  const validateForm = () => {
+    const newErrors = {};
+    const requiredFields = ['registration_number', 'test_object'];
+
+    requiredFields.forEach(field => {
+      if (!formData[field]) {
+        newErrors[field] = 'Это поле обязательно для заполнения';
+      }
+    });
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSave = async () => {
     try {
-      setDepartmentsLoading(true);
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/departments/by_laboratory/?laboratory_id=${laboratoryId}`
-      );
-      setDepartments(response.data.filter(dept => !dept.is_deleted));
+      if (!validateForm()) {
+        return;
+      }
+
+      setLoading(true);
+
+      const dataToSend = {
+        ...formData,
+        laboratory: laboratoryId,
+        department: departmentId,
+        sampling_date: formData.sampling_date
+          ? dayjs(formData.sampling_date).format('YYYY-MM-DD')
+          : null,
+        receiving_date: formData.receiving_date
+          ? dayjs(formData.receiving_date).format('YYYY-MM-DD')
+          : null,
+      };
+
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/samples/${sample.id}/`, dataToSend);
+
+      message.success('Проба успешно обновлена');
+      onSuccess();
     } catch (error) {
-      console.error('Ошибка при загрузке подразделений:', error);
-      message.error('Не удалось загрузить список подразделений');
-      setDepartments([]);
+      console.error('Ошибка при обновлении пробы:', error);
+
+      if (error.response?.data) {
+        const serverErrors = error.response.data;
+        const newErrors = {};
+
+        Object.keys(serverErrors).forEach(field => {
+          if (Array.isArray(serverErrors[field])) {
+            newErrors[field] = serverErrors[field][0];
+          } else {
+            newErrors[field] = serverErrors[field];
+          }
+        });
+
+        setErrors(prev => ({ ...prev, ...newErrors }));
+
+        if (Object.keys(newErrors).length === 0 && error.response?.data?.error) {
+          message.error(error.response.data.error);
+        }
+      } else {
+        message.error('Произошла ошибка при обновлении пробы');
+      }
     } finally {
-      setDepartmentsLoading(false);
+      setLoading(false);
     }
   };
 
-  const fetchProtocols = async (laboratoryId, departmentId = null, searchQuery = '') => {
+  const fetchProtocols = async (searchValue = '') => {
     try {
       setProtocolsLoading(true);
-      let url = `${import.meta.env.VITE_API_URL}/api/search-protocols/`;
-      const params = {
-        laboratory: laboratoryId,
-        search: searchQuery,
-      };
-      if (departmentId) {
-        params.department = departmentId;
-      }
-      const response = await axios.get(url, { params });
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/protocols/`, {
+        params: {
+          search: searchValue,
+          laboratory: laboratoryId,
+          department: departmentId,
+        },
+      });
       setProtocols(response.data);
-      if (searchQuery && searchQuery.length >= 1) {
-        setProtocolsDropdownVisible(true);
-      }
+      setProtocolsDropdownVisible(true);
     } catch (error) {
       console.error('Ошибка при загрузке протоколов:', error);
       message.error('Не удалось загрузить список протоколов');
-      setProtocols([]);
     } finally {
       setProtocolsLoading(false);
     }
@@ -147,30 +173,31 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
       );
       setProtocolSearchValue(response.data.test_protocol_number);
     } catch (error) {
-      console.error('Ошибка при загрузке информации о протоколе:', error);
-      message.error('Не удалось загрузить информацию о протоколе');
+      console.error('Ошибка при загрузке деталей протокола:', error);
     }
   };
 
-  const formatInputData = inputData => {
-    return Object.entries(inputData)
-      .map(([key, value]) => {
-        let formattedValue = value;
-        if (!isNaN(value)) {
-          if (parseFloat(value) < 0) {
-            formattedValue = value.toString().replace('-', '-').replace('.', ',');
-          } else {
-            formattedValue = value.toString().replace('.', ',');
-          }
+  const searchLocations = async query => {
+    try {
+      setLocationsLoading(true);
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/get-sampling-locations/`,
+        {
+          params: {
+            search: query,
+            laboratory: laboratoryId,
+            department: departmentId,
+          },
         }
-        return `${key} = ${formattedValue}`;
-      })
-      .join('\n');
-  };
-
-  const formatMeasurementError = error => {
-    if (!error || error === '-') return '-';
-    return `±${error.toString().replace('.', ',')}`;
+      );
+      setSamplingLocations(response.data);
+    } catch (error) {
+      console.error('Ошибка при поиске места отбора пробы:', error);
+      message.error('Не удалось найти место отбора пробы');
+      setSamplingLocations([]);
+    } finally {
+      setLocationsLoading(false);
+    }
   };
 
   const fetchCalculations = async sampleId => {
@@ -182,8 +209,8 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
         `${import.meta.env.VITE_API_URL}/api/research-pages/`,
         {
           params: {
-            laboratory_id: sample.laboratory,
-            department_id: sample.department || null,
+            laboratory_id: laboratoryId,
+            department_id: departmentId,
             type: 'oil_products',
           },
         }
@@ -230,51 +257,29 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
         },
       });
 
-      const formattedCalculations = response.data.map(calc => {
-        let methodName = calc.research_method.name;
-        if (calc.research_method.is_group_member && calc.research_method.groups?.length > 0) {
-          const groupName = calc.research_method.groups[0].name;
-          const methodNameLower = methodName.charAt(0).toLowerCase() + methodName.slice(1);
-          methodName = `${groupName} ${methodNameLower}`;
-        }
+      const calculationsData = response.data.map(calc => ({
+        key: calc.id,
+        methodName: methodOrder[calc.method]?.name || 'Неизвестный метод',
+        unit: calc.unit || '-',
+        inputData: calc.input_data
+          ? Object.entries(calc.input_data)
+              .map(([key, value]) => `${key}: ${value}`)
+              .join('\n')
+          : '-',
+        result: calc.result || '-',
+        measurementError: calc.measurement_error || '-',
+        equipment: calc.equipment || [],
+        executor: calc.executor || '-',
+        sort_order: methodOrder[calc.method]?.sort_order || 999,
+      }));
 
-        let formattedResult = calc.result;
-        if (formattedResult && !isNaN(formattedResult)) {
-          const numValue = parseFloat(formattedResult);
-          if (numValue < 0) {
-            formattedResult = `минус ${Math.abs(numValue).toString().replace('.', ',')}`;
-          } else {
-            formattedResult = formattedResult.toString().replace('.', ',');
-          }
-        }
+      // Сортируем расчеты по порядку методов
+      calculationsData.sort((a, b) => a.sort_order - b.sort_order);
 
-        return {
-          key: calc.id,
-          methodName,
-          unit: calc.unit || '-',
-          inputData: formatInputData(calc.input_data),
-          result: formattedResult,
-          measurementError: formatMeasurementError(calc.measurement_error),
-          equipment: calc.equipment || [],
-          executor: calc.executor || '-',
-          // Сортировка
-          sort_order: methodOrder[calc.research_method.id]?.sort_order ?? -1,
-          method_name: methodOrder[calc.research_method.id]?.name || methodName,
-        };
-      });
-
-      // Сортируем расчеты по sort_order и имени метода
-      formattedCalculations.sort((a, b) => {
-        if (a.sort_order !== b.sort_order) {
-          return a.sort_order - b.sort_order;
-        }
-        return a.method_name.localeCompare(b.method_name);
-      });
-
-      setCalculations(formattedCalculations);
+      setCalculations(calculationsData);
     } catch (error) {
-      console.error('Ошибка при загрузке результатов расчетов:', error);
-      message.error('Не удалось загрузить результаты расчетов');
+      console.error('Ошибка при загрузке расчетов:', error);
+      message.error('Не удалось загрузить список расчетов');
     } finally {
       setCalculationsLoading(false);
     }
@@ -287,8 +292,8 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
         `${import.meta.env.VITE_API_URL}/api/research-pages/`,
         {
           params: {
-            laboratory_id: sample.laboratory,
-            department_id: sample.department || null,
+            laboratory_id: laboratoryId,
+            department_id: departmentId,
             type: 'oil_products',
           },
         }
@@ -312,7 +317,7 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
       sessionStorage.setItem('available_methods', JSON.stringify(response.data));
 
       navigate(
-        `/research-method?sample_id=${sample.id}&laboratory=${sample.laboratory}${sample.department ? `&department=${sample.department}` : ''}`
+        `/research-method?sample_id=${sample.id}&laboratory=${laboratoryId}${departmentId ? `&department=${departmentId}` : ''}`
       );
 
       onClose();
@@ -408,136 +413,6 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
     }
   };
 
-  const handleInputChange = field => e => {
-    const value = e?.target ? e.target.value : e;
-
-    if (field === 'laboratory') {
-      setFormData(prev => ({
-        ...prev,
-        [field]: value,
-        department: null,
-        protocol: null,
-      }));
-    } else if (field === 'department') {
-      setFormData(prev => ({
-        ...prev,
-        [field]: value,
-        protocol: null,
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [field]: value,
-      }));
-    }
-
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
-  };
-
-  const validateForm = () => {
-    const newErrors = {};
-    const requiredFields = ['registration_number', 'test_object', 'laboratory'];
-
-    requiredFields.forEach(field => {
-      if (!formData[field]) {
-        newErrors[field] = 'Это поле обязательно для заполнения';
-      }
-    });
-
-    // Проверяем обязательность подразделения
-    if (formData.laboratory && departments.length > 0 && !formData.department) {
-      newErrors.department = 'В выбранной лаборатории необходимо указать подразделение';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSave = async () => {
-    try {
-      if (!validateForm()) {
-        return;
-      }
-
-      setLoading(true);
-
-      const dataToSend = {
-        ...formData,
-        sampling_date: formData.sampling_date
-          ? dayjs(formData.sampling_date).format('YYYY-MM-DD')
-          : null,
-        receiving_date: formData.receiving_date
-          ? dayjs(formData.receiving_date).format('YYYY-MM-DD')
-          : null,
-      };
-
-      const response = await axios.put(
-        `${import.meta.env.VITE_API_URL}/api/samples/${sample.id}/`,
-        dataToSend
-      );
-
-      message.success('Проба успешно обновлена');
-      onSuccess();
-    } catch (error) {
-      console.error('Ошибка при обновлении пробы:', error);
-
-      if (error.response?.data) {
-        const serverErrors = error.response.data;
-        const newErrors = {};
-
-        Object.keys(serverErrors).forEach(field => {
-          if (Array.isArray(serverErrors[field])) {
-            newErrors[field] = serverErrors[field][0];
-          } else {
-            newErrors[field] = serverErrors[field];
-          }
-        });
-
-        setErrors(prev => ({ ...prev, ...newErrors }));
-
-        if (Object.keys(newErrors).length === 0 && error.response?.data?.error) {
-          message.error(error.response.data.error);
-        }
-      } else {
-        message.error('Произошла ошибка при обновлении пробы');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleProtocolSearch = value => {
-    setProtocolSearchValue(value);
-    if (formData.laboratory) {
-      fetchProtocols(formData.laboratory, formData.department, value);
-    }
-  };
-
-  const searchLocations = async query => {
-    try {
-      setLocationsLoading(true);
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/get-sampling-locations/`,
-        {
-          params: {
-            search: query,
-            laboratory: formData.laboratory,
-            department: formData.department,
-          },
-        }
-      );
-      setSamplingLocations(response.data);
-    } catch (error) {
-      console.error('Ошибка при поиске места отбора пробы:', error);
-      message.error('Не удалось найти место отбора пробы');
-      setSamplingLocations([]);
-    } finally {
-      setLocationsLoading(false);
-    }
-  };
-
   return (
     <Modal
       header="Редактирование пробы"
@@ -619,98 +494,6 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
               </div>
 
               <div className="form-group">
-                <label>Протокол</label>
-                <div className="search-container" ref={protocolSearchRef}>
-                  <Input
-                    value={protocolSearchValue}
-                    onChange={e => {
-                      const value = e.target.value;
-                      setProtocolSearchValue(value);
-                      handleProtocolSearch(value);
-                    }}
-                    onFocus={() => {
-                      if (protocolSearchValue && protocolSearchValue.length >= 1) {
-                        setProtocolsDropdownVisible(true);
-                      }
-                    }}
-                    placeholder="Введите номер протокола"
-                    disabled={!formData.laboratory}
-                    status={errors.protocol ? 'error' : ''}
-                    style={{ width: '100%' }}
-                  />
-                  {protocolsDropdownVisible && protocols.length > 0 && (
-                    <div className="search-dropdown">
-                      {protocolsLoading ? (
-                        <div className="search-loading">
-                          <Spin size="small" />
-                        </div>
-                      ) : (
-                        protocols.map(protocol => (
-                          <div
-                            key={protocol.id}
-                            className="search-option"
-                            onClick={() => {
-                              setFormData(prev => ({ ...prev, protocol: protocol.id }));
-                              setProtocolSearchValue(protocol.test_protocol_number);
-                              setProtocolsDropdownVisible(false);
-                            }}
-                          >
-                            {protocol.test_protocol_number}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-                {errors.protocol && <div className="error-message">{errors.protocol}</div>}
-              </div>
-
-              <div className="form-group">
-                <label>
-                  Лаборатория <span className="required">*</span>
-                </label>
-                <Select
-                  value={formData.laboratory}
-                  onChange={value => handleInputChange('laboratory')(value)}
-                  placeholder="Выберите лабораторию"
-                  loading={laboratoriesLoading}
-                  status={errors.laboratory ? 'error' : ''}
-                  style={{ width: '100%' }}
-                >
-                  {laboratories.map(lab => (
-                    <Option key={lab.id} value={lab.id}>
-                      {lab.name}
-                    </Option>
-                  ))}
-                </Select>
-                {errors.laboratory && <div className="error-message">{errors.laboratory}</div>}
-              </div>
-
-              {departments.length > 0 && (
-                <div className="form-group">
-                  <label>
-                    Подразделение <span className="required">*</span>
-                  </label>
-                  <Select
-                    value={formData.department}
-                    onChange={value => handleInputChange('department')(value)}
-                    placeholder="Выберите подразделение"
-                    loading={departmentsLoading}
-                    disabled={!formData.laboratory}
-                    status={errors.department ? 'error' : ''}
-                    style={{ width: '100%' }}
-                  >
-                    {departments.map(dept => (
-                      <Option key={dept.id} value={dept.id}>
-                        {dept.name}
-                      </Option>
-                    ))}
-                  </Select>
-                  {errors.department && <div className="error-message">{errors.department}</div>}
-                </div>
-              )}
-
-              <div className="form-group">
                 <label>Место отбора пробы</label>
                 <div className="search-container" ref={locationSearchRef}>
                   <Input
@@ -765,20 +548,65 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
               </div>
 
               <div className="form-group">
+                <label>Протокол</label>
+                <div className="search-container" ref={protocolSearchRef}>
+                  <Input
+                    value={protocolSearchValue}
+                    onChange={e => {
+                      const value = e.target.value;
+                      setProtocolSearchValue(value);
+                      fetchProtocols(value);
+                    }}
+                    onFocus={() => {
+                      if (protocolSearchValue && protocolSearchValue.length >= 1) {
+                        setProtocolsDropdownVisible(true);
+                      }
+                    }}
+                    placeholder="Введите номер протокола"
+                    status={errors.protocol ? 'error' : ''}
+                    style={{ width: '100%' }}
+                  />
+                  {protocolsDropdownVisible && protocols.length > 0 && (
+                    <div className="search-dropdown">
+                      {protocolsLoading ? (
+                        <div className="search-loading">
+                          <Spin size="small" />
+                        </div>
+                      ) : (
+                        protocols.map(protocol => (
+                          <div
+                            key={protocol.id}
+                            className="search-option"
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, protocol: protocol.id }));
+                              setProtocolSearchValue(protocol.test_protocol_number);
+                              setProtocolsDropdownVisible(false);
+                            }}
+                          >
+                            {protocol.test_protocol_number}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                {errors.protocol && <div className="error-message">{errors.protocol}</div>}
+              </div>
+
+              <div className="form-group">
                 <label>Дата отбора пробы</label>
                 <DatePicker
-                  locale={locale}
                   format="DD.MM.YYYY"
                   value={formData.sampling_date ? dayjs(formData.sampling_date) : null}
                   onChange={value => handleInputChange('sampling_date')(value)}
                   placeholder="ДД.ММ.ГГГГ"
                   style={{ width: '100%' }}
                   status={errors.sampling_date ? 'error' : ''}
+                  locale={locale}
                   className="custom-date-picker"
                   rootClassName="custom-date-picker-root"
                   popupClassName="custom-date-picker-popup"
                   inputReadOnly={false}
-                  showToday={false}
                   allowClear={true}
                   superNextIcon={null}
                   superPrevIcon={null}
@@ -791,18 +619,17 @@ const EditSampleModal = ({ onClose, onSuccess, sample }) => {
               <div className="form-group">
                 <label>Дата получения пробы</label>
                 <DatePicker
-                  locale={locale}
                   format="DD.MM.YYYY"
                   value={formData.receiving_date ? dayjs(formData.receiving_date) : null}
                   onChange={value => handleInputChange('receiving_date')(value)}
                   placeholder="ДД.ММ.ГГГГ"
                   style={{ width: '100%' }}
                   status={errors.receiving_date ? 'error' : ''}
+                  locale={locale}
                   className="custom-date-picker"
                   rootClassName="custom-date-picker-root"
                   popupClassName="custom-date-picker-popup"
                   inputReadOnly={false}
-                  showToday={false}
                   allowClear={true}
                   superNextIcon={null}
                   superPrevIcon={null}

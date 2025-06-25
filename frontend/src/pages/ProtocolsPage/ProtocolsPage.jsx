@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Select, Form, Button, Table, Input, Space } from 'antd';
-import { SearchOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons';
-import { Resizable } from 'react-resizable';
+import { Table, Space, Input, message } from 'antd';
+import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import Layout from '../../shared/ui/Layout/Layout';
 import ProtocolsPageWrapper from './ProtocolsPageWrapper';
-import EditProtocolModal from '../../features/Modals/EditProtocolModal/EditProtocolModal';
 import CreateProtocolModal from '../../features/Modals/CreateProtocolModal/CreateProtocolModal';
-import EditTemplateModal from '../../features/Modals/ShablonEditModal/EditTemplateModal.jsx';
-
-const { Option } = Select;
+import EditProtocolModal from '../../features/Modals/EditProtocolModal/EditProtocolModal';
+import EditTemplateModal from '../../features/Modals/ShablonEditModal/EditTemplateModal';
+import { Button } from '../../shared/ui/Button/Button';
+import LoadingCard from '../../features/Cards/ui/LoadingCard/LoadingCard';
+import dayjs from 'dayjs';
+import './ProtocolsPage.css';
 
 const formatDate = (dateString, isAccredited) => {
   if (!dateString || !isAccredited) return '-';
@@ -47,60 +48,42 @@ const formatProtocolNumber = (number, date, isAccredited, samples) => {
   return `${protocolNumber} от ${formattedDate}`;
 };
 
-const ResizableTitle = props => {
-  const { onResize, width, ...restProps } = props;
-
-  if (!width) {
-    return <th {...restProps} />;
-  }
-
-  return (
-    <Resizable
-      width={width}
-      height={0}
-      handle={
-        <span
-          className="react-resizable-handle"
-          onClick={e => e.stopPropagation()}
-          style={{
-            position: 'absolute',
-            right: -5,
-            bottom: 0,
-            zIndex: 1,
-            width: 10,
-            height: '100%',
-            cursor: 'col-resize',
-          }}
-        />
-      }
-      onResize={onResize}
-      draggableOpts={{ enableUserSelectHack: false }}
-    >
-      <th {...restProps} />
-    </Resizable>
-  );
-};
-
 const ProtocolsPage = () => {
   const [laboratories, setLaboratories] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [selectedLaboratory, setSelectedLaboratory] = useState(null);
-  const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [protocols, setProtocols] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [searchedColumn, setSearchedColumn] = useState('');
-  const [form] = Form.useForm();
-  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedProtocol, setSelectedProtocol] = useState(null);
-  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [columnsState, setColumnsState] = useState({
     test_protocol_number: { width: 200 },
-    sampling_act_number: { width: 150 },
+    sampling_act_number: { width: 200 },
     is_accredited: { width: 100 },
-    created_at: { width: 150 },
+    created_at: { width: 200 },
   });
+
+  // Загрузка списка лабораторий
+  useEffect(() => {
+    const fetchLaboratories = async () => {
+      try {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
+        setLaboratories(response.data || []);
+      } catch (error) {
+        console.error('Ошибка при загрузке лабораторий:', error);
+        message.error('Не удалось загрузить список лабораторий');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLaboratories();
+  }, []);
 
   const handleSearch = (selectedKeys, confirm, dataIndex) => {
     confirm();
@@ -145,7 +128,7 @@ const ProtocolsPage = () => {
     ),
     filterIcon: filtered => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     onFilter: (value, record) => {
-      if (dataIndex === 'sampling_date' || dataIndex === 'receiving_date') {
+      if (dataIndex === 'date') {
         return formatDate(record[dataIndex], record.is_accredited)
           .toLowerCase()
           .includes(value.toLowerCase());
@@ -155,41 +138,20 @@ const ProtocolsPage = () => {
         : '';
     },
     render: (text, record) => {
-      if (dataIndex === 'sampling_date' || dataIndex === 'receiving_date') {
+      if (dataIndex === 'date') {
         return formatDate(text, record.is_accredited);
       }
       return text;
     },
   });
 
-  const handleRowClick = record => {
-    setSelectedProtocol(record);
-    setEditModalVisible(true);
-  };
-
-  const handleEditSuccess = async () => {
-    setEditModalVisible(false);
-    // Обновляем список протоколов
-    await handleShowProtocols();
-  };
-
-  const handleCreateSuccess = async () => {
-    setCreateModalVisible(false);
-    // Обновляем список протоколов
-    await handleShowProtocols();
-  };
-
   const handleResize =
     index =>
     (e, { size }) => {
-      const newColumns = [...columns];
-      newColumns[index] = {
-        ...newColumns[index],
-        width: size.width,
-      };
-      const newColumnsState = { ...columnsState };
-      newColumnsState[newColumns[index].dataIndex] = { width: size.width };
-      setColumnsState(newColumnsState);
+      setColumnsState(prev => ({
+        ...prev,
+        [Object.keys(prev)[index]]: { ...prev[Object.keys(prev)[index]], width: size },
+      }));
     };
 
   const columns = [
@@ -234,136 +196,197 @@ const ProtocolsPage = () => {
     }),
   }));
 
-  // Загрузка списка лабораторий
-  useEffect(() => {
-    const fetchLaboratories = async () => {
-      try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
-        setLaboratories(response.data);
-      } catch (error) {
-        console.error('Ошибка при загрузке лабораторий:', error);
-      }
-    };
-
-    fetchLaboratories();
-  }, []);
-
-  // Загрузка подразделений при выборе лаборатории
-  useEffect(() => {
-    const fetchDepartments = async () => {
-      if (selectedLaboratory) {
-        try {
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/departments/`, {
-            params: { laboratory: selectedLaboratory },
-          });
-          // Фильтруем только неудаленные подразделения выбранной лаборатории
-          const filteredDepartments = response.data.filter(
-            dept => !dept.is_deleted && dept.laboratory === selectedLaboratory
-          );
-          setDepartments(filteredDepartments);
-        } catch (error) {
-          console.error('Ошибка при загрузке подразделений:', error);
-        }
-      } else {
-        setDepartments([]);
-      }
-    };
-
-    fetchDepartments();
-  }, [selectedLaboratory]);
-
-  const handleLaboratoryChange = value => {
-    setSelectedLaboratory(value);
-    setSelectedDepartment(null);
-    form.setFieldsValue({ department: null });
+  const handleCreateModalClose = () => {
+    setIsCreateModalOpen(false);
   };
 
-  const handleDepartmentChange = value => {
-    setSelectedDepartment(value);
+  const handleCreateSuccess = () => {
+    setIsCreateModalOpen(false);
+    loadProtocols(selectedLaboratory.id, selectedDepartment?.id);
   };
 
-  const handleShowProtocols = async () => {
-    if (!selectedLaboratory) return;
-
+  const loadProtocols = async (laboratoryId, departmentId = null) => {
     setLoading(true);
     try {
+      const params = {
+        laboratory: laboratoryId,
+      };
+      if (departmentId) {
+        params.department = departmentId;
+      }
       const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/protocols/`, {
-        params: {
-          laboratory: selectedLaboratory,
-          department: selectedDepartment,
-          is_deleted: false,
-        },
+        params,
       });
       setProtocols(response.data);
     } catch (error) {
       console.error('Ошибка при загрузке протоколов:', error);
+      message.error('Не удалось загрузить список протоколов');
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <Layout title="Протоколы">
+  const handleRowClick = record => {
+    setSelectedProtocol(record);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditModalClose = () => {
+    setIsEditModalOpen(false);
+    setSelectedProtocol(null);
+  };
+
+  const handleEditModalSuccess = () => {
+    setIsEditModalOpen(false);
+    setSelectedProtocol(null);
+    loadProtocols(selectedLaboratory.id, selectedDepartment?.id);
+  };
+
+  const handleLaboratoryClick = async laboratory => {
+    setLoading(true);
+    setSelectedLaboratory(laboratory);
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/departments/by_laboratory/?laboratory_id=${laboratory.id}`
+      );
+      const departmentsData = response.data.filter(dept => !dept.is_deleted) || [];
+      setDepartments(departmentsData);
+
+      if (departmentsData.length === 0) {
+        // Если нет подразделений, сразу загружаем протоколы для лаборатории
+        await loadProtocols(laboratory.id);
+      }
+    } catch (error) {
+      console.error('Ошибка при загрузке данных:', error);
+      message.error('Не удалось загрузить данные');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDepartmentClick = async department => {
+    setLoading(true);
+    setSelectedDepartment(department);
+    try {
+      await loadProtocols(selectedLaboratory.id, department.id);
+    } catch (error) {
+      console.error('Ошибка при загрузке протоколов:', error);
+      message.error('Не удалось загрузить протоколы');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBack = () => {
+    // Если мы на странице с таблицей протоколов и есть подразделения
+    if (selectedDepartment && departments.length > 0) {
+      // Возвращаемся к выбору подразделения
+      setSelectedDepartment(null);
+      setProtocols([]);
+    } else {
+      // Возвращаемся к выбору лаборатории
+      setSelectedLaboratory(null);
+      setSelectedDepartment(null);
+      setDepartments([]);
+      setProtocols([]);
+    }
+  };
+
+  if (loading) {
+    return (
       <ProtocolsPageWrapper>
-        <div style={{ height: 'calc(100vh - 87px)', display: 'flex', flexDirection: 'column' }}>
-          <div className="form" style={{ padding: '20px', flex: 'none' }}>
-            <Form form={form} layout="vertical">
-              <Form.Item label="Лаборатория" name="laboratory">
-                <Select
-                  placeholder="Выберите лабораторию"
-                  value={selectedLaboratory}
-                  onChange={handleLaboratoryChange}
-                  style={{ width: '100%' }}
+        <Layout title={selectedLaboratory ? selectedLaboratory.name : 'Протоколы'}>
+          <div style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}>
+            <LoadingCard />
+          </div>
+        </Layout>
+      </ProtocolsPageWrapper>
+    );
+  }
+
+  // Если лаборатория не выбрана, показываем список лабораторий
+  if (!selectedLaboratory) {
+    return (
+      <ProtocolsPageWrapper>
+        <Layout title="Протоколы">
+          <div className="laboratories-container">
+            <div className="laboratories-grid">
+              {laboratories.map(laboratory => (
+                <div
+                  key={laboratory.id}
+                  className="laboratory-card"
+                  onClick={() => handleLaboratoryClick(laboratory)}
                 >
-                  {laboratories.map(lab => (
-                    <Option key={lab.id} value={lab.id}>
-                      {lab.name}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
+                  <div className="laboratory-card-content">
+                    <h3>{laboratory.name}</h3>
+                    {laboratory.description && <p>{laboratory.description}</p>}
+                    {laboratory.full_name && (
+                      <div className="laboratory-info">
+                        <span>{laboratory.full_name}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Layout>
+      </ProtocolsPageWrapper>
+    );
+  }
 
-              {selectedLaboratory && departments.length > 0 && (
-                <Form.Item label="Подразделение" name="department">
-                  <Select
-                    placeholder="Выберите подразделение"
-                    value={selectedDepartment}
-                    onChange={handleDepartmentChange}
-                    allowClear
-                    style={{ width: '100%' }}
-                  >
-                    {departments.map(dept => (
-                      <Option key={dept.id} value={dept.id}>
-                        {dept.name}
-                      </Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-              )}
+  // Если есть подразделения и подразделение еще не выбрано, показываем список подразделений
+  if (departments.length > 0 && !selectedDepartment) {
+    return (
+      <ProtocolsPageWrapper>
+        <Layout title={selectedLaboratory.name}>
+          <div className="departments-container">
+            <div className="departments-header">
+              <Button title="Назад" onClick={handleBack} type="default" className="back-btn" />
+            </div>
+            <div className="departments-grid">
+              {departments.map(department => (
+                <div
+                  key={department.id}
+                  className="department-card"
+                  onClick={() => handleDepartmentClick(department)}
+                >
+                  <div className="department-card-content">
+                    <h3>{department.name}</h3>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Layout>
+      </ProtocolsPageWrapper>
+    );
+  }
 
-              <Form.Item>
-                <Space>
-                  <Button
-                    type="primary"
-                    onClick={handleShowProtocols}
-                    disabled={!selectedLaboratory}
-                    loading={loading}
-                  >
-                    Показать
-                  </Button>
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => setCreateModalVisible(true)}
-                  >
-                    Создать
-                  </Button>
-                  <Button type="primary" onClick={() => setIsTemplateModalOpen(true)}>
-                    Редактировать шаблон
-                  </Button>
-                </Space>
-              </Form.Item>
-            </Form>
+  // Показываем таблицу с протоколами
+  return (
+    <ProtocolsPageWrapper>
+      <Layout title={selectedLaboratory.name}>
+        <div style={{ height: 'calc(100vh - 87px)', display: 'flex', flexDirection: 'column' }}>
+          <div
+            className="header-actions"
+            style={{ padding: '20px', display: 'flex', justifyContent: 'space-between' }}
+          >
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <Button title="Назад" onClick={handleBack} type="default" className="back-btn" />
+              <Button
+                title="Редактировать шаблон"
+                onClick={() => setIsTemplateModalOpen(true)}
+                type="primary"
+              />
+            </div>
+            <Button
+              title="Создать"
+              onClick={() => setIsCreateModalOpen(true)}
+              buttonColor="#0066cc"
+              type="primary"
+              icon={<PlusOutlined />}
+            />
           </div>
 
           <div
@@ -378,9 +401,9 @@ const ProtocolsPage = () => {
           >
             <Table
               columns={columns}
+              loading={loading}
               dataSource={protocols}
               rowKey="id"
-              loading={loading}
               onRow={record => ({
                 onClick: () => handleRowClick(record),
                 style: { cursor: 'pointer' },
@@ -398,40 +421,40 @@ const ProtocolsPage = () => {
                 triggerAsc: 'Сортировать по возрастанию',
                 cancelSort: 'Отменить сортировку',
               }}
-              components={{
-                header: {
-                  cell: ResizableTitle,
-                },
-              }}
             />
           </div>
+        </div>
 
-          {editModalVisible && (
-            <EditProtocolModal
-              isOpen={editModalVisible}
-              onClose={() => setEditModalVisible(false)}
-              onSuccess={handleEditSuccess}
-              protocol={selectedProtocol}
-            />
-          )}
+        {isCreateModalOpen && (
+          <CreateProtocolModal
+            onClose={handleCreateModalClose}
+            onSuccess={handleCreateSuccess}
+            laboratoryId={selectedLaboratory.id}
+            departmentId={selectedDepartment?.id}
+          />
+        )}
 
-          {createModalVisible && (
-            <CreateProtocolModal
-              isOpen={createModalVisible}
-              onClose={() => setCreateModalVisible(false)}
-              onSuccess={handleCreateSuccess}
-              selectedLaboratory={selectedLaboratory}
-              selectedDepartment={selectedDepartment}
-            />
-          )}
+        {isEditModalOpen && selectedProtocol && (
+          <EditProtocolModal
+            isOpen={isEditModalOpen}
+            onClose={handleEditModalClose}
+            onSuccess={handleEditModalSuccess}
+            protocol={selectedProtocol}
+            laboratoryId={selectedLaboratory.id}
+            departmentId={selectedDepartment?.id}
+          />
+        )}
 
+        {isTemplateModalOpen && (
           <EditTemplateModal
             isOpen={isTemplateModalOpen}
             onClose={() => setIsTemplateModalOpen(false)}
+            laboratoryId={selectedLaboratory.id}
+            departmentId={selectedDepartment?.id}
           />
-        </div>
-      </ProtocolsPageWrapper>
-    </Layout>
+        )}
+      </Layout>
+    </ProtocolsPageWrapper>
   );
 };
 

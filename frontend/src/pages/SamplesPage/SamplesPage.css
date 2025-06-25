@@ -1,0 +1,110 @@
+.laboratories-container {
+  padding: 20px;
+}
+
+.laboratories-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.laboratories-header h2 {
+  font-size: 1.8rem;
+  color: #333;
+  margin: 0;
+}
+
+.laboratories-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(26vw, 1fr));
+  gap: 5px;
+}
+
+.laboratory-card {
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.laboratory-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.laboratory-card-content {
+  margin-bottom: 15px;
+}
+
+.laboratory-card-content h3 {
+  margin: 0;
+  color: #333;
+  font-size: 18px;
+  font-family: 'HeliosCondC';
+}
+
+.laboratory-card-content p {
+  margin: 10px 0 0 0;
+  color: #666;
+  font-family: 'HeliosCondC';
+}
+
+.laboratory-info {
+  color: #999;
+  font-size: 14px;
+  font-family: 'HeliosCondC';
+  margin-top: 10px;
+}
+
+.departments-container {
+  padding: 20px;
+}
+
+.departments-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.departments-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(26vw, 1fr));
+  gap: 5px;
+}
+
+.department-card {
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.department-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.department-card-content {
+  margin-bottom: 15px;
+}
+
+.department-card-content h3 {
+  margin: 0;
+  color: #333;
+  font-size: 18px;
+  font-family: 'HeliosCondC';
+}
+
+.back-btn {
+  margin-right: 10px;
+}
+
+.header-actions {
+  margin-bottom: 20px;
+}

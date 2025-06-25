@@ -76,7 +76,13 @@ const Sidebar = ({ username }) => {
       const currentPath = `${parentPath}${item.path}`;
       const isOpen = openSubmenus.includes(currentPath);
       const isCurrentPath =
-        ((!openSubmenus.length || level !== 0) && localion.pathname === currentPath) || isOpen;
+        ((!openSubmenus.length || level !== 0) &&
+          (localion.pathname === currentPath ||
+            (currentPath === '/' &&
+              (localion.pathname.startsWith('/laboratory/') ||
+                localion.pathname.startsWith('/laboratories/') ||
+                localion.pathname.startsWith('/departments/'))))) ||
+        isOpen;
       const context = minimize ? item.icon : item.label;
 
       const openSubmenu = e => {

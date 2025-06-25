@@ -11,6 +11,9 @@ import './CreateProtocolModal.css';
 
 const { Option } = Select;
 
+// Устанавливаем русскую локаль для dayjs
+dayjs.locale('ru');
+
 // Функция для форматирования ввода даты
 const formatDateInput = value => {
   // Убираем все нецифровые символы
@@ -41,22 +44,16 @@ const isValidDate = dateString => {
   );
 };
 
-const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
+const CreateProtocolModal = ({ onClose, onSuccess, laboratoryId, departmentId }) => {
   const [formData, setFormData] = useState({
     test_protocol_number: '',
     test_protocol_date: null,
     is_accredited: false,
     laboratory_location: '',
     sampling_act_number: '',
-    sampling_date: null,
-    receiving_date: null,
     excel_template: undefined,
-    protocol_details_id: null,
     branch: '',
-    sampling_location_detail: '',
     phone: '',
-    laboratory: null,
-    department: null,
     selection_conditions: null,
   });
 
@@ -68,10 +65,6 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
   const [samplingLocations, setSamplingLocations] = useState([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [locationsLoading, setLocationsLoading] = useState(false);
-  const [laboratories, setLaboratories] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [laboratoriesLoading, setLaboratoriesLoading] = useState(false);
-  const [departmentsLoading, setDepartmentsLoading] = useState(false);
 
   const [branchSearchValue, setBranchSearchValue] = useState('');
   const [locationSearchValue, setLocationSearchValue] = useState('');
@@ -82,33 +75,9 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
   const locationSearchRef = useRef(null);
 
   useEffect(() => {
-    fetchLaboratories();
-  }, []);
-
-  useEffect(() => {
-    if (formData.laboratory) {
-      fetchDepartments(formData.laboratory);
-    } else {
-      setDepartments([]);
-      setFormData(prev => ({ ...prev, department: null }));
-    }
-  }, [formData.laboratory]);
-
-  useEffect(() => {
-    const handleClickOutside = event => {
-      if (branchSearchRef.current && !branchSearchRef.current.contains(event.target)) {
-        setBranchesDropdownVisible(false);
-      }
-      if (locationSearchRef.current && !locationSearchRef.current.contains(event.target)) {
-        setLocationsDropdownVisible(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+    // Загружаем шаблоны при монтировании компонента
+    fetchTemplates(laboratoryId, departmentId);
+  }, [laboratoryId, departmentId]);
 
   const fetchTemplates = async (laboratoryId, departmentId = null) => {
     try {
@@ -132,72 +101,10 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
     }
   };
 
-  const fetchLaboratories = async () => {
-    try {
-      setLaboratoriesLoading(true);
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
-      setLaboratories(response.data);
-    } catch (error) {
-      console.error('Ошибка при загрузке лабораторий:', error);
-      message.error('Не удалось загрузить список лабораторий');
-    } finally {
-      setLaboratoriesLoading(false);
-    }
-  };
-
-  const fetchDepartments = async laboratoryId => {
-    try {
-      setDepartmentsLoading(true);
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/departments/by_laboratory/?laboratory_id=${laboratoryId}`
-      );
-      setDepartments(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.error('Ошибка при загрузке подразделений:', error);
-      message.error('Не удалось загрузить список подразделений');
-      setDepartments([]);
-    } finally {
-      setDepartmentsLoading(false);
-    }
-  };
-
   const handleInputChange = field => e => {
     const value = e?.target ? e.target.value : e;
 
-    if (field === 'laboratory') {
-      setFormData(prev => ({
-        ...prev,
-        [field]: value,
-        department: null,
-        excel_template: undefined,
-        selection_conditions: null,
-      }));
-      // Загружаем подразделения и шаблоны при выборе лаборатории
-      if (value) {
-        fetchDepartments(value);
-        fetchTemplates(value);
-      } else {
-        setDepartments([]);
-        setTemplates([]);
-      }
-    } else if (field === 'department') {
-      setFormData(prev => ({
-        ...prev,
-        [field]: value,
-        excel_template: undefined,
-        selection_conditions: null,
-      }));
-      // Обновляем список шаблонов при выборе подразделения
-      if (value) {
-        fetchTemplates(formData.laboratory, value);
-      } else {
-        fetchTemplates(formData.laboratory);
-      }
-    } else if (
-      field === 'test_protocol_date' ||
-      field === 'sampling_date' ||
-      field === 'receiving_date'
-    ) {
+    if (field === 'test_protocol_date') {
       setFormData(prev => ({
         ...prev,
         [field]: value ? dayjs(value) : null,
@@ -214,31 +121,9 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
     }
   };
 
-  const handleProtocolDetailsChange = field => value => {
-    if (field === 'branch') {
-      setFormData(prev => ({
-        ...prev,
-        selectedBranch: value,
-        protocol_details_id: null,
-        phone: '',
-      }));
-    } else if (field === 'sampling_location_detail') {
-      const selectedLocation = samplingLocations.find(
-        loc => loc.sampling_location_detail === value
-      );
-      if (selectedLocation) {
-        setFormData(prev => ({
-          ...prev,
-          protocol_details_id: selectedLocation.id,
-          phone: selectedLocation.phone || '',
-        }));
-      }
-    }
-  };
-
   const validateForm = () => {
     const newErrors = {};
-    const requiredFields = ['sampling_act_number', 'excel_template', 'laboratory'];
+    const requiredFields = ['sampling_act_number', 'excel_template'];
 
     requiredFields.forEach(field => {
       if (!formData[field]) {
@@ -246,60 +131,17 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
       }
     });
 
-    // Проверяем обязательность подразделения
-    if (formData.laboratory && departments.length > 0 && !formData.department) {
-      newErrors.department = 'В выбранной лаборатории необходимо указать подразделение';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleTemplateChange = async value => {
-    try {
-      const selectedTemplate = templates.find(t => t.id === value);
-      if (selectedTemplate && selectedTemplate.selection_conditions) {
-        // Добавляем поле value к каждому условию
-        const conditionsWithValues = selectedTemplate.selection_conditions.map(condition => ({
-          ...condition,
-          value: null,
-        }));
-        setFormData(prev => ({
-          ...prev,
-          excel_template: value,
-          selection_conditions: conditionsWithValues,
-        }));
-      } else {
-        setFormData(prev => ({
-          ...prev,
-          excel_template: value,
-          selection_conditions: null,
-        }));
-      }
-    } catch (error) {
-      console.error('Ошибка при получении условий отбора:', error);
-      message.error('Не удалось загрузить условия отбора');
-    }
-  };
-
-  const handleSelectionConditionsChange = conditions => {
-    setFormData(prev => ({
-      ...prev,
-      selection_conditions: conditions,
-    }));
-  };
-
   const handleSave = async () => {
     try {
-      console.log('Текущее состояние формы:', formData);
-      console.log('Условия отбора для отправки:', formData.selection_conditions);
+      if (!validateForm()) {
+        return;
+      }
 
-      // Преобразуем массив условий отбора в объект
-      const selectionConditionsObject =
-        formData.selection_conditions?.reduce((acc, condition) => {
-          acc[condition.name] = condition.value;
-          return acc;
-        }, {}) || {};
+      setLoading(true);
 
       const protocolData = {
         test_protocol_number: formData.test_protocol_number,
@@ -309,39 +151,29 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
         laboratory_location: formData.laboratory_location,
         sampling_act_number: formData.sampling_act_number,
         excel_template: formData.excel_template,
-        laboratory: formData.laboratory,
-        department: formData.department,
+        laboratory: laboratoryId,
+        department: departmentId,
         branch: formData.branch,
         phone: formData.phone || '',
-        selection_conditions: selectionConditionsObject,
+        selection_conditions:
+          formData.selection_conditions?.reduce((acc, condition) => {
+            acc[condition.name] = condition.value;
+            return acc;
+          }, {}) || {},
         is_accredited: formData.is_accredited,
       };
 
-      console.log('Данные для отправки на сервер:', protocolData);
-
-      if (!validateForm()) {
-        console.log('Ошибки валидации:', errors);
-        return;
-      }
-
-      setLoading(true);
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/protocols/`,
-        protocolData
-      );
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/protocols/`, protocolData);
 
       message.success('Протокол успешно создан');
       onSuccess();
     } catch (error) {
       console.error('Ошибка при создании протокола:', error);
 
-      // Обработка ошибок валидации с сервера
       if (error.response?.data) {
         const serverErrors = error.response.data;
         const newErrors = {};
 
-        // Обрабатываем ошибки для каждого поля
         Object.keys(serverErrors).forEach(field => {
           if (Array.isArray(serverErrors[field])) {
             newErrors[field] = serverErrors[field][0];
@@ -350,10 +182,8 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
           }
         });
 
-        // Устанавливаем ошибки в состояние формы
         setErrors(prev => ({ ...prev, ...newErrors }));
 
-        // Если есть конкретная ошибка для поля, не показываем общее сообщение
         if (Object.keys(newErrors).length === 0 && error.response?.data?.error) {
           message.error(error.response.data.error);
         }
@@ -409,6 +239,40 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
     }
   };
 
+  const handleTemplateChange = async value => {
+    try {
+      const selectedTemplate = templates.find(t => t.id === value);
+      if (selectedTemplate && selectedTemplate.selection_conditions) {
+        // Добавляем поле value к каждому условию
+        const conditionsWithValues = selectedTemplate.selection_conditions.map(condition => ({
+          ...condition,
+          value: null,
+        }));
+        setFormData(prev => ({
+          ...prev,
+          excel_template: value,
+          selection_conditions: conditionsWithValues,
+        }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          excel_template: value,
+          selection_conditions: null,
+        }));
+      }
+    } catch (error) {
+      console.error('Ошибка при получении условий отбора:', error);
+      message.error('Не удалось загрузить условия отбора');
+    }
+  };
+
+  const handleSelectionConditionsChange = conditions => {
+    setFormData(prev => ({
+      ...prev,
+      selection_conditions: conditions,
+    }));
+  };
+
   return (
     <Modal
       header="Создание протокола"
@@ -435,44 +299,20 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
         <div className="form-group">
           <label>Дата протокола испытаний</label>
           <DatePicker
-            locale={locale}
             format="DD.MM.YYYY"
-            value={formData.test_protocol_date}
-            onChange={date => handleInputChange('test_protocol_date')(date)}
+            value={formData.test_protocol_date ? dayjs(formData.test_protocol_date) : null}
+            onChange={value => handleInputChange('test_protocol_date')(value)}
             placeholder="ДД.ММ.ГГГГ"
             style={{ width: '100%' }}
             status={errors.test_protocol_date ? 'error' : ''}
+            locale={locale}
             className="custom-date-picker"
             rootClassName="custom-date-picker-root"
             popupClassName="custom-date-picker-popup"
             inputReadOnly={false}
-            showToday={false}
             allowClear={true}
             superNextIcon={null}
             superPrevIcon={null}
-            onKeyDown={e => {
-              // Разрешаем цифры, точки, backspace и delete
-              if (!/[\d\.]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete') {
-                e.preventDefault();
-              }
-            }}
-            onInput={e => {
-              const input = e.target;
-              const cursorPosition = input.selectionStart;
-              const formatted = formatDateInput(input.value);
-
-              const dotsBeforeCursor = (input.value.slice(0, cursorPosition).match(/\./g) || [])
-                .length;
-              input.value = formatted;
-              const newDotsBeforeCursor = (formatted.slice(0, cursorPosition).match(/\./g) || [])
-                .length;
-              const newPosition = cursorPosition + (newDotsBeforeCursor - dotsBeforeCursor);
-              input.setSelectionRange(newPosition, newPosition);
-
-              if (formatted.length === 10 && isValidDate(formatted)) {
-                handleInputChange('test_protocol_date')(dayjs(formatted, 'DD.MM.YYYY'));
-              }
-            }}
           />
           {errors.test_protocol_date && (
             <div className="error-message">{errors.test_protocol_date}</div>
@@ -573,90 +413,38 @@ const CreateProtocolModal = ({ isOpen, onClose, onSuccess }) => {
 
         <div className="form-group">
           <label>
-            Лаборатория <span className="required">*</span>
+            Шаблон протокола <span className="required">*</span>
           </label>
           <Select
-            value={formData.laboratory}
-            onChange={value => handleInputChange('laboratory')(value)}
-            placeholder="Выберите лабораторию"
-            loading={laboratoriesLoading}
-            status={errors.laboratory ? 'error' : ''}
+            value={formData.excel_template}
+            onChange={handleTemplateChange}
+            placeholder="Выберите шаблон протокола"
+            loading={templatesLoading}
+            status={errors.excel_template ? 'error' : ''}
             style={{ width: '100%' }}
           >
-            {laboratories.map(lab => (
-              <Option key={lab.id} value={lab.id}>
-                {lab.name}
+            {templates.map(template => (
+              <Option
+                key={template.id}
+                value={template.id}
+                style={{
+                  color: template.is_active ? 'inherit' : '#999',
+                  fontStyle: template.is_active ? 'normal' : 'italic',
+                }}
+              >
+                {template.name} - {template.version}
+                {!template.is_active && ' (архивная версия)'}
               </Option>
             ))}
           </Select>
-          {errors.laboratory && <div className="error-message">{errors.laboratory}</div>}
+          {errors.excel_template && <div className="error-message">{errors.excel_template}</div>}
         </div>
 
-        {departments.length > 0 && (
-          <div className="form-group">
-            <label>
-              Подразделение <span className="required">*</span>
-            </label>
-            <Select
-              value={formData.department}
-              onChange={value => handleInputChange('department')(value)}
-              placeholder="Выберите подразделение"
-              loading={departmentsLoading}
-              disabled={!formData.laboratory}
-              status={errors.department ? 'error' : ''}
-              style={{ width: '100%' }}
-            >
-              {departments.map(dept => (
-                <Option key={dept.id} value={dept.id}>
-                  {dept.name}
-                </Option>
-              ))}
-            </Select>
-            {errors.department && <div className="error-message">{errors.department}</div>}
-          </div>
-        )}
-
-        {/* Показываем шаблон только если выбрана лаборатория и подразделение (если требуется) */}
-        {formData.laboratory && (!departments.length || formData.department) && (
-          <>
-            <div className="form-group">
-              <label>
-                Шаблон протокола <span className="required">*</span>
-              </label>
-              <Select
-                value={formData.excel_template}
-                onChange={handleTemplateChange}
-                placeholder="Выберите шаблон протокола"
-                loading={templatesLoading}
-                status={errors.excel_template ? 'error' : ''}
-                style={{ width: '100%' }}
-              >
-                {templates.map(template => (
-                  <Option
-                    key={template.id}
-                    value={template.id}
-                    style={{
-                      color: template.is_active ? 'inherit' : '#999',
-                      fontStyle: template.is_active ? 'normal' : 'italic',
-                    }}
-                  >
-                    {template.name} - {template.version}
-                    {!template.is_active && ' (архивная версия)'}
-                  </Option>
-                ))}
-              </Select>
-              {errors.excel_template && (
-                <div className="error-message">{errors.excel_template}</div>
-              )}
-            </div>
-
-            {formData.excel_template && (
-              <SelectionConditionsForm
-                conditions={formData.selection_conditions}
-                onChange={handleSelectionConditionsChange}
-              />
-            )}
-          </>
+        {formData.excel_template && (
+          <SelectionConditionsForm
+            conditions={formData.selection_conditions}
+            onChange={handleSelectionConditionsChange}
+          />
         )}
       </div>
     </Modal>

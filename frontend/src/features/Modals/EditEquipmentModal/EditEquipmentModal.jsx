@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Input, DatePicker, Select, message, Button, Popconfirm } from 'antd';
+import { Input, DatePicker, Select, message, Button } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
@@ -9,7 +9,10 @@ import './EditEquipmentModal.css';
 
 const { Option } = Select;
 
-const EditEquipmentModal = ({ isOpen, onClose, onSuccess, equipment }) => {
+// Устанавливаем русскую локаль для dayjs
+dayjs.locale('ru');
+
+const EditEquipmentModal = ({ onClose, onSuccess, equipment, laboratoryId, departmentId }) => {
   const [formData, setFormData] = useState({
     name: '',
     type: undefined,
@@ -17,16 +20,10 @@ const EditEquipmentModal = ({ isOpen, onClose, onSuccess, equipment }) => {
     verification_info: '',
     verification_date: null,
     verification_end_date: null,
-    laboratory: null,
-    department: null,
   });
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const [laboratories, setLaboratories] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [laboratoriesLoading, setLaboratoriesLoading] = useState(false);
-  const [departmentsLoading, setDepartmentsLoading] = useState(false);
   const [isConfirmDeleteModalVisible, setIsConfirmDeleteModalVisible] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
@@ -43,66 +40,9 @@ const EditEquipmentModal = ({ isOpen, onClose, onSuccess, equipment }) => {
         verification_end_date: equipment.verification_end_date
           ? dayjs(equipment.verification_end_date)
           : null,
-        laboratory: equipment.laboratory,
-        department: equipment.department,
       });
     }
   }, [equipment]);
-
-  useEffect(() => {
-    fetchLaboratories();
-  }, []);
-
-  useEffect(() => {
-    if (formData.laboratory) {
-      console.log('Загрузка подразделений для лаборатории:', formData.laboratory);
-      fetchDepartments(formData.laboratory);
-    } else {
-      setDepartments([]);
-      if (!equipment?.department) {
-        console.log('Сброс подразделения (не начальная загрузка)');
-        setFormData(prev => ({ ...prev, department: null }));
-      }
-    }
-  }, [formData.laboratory]);
-
-  const fetchLaboratories = async () => {
-    try {
-      setLaboratoriesLoading(true);
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
-      setLaboratories(response.data.filter(lab => !lab.is_deleted));
-    } catch (error) {
-      console.error('Ошибка при загрузке лабораторий:', error);
-      message.error('Не удалось загрузить список лабораторий');
-    } finally {
-      setLaboratoriesLoading(false);
-    }
-  };
-
-  const fetchDepartments = async laboratoryId => {
-    try {
-      setDepartmentsLoading(true);
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/departments/?laboratory=${laboratoryId}`
-      );
-      const filteredDepartments = response.data.filter(
-        dept => !dept.is_deleted && dept.laboratory === laboratoryId
-      );
-      console.log('Загруженные подразделения:', filteredDepartments);
-      setDepartments(filteredDepartments);
-
-      if (!formData.department && equipment?.department) {
-        console.log('Восстановление подразделения из equipment:', equipment.department);
-        setFormData(prev => ({ ...prev, department: equipment.department }));
-      }
-    } catch (error) {
-      console.error('Ошибка при загрузке подразделений:', error);
-      message.error('Не удалось загрузить список подразделений');
-      setDepartments([]);
-    } finally {
-      setDepartmentsLoading(false);
-    }
-  };
 
   const handleInputChange = field => e => {
     const value = e?.target ? e.target.value : e;
@@ -111,13 +51,6 @@ const EditEquipmentModal = ({ isOpen, onClose, onSuccess, equipment }) => {
       setFormData(prev => ({
         ...prev,
         [field]: value ? dayjs(value) : null,
-      }));
-    } else if (field === 'laboratory') {
-      // Сбрасываем подразделение при смене лаборатории
-      setFormData(prev => ({
-        ...prev,
-        [field]: value,
-        department: null,
       }));
     } else {
       setFormData(prev => ({
@@ -140,7 +73,6 @@ const EditEquipmentModal = ({ isOpen, onClose, onSuccess, equipment }) => {
       'verification_info',
       'verification_date',
       'verification_end_date',
-      'laboratory',
     ];
 
     requiredFields.forEach(field => {
@@ -148,11 +80,6 @@ const EditEquipmentModal = ({ isOpen, onClose, onSuccess, equipment }) => {
         newErrors[field] = 'Это поле обязательно для заполнения';
       }
     });
-
-    // Проверяем обязательность подразделения
-    if (formData.laboratory && departments.length > 0 && !formData.department) {
-      newErrors.department = 'В выбранной лаборатории необходимо указать подразделение';
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -173,13 +100,9 @@ const EditEquipmentModal = ({ isOpen, onClose, onSuccess, equipment }) => {
         verification_info: formData.verification_info,
         verification_date: formData.verification_date?.format('YYYY-MM-DD'),
         verification_end_date: formData.verification_end_date?.format('YYYY-MM-DD'),
-        laboratory: formData.laboratory,
+        laboratory: laboratoryId,
+        department: departmentId,
       };
-
-      // Добавляем department только если он выбран
-      if (formData.department) {
-        equipmentData.department = formData.department;
-      }
 
       console.log('Отправляемые данные в EditEquipmentModal:', equipmentData);
 
@@ -332,7 +255,6 @@ const EditEquipmentModal = ({ isOpen, onClose, onSuccess, equipment }) => {
             rootClassName="custom-date-picker-root"
             popupClassName="custom-date-picker-popup"
             inputReadOnly={false}
-            showToday={false}
             allowClear={true}
             superNextIcon={null}
             superPrevIcon={null}
@@ -358,7 +280,6 @@ const EditEquipmentModal = ({ isOpen, onClose, onSuccess, equipment }) => {
             rootClassName="custom-date-picker-root"
             popupClassName="custom-date-picker-popup"
             inputReadOnly={false}
-            showToday={false}
             allowClear={true}
             superNextIcon={null}
             superPrevIcon={null}
@@ -367,51 +288,6 @@ const EditEquipmentModal = ({ isOpen, onClose, onSuccess, equipment }) => {
             <div className="error-message">{errors.verification_end_date}</div>
           )}
         </div>
-
-        <div className="form-group">
-          <label>
-            Лаборатория <span className="required">*</span>
-          </label>
-          <Select
-            value={formData.laboratory}
-            onChange={value => handleInputChange('laboratory')(value)}
-            placeholder="Выберите лабораторию"
-            loading={laboratoriesLoading}
-            status={errors.laboratory ? 'error' : ''}
-            style={{ width: '100%' }}
-          >
-            {laboratories.map(lab => (
-              <Option key={lab.id} value={lab.id}>
-                {lab.name}
-              </Option>
-            ))}
-          </Select>
-          {errors.laboratory && <div className="error-message">{errors.laboratory}</div>}
-        </div>
-
-        {departments.length > 0 && (
-          <div className="form-group">
-            <label>
-              Подразделение <span className="required">*</span>
-            </label>
-            <Select
-              value={formData.department}
-              onChange={value => handleInputChange('department')(value)}
-              placeholder="Выберите подразделение"
-              loading={departmentsLoading}
-              disabled={!formData.laboratory}
-              status={errors.department ? 'error' : ''}
-              style={{ width: '100%' }}
-            >
-              {departments.map(dept => (
-                <Option key={dept.id} value={dept.id}>
-                  {dept.name}
-                </Option>
-              ))}
-            </Select>
-            {errors.department && <div className="error-message">{errors.department}</div>}
-          </div>
-        )}
       </div>
 
       {isConfirmDeleteModalVisible && (

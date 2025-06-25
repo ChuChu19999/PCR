@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Select, Form, Button, Table, Space, Input } from 'antd';
+import { Table, Space, Input, message } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import Layout from '../../shared/ui/Layout/Layout';
 import EquipmentPageWrapper from './EquipmentPageWrapper';
 import CreateEquipmentModal from '../../features/Modals/CreateEquipmentModal/CreateEquipmentModal';
 import EditEquipmentModal from '../../features/Modals/EditEquipmentModal/EditEquipmentModal';
-
-const { Option } = Select;
+import { Button } from '../../shared/ui/Button/Button';
+import LoadingCard from '../../features/Cards/ui/LoadingCard/LoadingCard';
+import './EquipmentPage.css';
 
 const formatDate = dateString => {
   if (!dateString) return '-';
@@ -25,13 +26,12 @@ const EquipmentPage = () => {
   const [selectedLaboratory, setSelectedLaboratory] = useState(null);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [equipment, setEquipment] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [searchedColumn, setSearchedColumn] = useState('');
-  const [form] = Form.useForm();
 
   const handleSearch = (selectedKeys, confirm, dataIndex) => {
     confirm();
@@ -144,7 +144,6 @@ const EquipmentPage = () => {
     },
   ];
 
-  // Загрузка списка лабораторий
   useEffect(() => {
     const fetchLaboratories = async () => {
       try {
@@ -152,64 +151,58 @@ const EquipmentPage = () => {
         setLaboratories(response.data.filter(lab => !lab.is_deleted));
       } catch (error) {
         console.error('Ошибка при загрузке лабораторий:', error);
+        message.error('Не удалось загрузить список лабораторий');
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchLaboratories();
   }, []);
 
-  // Загрузка подразделений при выборе лаборатории
-  useEffect(() => {
-    const fetchDepartments = async () => {
-      if (selectedLaboratory) {
-        try {
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/departments/`, {
-            params: { laboratory: selectedLaboratory },
-          });
-          // Фильтруем только неудаленные подразделения выбранной лаборатории
-          const filteredDepartments = response.data.filter(
-            dept => !dept.is_deleted && dept.laboratory === selectedLaboratory
-          );
-          setDepartments(filteredDepartments);
-        } catch (error) {
-          console.error('Ошибка при загрузке подразделений:', error);
-        }
-      } else {
-        setDepartments([]);
-      }
-      setSelectedDepartment(null);
-    };
-
-    fetchDepartments();
-  }, [selectedLaboratory]);
-
-  // Обработчики изменения выбора
-  const handleLaboratoryChange = value => {
-    setSelectedLaboratory(value);
-    form.setFieldsValue({ department: undefined });
-  };
-
-  const handleDepartmentChange = value => {
-    setSelectedDepartment(value);
-  };
-
-  // Временные обработчики для кнопок
-  const handleCreate = () => {
-    setIsCreateModalOpen(true);
-  };
-
-  const handleShow = async () => {
-    if (!selectedLaboratory) return;
-
+  const handleLaboratoryClick = async laboratory => {
     setLoading(true);
+    setSelectedLaboratory(laboratory);
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/departments/by_laboratory/?laboratory_id=${laboratory.id}`
+      );
+      const departmentsData = response.data.filter(dept => !dept.is_deleted) || [];
+      setDepartments(departmentsData);
+
+      if (departmentsData.length === 0) {
+        await loadEquipment(laboratory.id);
+      }
+    } catch (error) {
+      console.error('Ошибка при загрузке данных:', error);
+      message.error('Не удалось загрузить данные');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDepartmentClick = async department => {
+    setLoading(true);
+    setSelectedDepartment(department);
+    try {
+      await loadEquipment(selectedLaboratory.id, department.id);
+    } catch (error) {
+      console.error('Ошибка при загрузке приборов:', error);
+      message.error('Не удалось загрузить приборы');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadEquipment = async (laboratoryId, departmentId = null) => {
     try {
       const params = {
-        laboratory: selectedLaboratory,
+        laboratory: laboratoryId,
         is_active: true,
         is_deleted: false,
       };
-      if (selectedDepartment) {
-        params.department = selectedDepartment;
+      if (departmentId) {
+        params.department = departmentId;
       }
       const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/equipment/`, {
         params,
@@ -217,18 +210,29 @@ const EquipmentPage = () => {
       setEquipment(response.data);
     } catch (error) {
       console.error('Ошибка при загрузке приборов:', error);
-    } finally {
-      setLoading(false);
+      message.error('Не удалось загрузить список приборов');
     }
   };
 
-  const handleModalClose = () => {
+  const handleBack = () => {
+    if (selectedDepartment && departments.length > 0) {
+      setSelectedDepartment(null);
+      setEquipment([]);
+    } else {
+      setSelectedLaboratory(null);
+      setSelectedDepartment(null);
+      setDepartments([]);
+      setEquipment([]);
+    }
+  };
+
+  const handleCreateModalClose = () => {
     setIsCreateModalOpen(false);
   };
 
-  const handleModalSuccess = () => {
+  const handleCreateModalSuccess = () => {
     setIsCreateModalOpen(false);
-    handleShow();
+    loadEquipment(selectedLaboratory.id, selectedDepartment?.id);
   };
 
   const handleRowClick = record => {
@@ -244,64 +248,97 @@ const EquipmentPage = () => {
   const handleEditModalSuccess = () => {
     setIsEditModalOpen(false);
     setSelectedEquipment(null);
-    handleShow();
+    loadEquipment(selectedLaboratory.id, selectedDepartment?.id);
   };
 
-  return (
-    <Layout title="Приборы">
+  if (loading) {
+    return (
       <EquipmentPageWrapper>
-        <div style={{ height: 'calc(100vh - 87px)', display: 'flex', flexDirection: 'column' }}>
-          <div className="form" style={{ padding: '20px', flex: 'none' }}>
-            <Form form={form} layout="vertical">
-              <Form.Item label="Лаборатория" name="laboratory">
-                <Select
-                  placeholder="Выберите лабораторию"
-                  value={selectedLaboratory}
-                  onChange={handleLaboratoryChange}
-                  style={{ width: '100%' }}
+        <Layout title={selectedLaboratory ? selectedLaboratory.name : 'Приборы'}>
+          <div style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}>
+            <LoadingCard />
+          </div>
+        </Layout>
+      </EquipmentPageWrapper>
+    );
+  }
+
+  // Если лаборатория не выбрана, показываем список лабораторий
+  if (!selectedLaboratory) {
+    return (
+      <EquipmentPageWrapper>
+        <Layout title="Приборы">
+          <div className="laboratories-container">
+            <div className="laboratories-grid">
+              {laboratories.map(laboratory => (
+                <div
+                  key={laboratory.id}
+                  className="laboratory-card"
+                  onClick={() => handleLaboratoryClick(laboratory)}
                 >
-                  {laboratories.map(lab => (
-                    <Option key={lab.id} value={lab.id}>
-                      {lab.name}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
+                  <div className="laboratory-card-content">
+                    <h3>{laboratory.name}</h3>
+                    {laboratory.description && <p>{laboratory.description}</p>}
+                    {laboratory.full_name && (
+                      <div className="laboratory-info">
+                        <span>{laboratory.full_name}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Layout>
+      </EquipmentPageWrapper>
+    );
+  }
 
-              {selectedLaboratory && departments.length > 0 && (
-                <Form.Item label="Подразделение" name="department">
-                  <Select
-                    placeholder="Выберите подразделение"
-                    value={selectedDepartment}
-                    onChange={handleDepartmentChange}
-                    allowClear
-                    style={{ width: '100%' }}
-                  >
-                    {departments.map(dept => (
-                      <Option key={dept.id} value={dept.id}>
-                        {dept.name}
-                      </Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-              )}
+  // Если есть подразделения и подразделение еще не выбрано, показываем список подразделений
+  if (departments.length > 0 && !selectedDepartment) {
+    return (
+      <EquipmentPageWrapper>
+        <Layout title={selectedLaboratory.name}>
+          <div className="departments-container">
+            <div className="departments-header">
+              <Button title="Назад" onClick={handleBack} type="default" className="back-btn" />
+            </div>
+            <div className="departments-grid">
+              {departments.map(department => (
+                <div
+                  key={department.id}
+                  className="department-card"
+                  onClick={() => handleDepartmentClick(department)}
+                >
+                  <div className="department-card-content">
+                    <h3>{department.name}</h3>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Layout>
+      </EquipmentPageWrapper>
+    );
+  }
 
-              <Form.Item>
-                <Space>
-                  <Button
-                    type="primary"
-                    onClick={handleShow}
-                    disabled={!selectedLaboratory}
-                    loading={loading}
-                  >
-                    Показать
-                  </Button>
-                  <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-                    Создать
-                  </Button>
-                </Space>
-              </Form.Item>
-            </Form>
+  // Показываем таблицу с приборами
+  return (
+    <EquipmentPageWrapper>
+      <Layout title={selectedLaboratory.name}>
+        <div style={{ height: 'calc(100vh - 87px)', display: 'flex', flexDirection: 'column' }}>
+          <div
+            className="header-actions"
+            style={{ padding: '20px', display: 'flex', justifyContent: 'space-between' }}
+          >
+            <Button title="Назад" onClick={handleBack} type="default" className="back-btn" />
+            <Button
+              title="Создать"
+              onClick={() => setIsCreateModalOpen(true)}
+              buttonColor="#0066cc"
+              type="primary"
+              icon={<PlusOutlined />}
+            />
           </div>
 
           <div
@@ -343,8 +380,10 @@ const EquipmentPage = () => {
         {isCreateModalOpen && (
           <CreateEquipmentModal
             isOpen={isCreateModalOpen}
-            onClose={handleModalClose}
-            onSuccess={handleModalSuccess}
+            onClose={handleCreateModalClose}
+            onSuccess={handleCreateModalSuccess}
+            laboratoryId={selectedLaboratory.id}
+            departmentId={selectedDepartment?.id}
           />
         )}
 
@@ -354,10 +393,12 @@ const EquipmentPage = () => {
             onClose={handleEditModalClose}
             onSuccess={handleEditModalSuccess}
             equipment={selectedEquipment}
+            laboratoryId={selectedLaboratory.id}
+            departmentId={selectedDepartment?.id}
           />
         )}
-      </EquipmentPageWrapper>
-    </Layout>
+      </Layout>
+    </EquipmentPageWrapper>
   );
 };
 

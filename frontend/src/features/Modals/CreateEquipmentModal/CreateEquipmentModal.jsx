@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Input, DatePicker, Select, message } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -9,7 +9,10 @@ import './CreateEquipmentModal.css';
 
 const { Option } = Select;
 
-const CreateEquipmentModal = ({ isOpen, onClose, onSuccess }) => {
+// Устанавливаем русскую локаль для dayjs
+dayjs.locale('ru');
+
+const CreateEquipmentModal = ({ onClose, onSuccess, laboratoryId, departmentId }) => {
   const [formData, setFormData] = useState({
     name: '',
     type: undefined,
@@ -17,78 +20,18 @@ const CreateEquipmentModal = ({ isOpen, onClose, onSuccess }) => {
     verification_info: '',
     verification_date: null,
     verification_end_date: null,
-    version: 'v1',
-    is_active: true,
-    laboratory: null,
-    department: null,
   });
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const [laboratories, setLaboratories] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [laboratoriesLoading, setLaboratoriesLoading] = useState(false);
-  const [departmentsLoading, setDepartmentsLoading] = useState(false);
-
-  useEffect(() => {
-    fetchLaboratories();
-  }, []);
-
-  useEffect(() => {
-    if (formData.laboratory) {
-      fetchDepartments(formData.laboratory);
-    } else {
-      setDepartments([]);
-      setFormData(prev => ({ ...prev, department: null }));
-    }
-  }, [formData.laboratory]);
-
-  const fetchLaboratories = async () => {
-    try {
-      setLaboratoriesLoading(true);
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
-      setLaboratories(response.data.filter(lab => !lab.is_deleted));
-    } catch (error) {
-      console.error('Ошибка при загрузке лабораторий:', error);
-      message.error('Не удалось загрузить список лабораторий');
-    } finally {
-      setLaboratoriesLoading(false);
-    }
-  };
-
-  const fetchDepartments = async laboratoryId => {
-    try {
-      setDepartmentsLoading(true);
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/departments/?laboratory=${laboratoryId}`
-      );
-      setDepartments(
-        response.data.filter(dept => !dept.is_deleted && dept.laboratory === laboratoryId)
-      );
-    } catch (error) {
-      console.error('Ошибка при загрузке подразделений:', error);
-      message.error('Не удалось загрузить список подразделений');
-      setDepartments([]);
-    } finally {
-      setDepartmentsLoading(false);
-    }
-  };
 
   const handleInputChange = field => e => {
     const value = e?.target ? e.target.value : e;
 
-    // Специальная обработка для дат
     if (field === 'verification_date' || field === 'verification_end_date') {
       setFormData(prev => ({
         ...prev,
         [field]: value ? dayjs(value) : null,
-      }));
-    } else if (field === 'laboratory') {
-      // При смене лаборатории сбрасываем подразделение
-      setFormData(prev => ({
-        ...prev,
-        [field]: value,
-        department: null,
       }));
     } else {
       setFormData(prev => ({
@@ -111,7 +54,6 @@ const CreateEquipmentModal = ({ isOpen, onClose, onSuccess }) => {
       'verification_info',
       'verification_date',
       'verification_end_date',
-      'laboratory',
     ];
 
     requiredFields.forEach(field => {
@@ -119,11 +61,6 @@ const CreateEquipmentModal = ({ isOpen, onClose, onSuccess }) => {
         newErrors[field] = 'Это поле обязательно для заполнения';
       }
     });
-
-    // Проверяем обязательность подразделения
-    if (formData.laboratory && departments.length > 0 && !formData.department) {
-      newErrors.department = 'В выбранной лаборатории необходимо указать подразделение';
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -144,15 +81,9 @@ const CreateEquipmentModal = ({ isOpen, onClose, onSuccess }) => {
         verification_info: formData.verification_info,
         verification_date: formData.verification_date?.format('YYYY-MM-DD'),
         verification_end_date: formData.verification_end_date?.format('YYYY-MM-DD'),
-        version: 'v1',
-        is_active: true,
-        laboratory: formData.laboratory,
+        laboratory: laboratoryId,
+        department: departmentId,
       };
-
-      // Добавляем department только если он выбран
-      if (formData.department) {
-        equipmentData.department = formData.department;
-      }
 
       console.log('Отправляемые данные в CreateEquipmentModal:', equipmentData);
 
@@ -274,7 +205,6 @@ const CreateEquipmentModal = ({ isOpen, onClose, onSuccess }) => {
             rootClassName="custom-date-picker-root"
             popupClassName="custom-date-picker-popup"
             inputReadOnly={false}
-            showToday={false}
             allowClear={true}
             superNextIcon={null}
             superPrevIcon={null}
@@ -300,7 +230,6 @@ const CreateEquipmentModal = ({ isOpen, onClose, onSuccess }) => {
             rootClassName="custom-date-picker-root"
             popupClassName="custom-date-picker-popup"
             inputReadOnly={false}
-            showToday={false}
             allowClear={true}
             superNextIcon={null}
             superPrevIcon={null}
@@ -309,51 +238,6 @@ const CreateEquipmentModal = ({ isOpen, onClose, onSuccess }) => {
             <div className="error-message">{errors.verification_end_date}</div>
           )}
         </div>
-
-        <div className="form-group">
-          <label>
-            Лаборатория <span className="required">*</span>
-          </label>
-          <Select
-            value={formData.laboratory}
-            onChange={value => handleInputChange('laboratory')(value)}
-            placeholder="Выберите лабораторию"
-            loading={laboratoriesLoading}
-            status={errors.laboratory ? 'error' : ''}
-            style={{ width: '100%' }}
-          >
-            {laboratories.map(lab => (
-              <Option key={lab.id} value={lab.id}>
-                {lab.name}
-              </Option>
-            ))}
-          </Select>
-          {errors.laboratory && <div className="error-message">{errors.laboratory}</div>}
-        </div>
-
-        {departments.length > 0 && (
-          <div className="form-group">
-            <label>
-              Подразделение <span className="required">*</span>
-            </label>
-            <Select
-              value={formData.department}
-              onChange={value => handleInputChange('department')(value)}
-              placeholder="Выберите подразделение"
-              loading={departmentsLoading}
-              disabled={!formData.laboratory}
-              status={errors.department ? 'error' : ''}
-              style={{ width: '100%' }}
-            >
-              {departments.map(dept => (
-                <Option key={dept.id} value={dept.id}>
-                  {dept.name}
-                </Option>
-              ))}
-            </Select>
-            {errors.department && <div className="error-message">{errors.department}</div>}
-          </div>
-        )}
       </div>
     </Modal>
   );
