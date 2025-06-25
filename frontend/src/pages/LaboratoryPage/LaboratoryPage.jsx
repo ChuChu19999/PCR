@@ -123,7 +123,7 @@ function LaboratoryPage() {
           <div className="departments-header">
             <Button
               title="Назад"
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/?admin=true')}
               type="default"
               className="back-btn"
             />

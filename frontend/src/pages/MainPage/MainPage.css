@@ -85,3 +85,78 @@
 .no-laboratories p {
   font-size: 1.1rem;
 }
+
+.main-page-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  top: 0px;
+  left: 200px;
+  right: 0;
+  bottom: 0;
+  text-align: center;
+  background: url('/home-background.svg') no-repeat center center;
+  background-size: cover;
+}
+
+.welcome-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 40px;
+  max-width: 1200px;
+  width: 100%;
+  padding: 20px;
+  border-radius: 20px;
+  margin-top: -80px;
+}
+
+.welcome-text-content {
+  flex: 1;
+  text-align: left;
+  max-width: 600px;
+}
+
+.welcome-animation {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  max-width: 500px;
+}
+
+.welcome-bubbles {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.welcome-title {
+  font-family: 'HeliosCondC';
+  font-size: 2.5rem;
+  color: #333;
+  margin: 0;
+}
+
+.welcome-subtitle {
+  font-family: 'HeliosCondC';
+  font-size: 1.2rem;
+  color: #666;
+  margin: 0;
+  max-width: 600px;
+  line-height: 1.5;
+}
+
+.admin-button {
+  margin-top: 30px;
+  padding: 12px 24px;
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+}
+
+.admin-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}

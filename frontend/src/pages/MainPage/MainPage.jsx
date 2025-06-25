@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PlusOutlined } from '@ant-design/icons';
+import { Player } from '@lottiefiles/react-lottie-player';
 import EmptyPageWrapper from './MainPageWrapper';
 import Layout from '../../shared/ui/Layout/Layout';
 import { Button } from '../../shared/ui/Button/Button';
@@ -8,18 +9,22 @@ import EditLaboratoryModal from '../../features/Modals/EditLaboratoryModal/EditL
 import AddLaboratoryModal from '../../features/Modals/AddLaboratoryModal/AddLaboratoryModal';
 import DeleteLaboratoryModal from '../../features/Modals/DeleteLaboratoryModal/DeleteLaboratoryModal';
 import LoadingCard from '../../features/Cards/ui/LoadingCard/LoadingCard';
+import Bubble from '../../shared/ui/Bubble/Bubble';
+import chemistryAnimation from '../../shared/assets/animations/chemistry-lab.json';
 import axios from 'axios';
 import './MainPage.css';
 
 function MainPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [laboratories, setLaboratories] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedLaboratory, setSelectedLaboratory] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
 
   const fetchLaboratories = async () => {
     try {
@@ -35,13 +40,21 @@ function MainPage() {
   };
 
   useEffect(() => {
-    fetchLaboratories();
-  }, []);
+    const adminParam = searchParams.get('admin');
+    if (adminParam === 'true') {
+      setShowAdmin(true);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (showAdmin) {
+      fetchLaboratories();
+    }
+  }, [showAdmin]);
 
   const handleCardClick = async laboratory => {
     try {
       setIsNavigating(true);
-      // Проверяем наличие страницы расчетов для лаборатории
       const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/research-pages/`, {
         params: {
           laboratory_id: laboratory.id,
@@ -49,7 +62,6 @@ function MainPage() {
         },
       });
 
-      // Если есть страница расчетов и department = null
       if (response.data.length > 0 && response.data[0].department === null) {
         navigate(`/laboratories/${laboratory.id}/oil-products`);
       } else {
@@ -87,7 +99,7 @@ function MainPage() {
   if (isLoading || isNavigating) {
     return (
       <EmptyPageWrapper>
-        <Layout title="Главная">
+        <Layout title={showAdmin ? 'Администрирование' : 'Главная'}>
           <div
             className="laboratories-container"
             style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}
@@ -99,11 +111,55 @@ function MainPage() {
     );
   }
 
+  if (!showAdmin) {
+    return (
+      <EmptyPageWrapper>
+        <Layout title="Главная">
+          <div className="main-page-container">
+            <div className="welcome-content">
+              <div className="welcome-text-content">
+                <div className="welcome-bubbles">
+                  <Bubble text="Права пользователя" color="#007DFE" />
+                  <Bubble text="Версия 0.0.1" color="#619BEF" textColor="#fff" />
+                </div>
+                <h1 className="welcome-title">Лаборант ФХИ</h1>
+                <p className="welcome-subtitle">
+                  Система управления физико-химическими испытаниями и лабораторной документацией
+                </p>
+                <Button
+                  title="Управление лабораториями"
+                  onClick={() => setShowAdmin(true)}
+                  buttonColor="#0066cc"
+                  type="primary"
+                  className="admin-button"
+                />
+              </div>
+              <div className="welcome-animation">
+                <Player
+                  autoplay
+                  loop
+                  src={chemistryAnimation}
+                  style={{ height: '400px', width: '400px' }}
+                />
+              </div>
+            </div>
+          </div>
+        </Layout>
+      </EmptyPageWrapper>
+    );
+  }
+
   return (
     <EmptyPageWrapper>
-      <Layout title="Главная">
+      <Layout title="Управление лабораториями">
         <div className="laboratories-container">
           <div className="laboratories-header">
+            <Button
+              title="Вернуться на главную"
+              onClick={() => setShowAdmin(false)}
+              buttonColor="#0066cc"
+              type="primary"
+            />
             {Array.isArray(laboratories) && laboratories.length > 0 && (
               <Button
                 title="Добавить лабораторию"
