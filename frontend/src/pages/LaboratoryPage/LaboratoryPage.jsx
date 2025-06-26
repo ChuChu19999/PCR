@@ -101,10 +101,7 @@ function LaboratoryPage() {
     return (
       <EmptyPageWrapper>
         <Layout title="Загрузка...">
-          <div
-            className="departments-container"
-            style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}
-          >
+          <div className="departments-container" style={{ position: 'relative' }}>
             <LoadingCard />
           </div>
         </Layout>

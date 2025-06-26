@@ -630,7 +630,7 @@ const ResearchMethodPage = () => {
     return (
       <ResearchMethodPageWrapper>
         <Layout title={sampleData ? `Проба № ${sampleData.registration_number}` : 'Загрузка...'}>
-          <div style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}>
+          <div style={{ position: 'relative' }}>
             <LoadingCard />
           </div>
         </Layout>

@@ -250,7 +250,7 @@ const SamplesPage = () => {
     return (
       <SamplesPageWrapper>
         <Layout title={selectedLaboratory ? selectedLaboratory.name : 'Пробы'}>
-          <div style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}>
+          <div style={{ position: 'relative' }}>
             <LoadingCard />
           </div>
         </Layout>

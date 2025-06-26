@@ -296,7 +296,7 @@ const ProtocolsPage = () => {
     return (
       <ProtocolsPageWrapper>
         <Layout title={selectedLaboratory ? selectedLaboratory.name : 'Протоколы'}>
-          <div style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}>
+          <div style={{ position: 'relative' }}>
             <LoadingCard />
           </div>
         </Layout>

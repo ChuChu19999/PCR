@@ -1043,7 +1043,7 @@ const OilProductsPage = () => {
     return (
       <OilProductsPageWrapper>
         <Layout title="Загрузка...">
-          <div style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}>
+          <div style={{ position: 'relative' }}>
             <LoadingCard />
           </div>
         </Layout>

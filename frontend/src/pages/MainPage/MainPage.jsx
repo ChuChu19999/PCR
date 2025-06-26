@@ -100,10 +100,7 @@ function MainPage() {
     return (
       <EmptyPageWrapper>
         <Layout title={showAdmin ? 'Администрирование' : 'Главная'}>
-          <div
-            className="laboratories-container"
-            style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}
-          >
+          <div className="laboratories-container" style={{ position: 'relative' }}>
             <LoadingCard />
           </div>
         </Layout>

@@ -255,7 +255,7 @@ const EquipmentPage = () => {
     return (
       <EquipmentPageWrapper>
         <Layout title={selectedLaboratory ? selectedLaboratory.name : 'Приборы'}>
-          <div style={{ position: 'relative', minHeight: 'calc(100vh - 64px)' }}>
+          <div style={{ position: 'relative' }}>
             <LoadingCard />
           </div>
         </Layout>

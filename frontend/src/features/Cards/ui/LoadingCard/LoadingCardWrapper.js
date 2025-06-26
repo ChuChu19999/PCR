@@ -6,8 +6,8 @@ const LoadingCardWrapper = styled.div.withConfig({
 })`
   position: absolute;
   inset: 0;
-  height: 100%;
   z-index: 999;
+  min-height: calc(100vh - 100px);
 
   display: flex;
   justify-content: center;
