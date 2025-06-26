@@ -11,6 +11,7 @@ import {
   SettingOutlined,
   InfoCircleOutlined,
   NumberOutlined,
+  ArrowLeftOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import ExcelEditor from './ExcelEditor';
@@ -659,7 +660,12 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
         ) : selectedSection?.id === 'accreditation' ? (
           <div className="editor-container">
             <div className="editor-header">
-              <Button title="Назад к разделам" onClick={handleBackToSections} type="default">
+              <Button
+                title="Назад к разделам"
+                onClick={handleBackToSections}
+                type="default"
+                icon={<ArrowLeftOutlined />}
+              >
                 Назад к разделам
               </Button>
             </div>
@@ -692,7 +698,12 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
         ) : (
           <div className="editor-container">
             <div className="editor-header">
-              <Button title="Назад к разделам" onClick={handleBackToSections} type="default">
+              <Button
+                title="Назад к разделам"
+                onClick={handleBackToSections}
+                type="default"
+                icon={<ArrowLeftOutlined />}
+              >
                 Назад к разделам
               </Button>
             </div>

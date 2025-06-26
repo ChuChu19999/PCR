@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Table, Space, Input, message } from 'antd';
-import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { PlusOutlined, SearchOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import Layout from '../../shared/ui/Layout/Layout';
 import SamplesPageWrapper from './SamplesPageWrapper';
 import CreateSampleModal from '../../features/Modals/CreateSampleModal/CreateSampleModal';
@@ -296,7 +296,13 @@ const SamplesPage = () => {
         <Layout title={selectedLaboratory.name}>
           <div className="departments-container">
             <div className="departments-header">
-              <Button title="Назад" onClick={handleBack} type="default" className="back-btn" />
+              <Button
+                title="Назад"
+                onClick={handleBack}
+                type="default"
+                className="back-btn"
+                icon={<ArrowLeftOutlined />}
+              />
             </div>
             <div className="departments-grid">
               {departments.map(department => (
@@ -326,7 +332,13 @@ const SamplesPage = () => {
             className="header-actions"
             style={{ padding: '20px', display: 'flex', justifyContent: 'space-between' }}
           >
-            <Button title="Назад" onClick={handleBack} type="default" className="back-btn" />
+            <Button
+              title="Назад"
+              onClick={handleBack}
+              type="default"
+              className="back-btn"
+              icon={<ArrowLeftOutlined />}
+            />
             <Button
               title="Создать"
               onClick={() => setIsCreateModalOpen(true)}

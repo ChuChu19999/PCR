@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import EmptyPageWrapper from './LaboratoryPageWrapper';
 import Layout from '../../shared/ui/Layout/Layout';
 import { Button } from '../../shared/ui/Button/Button';
@@ -123,6 +123,7 @@ function LaboratoryPage() {
               onClick={() => navigate('/?admin=true')}
               type="default"
               className="back-btn"
+              icon={<ArrowLeftOutlined />}
             />
             {departments.length > 0 && (
               <Button
