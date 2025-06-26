@@ -6,7 +6,7 @@ import SidebarWrapper from './SidebarWrapper';
 import { ThemeEnum } from '../../../shared/constants/theme';
 import FunctionsIcon from '@mui/icons-material/Functions';
 
-const Sidebar = ({ username }) => {
+const Sidebar = ({ username, onMinimizeChange }) => {
   const [minimize, setMinimize] = useState(false);
   const [openSubmenus, setOpenSubmenus] = useState([]);
   const buttonRef = useRef(null);
@@ -42,7 +42,9 @@ const Sidebar = ({ username }) => {
   }, [openSubmenus.length]);
 
   const toggleMenu = () => {
-    setMinimize(!minimize);
+    const newMinimize = !minimize;
+    setMinimize(newMinimize);
+    onMinimizeChange?.(newMinimize);
     setOpenSubmenus([]);
   };
 
@@ -83,7 +85,6 @@ const Sidebar = ({ username }) => {
                 localion.pathname.startsWith('/laboratories/') ||
                 localion.pathname.startsWith('/departments/'))))) ||
         isOpen;
-      const context = minimize ? item.icon : item.label;
 
       const openSubmenu = e => {
         e.stopPropagation();
@@ -118,7 +119,8 @@ const Sidebar = ({ username }) => {
               transition: '0.3s',
             }}
           >
-            {context}
+            {item.icon}
+            <span>{item.label}</span>
           </div>
 
           {item.children?.length && !item.doNotShowChildrenInSidebar && isOpen && (

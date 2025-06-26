@@ -92,13 +92,21 @@
   align-items: center;
   justify-content: center;
   position: fixed;
-  top: 0px;
-  left: 200px;
+  top: 0;
   right: 0;
   bottom: 0;
   text-align: center;
   background: url('/home-background.svg') no-repeat center center;
   background-size: cover;
+  transition: left 0.4s ease;
+}
+
+.main-page-container.sidebar-collapsed {
+  left: 75px;
+}
+
+.main-page-container.sidebar-expanded {
+  left: 200px;
 }
 
 .welcome-content {
@@ -109,9 +117,8 @@
   max-width: 1200px;
   width: 100%;
   padding: 20px;
-  margin-left: 60px;
-  border-radius: 20px;
   margin-top: -80px;
+  margin-left: 60px;
 }
 
 .welcome-text-content {

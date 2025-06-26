@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useOutletContext } from 'react-router-dom';
 import { PlusOutlined } from '@ant-design/icons';
 import { Player } from '@lottiefiles/react-lottie-player';
 import EmptyPageWrapper from './MainPageWrapper';
@@ -17,6 +17,7 @@ import './MainPage.css';
 function MainPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { minimize } = useOutletContext() || {};
   const [laboratories, setLaboratories] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -25,6 +26,8 @@ function MainPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+
+  console.log('Minimize state:', minimize);
 
   const fetchLaboratories = async () => {
     try {
@@ -112,7 +115,9 @@ function MainPage() {
     return (
       <EmptyPageWrapper>
         <Layout title="Главная">
-          <div className="main-page-container">
+          <div
+            className={`main-page-container ${minimize ? 'sidebar-collapsed' : 'sidebar-expanded'}`}
+          >
             <div className="welcome-content">
               <div className="welcome-text-content">
                 <div className="welcome-bubbles">
