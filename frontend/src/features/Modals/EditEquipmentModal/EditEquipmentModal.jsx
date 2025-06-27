@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Input, DatePicker, Select, message, Button } from 'antd';
-import axios from 'axios';
+import { Input, DatePicker, Select, Button } from 'antd';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import locale from 'antd/es/date-picker/locale/ru_RU';
@@ -22,15 +21,11 @@ const EditEquipmentModal = ({ onClose, onSuccess, equipment, laboratoryId, depar
     verification_end_date: null,
   });
 
-  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [isConfirmDeleteModalVisible, setIsConfirmDeleteModalVisible] = useState(false);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-  const [deleteError, setDeleteError] = useState(null);
 
   useEffect(() => {
     if (equipment) {
-      console.log('Инициализация данных из equipment:', equipment);
       setFormData({
         name: equipment.name,
         type: equipment.type,
@@ -85,83 +80,23 @@ const EditEquipmentModal = ({ onClose, onSuccess, equipment, laboratoryId, depar
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = async () => {
-    try {
-      if (!validateForm()) {
-        return;
-      }
-
-      setLoading(true);
-
-      const equipmentData = {
-        name: formData.name,
-        type: formData.type,
-        serial_number: formData.serial_number,
-        verification_info: formData.verification_info,
-        verification_date: formData.verification_date?.format('YYYY-MM-DD'),
-        verification_end_date: formData.verification_end_date?.format('YYYY-MM-DD'),
-        laboratory: laboratoryId,
-        department: departmentId,
-      };
-
-      console.log('Отправляемые данные в EditEquipmentModal:', equipmentData);
-
-      // Деактивируем текущую версию и создаем новую
-      await axios.patch(`${import.meta.env.VITE_API_URL}/api/equipment/${equipment.id}/`, {
-        is_active: false,
-      });
-
-      // Создаем новую версию
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/equipment/`, equipmentData);
-
-      message.success('Прибор успешно обновлен');
-      onSuccess();
-    } catch (error) {
-      console.error('Ошибка при обновлении прибора:', error);
-
-      if (error.response?.data) {
-        const serverErrors = error.response.data;
-        const newErrors = {};
-
-        Object.keys(serverErrors).forEach(field => {
-          if (Array.isArray(serverErrors[field])) {
-            newErrors[field] = serverErrors[field][0];
-          } else {
-            newErrors[field] = serverErrors[field];
-          }
-        });
-
-        setErrors(prev => ({ ...prev, ...newErrors }));
-
-        if (Object.keys(newErrors).length === 0 && error.response?.data?.error) {
-          message.error(error.response.data.error);
-        }
-      } else {
-        message.error('Произошла ошибка при обновлении прибора');
-      }
-    } finally {
-      setLoading(false);
+  const handleSave = () => {
+    if (!validateForm()) {
+      return;
     }
-  };
 
-  const handleDeleteClick = () => {
-    setIsConfirmDeleteModalVisible(true);
-  };
+    const equipmentData = {
+      name: formData.name,
+      type: formData.type,
+      serial_number: formData.serial_number,
+      verification_info: formData.verification_info,
+      verification_date: formData.verification_date?.format('YYYY-MM-DD'),
+      verification_end_date: formData.verification_end_date?.format('YYYY-MM-DD'),
+      laboratory: laboratoryId,
+      department: departmentId,
+    };
 
-  const handleDelete = async () => {
-    try {
-      setDeleteLoading(true);
-      setDeleteError(null);
-      await axios.delete(`${import.meta.env.VITE_API_URL}/api/equipment/${equipment.id}/`);
-      message.success('Прибор успешно удален');
-      setIsConfirmDeleteModalVisible(false);
-      onSuccess();
-    } catch (error) {
-      console.error('Ошибка при удалении прибора:', error);
-      setDeleteError('Произошла ошибка при удалении прибора');
-    } finally {
-      setDeleteLoading(false);
-    }
+    onSuccess(equipmentData);
   };
 
   return (
@@ -169,10 +104,9 @@ const EditEquipmentModal = ({ onClose, onSuccess, equipment, laboratoryId, depar
       header="Редактирование прибора"
       onClose={onClose}
       onSave={handleSave}
-      loading={loading}
       style={{ width: '600px' }}
       extraButtons={
-        <Button danger loading={loading} onClick={handleDeleteClick}>
+        <Button danger onClick={() => setIsConfirmDeleteModalVisible(true)}>
           Удалить
         </Button>
       }
@@ -294,16 +228,17 @@ const EditEquipmentModal = ({ onClose, onSuccess, equipment, laboratoryId, depar
         <Modal
           header="Подтверждение удаления"
           onClose={() => setIsConfirmDeleteModalVisible(false)}
-          onSave={handleDelete}
+          onSave={() => {
+            onSuccess({ delete: true, id: equipment.id });
+            setIsConfirmDeleteModalVisible(false);
+          }}
           saveButtonText="Подтвердить"
           style={{ width: '500px', margin: '0 auto', left: '50%' }}
-          loading={deleteLoading}
         >
           <div className="delete-equipment-confirmation">
             <p className="confirmation-message">
               Вы уверены, что хотите удалить прибор "{equipment.name}"?
             </p>
-            {deleteError && <p className="error-message">{deleteError}</p>}
           </div>
         </Modal>
       )}

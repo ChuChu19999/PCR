@@ -33,6 +33,7 @@
     "@mui/icons-material": "^5.15.11",
     "@mui/material": "^5.15.14",
     "@mui/x-date-pickers": "^6.19.7",
+    "@tanstack/react-query": "^5.81.2",
     "ag-grid-enterprise": "32.3.3",
     "ag-grid-react": "32.3.3",
     "antd": "^5.24.9",

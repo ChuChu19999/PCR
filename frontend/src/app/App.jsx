@@ -5,6 +5,7 @@ import { LicenseManager } from 'ag-grid-enterprise';
 import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { message } from 'antd';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { routersData } from './data';
 import Content from './Content/Content';
 import LoadingPage from '../pages/LoadingPage/LoadingPage';
@@ -30,6 +31,18 @@ LicenseManager.setLicenseKey('BOARD4ALL_NDEwMjM1MTIwMDAwMA==8f4481b5cc626ad79fe9
 const ReloadComponent = () => {
   return <Navigate to="/" replace />;
 };
+
+// Экземпляр QueryClient
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchInterval: 60000, // Обновление данных каждую минуту
+      staleTime: 30000, // Данные считаются устаревшими через 30 секунд
+      refetchOnWindowFocus: true, // Автообновление при фокусе окна
+      refetchOnReconnect: true, // Обновление при восстановлении соединения
+    },
+  },
+});
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -88,25 +101,27 @@ export default function App() {
   const allRoutes = useMemo(() => getAllRoutes(routersData), [routersData]);
 
   return (
-    <div>
-      <BrowserRouter>
-        {showLoadingScreen && isLoading && <LoadingPage isLoading={isLoading} />}
-        <Routes>
-          <Route path="/" element={<Content username={username} />}>
-            <Route path="/laboratory/:id" element={<LaboratoryPage />} />
-            <Route path="/laboratories/:id/oil-products" element={<OilProductsPage />} />
-            <Route path="/departments/:id/oil-products" element={<OilProductsPage />} />
-            <Route path="/research-method" element={<ResearchMethodPage />} />
-            <Route path="/reload" element={<ReloadComponent />} />
-            <>
-              {allRoutes.map((item, index) => (
-                <Route key={`${item.path}-${index}`} path={item.path} element={item.element} />
-              ))}
-              <Route path="*" element={<Page404 />} />
-            </>
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <div>
+        <BrowserRouter>
+          {showLoadingScreen && isLoading && <LoadingPage isLoading={isLoading} />}
+          <Routes>
+            <Route path="/" element={<Content username={username} />}>
+              <Route path="/laboratory/:id" element={<LaboratoryPage />} />
+              <Route path="/laboratories/:id/oil-products" element={<OilProductsPage />} />
+              <Route path="/departments/:id/oil-products" element={<OilProductsPage />} />
+              <Route path="/research-method" element={<ResearchMethodPage />} />
+              <Route path="/reload" element={<ReloadComponent />} />
+              <>
+                {allRoutes.map((item, index) => (
+                  <Route key={`${item.path}-${index}`} path={item.path} element={item.element} />
+                ))}
+                <Route path="*" element={<Page404 />} />
+              </>
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </div>
+    </QueryClientProvider>
   );
 }

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Input, DatePicker, Select, message } from 'antd';
-import axios from 'axios';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import locale from 'antd/es/date-picker/locale/ru_RU';
@@ -22,7 +21,6 @@ const CreateEquipmentModal = ({ onClose, onSuccess, laboratoryId, departmentId }
     verification_end_date: null,
   });
 
-  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
   const handleInputChange = field => e => {
@@ -66,57 +64,23 @@ const CreateEquipmentModal = ({ onClose, onSuccess, laboratoryId, departmentId }
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = async () => {
-    try {
-      if (!validateForm()) {
-        return;
-      }
-
-      setLoading(true);
-
-      const equipmentData = {
-        name: formData.name,
-        type: formData.type,
-        serial_number: formData.serial_number,
-        verification_info: formData.verification_info,
-        verification_date: formData.verification_date?.format('YYYY-MM-DD'),
-        verification_end_date: formData.verification_end_date?.format('YYYY-MM-DD'),
-        laboratory: laboratoryId,
-        department: departmentId,
-      };
-
-      console.log('Отправляемые данные в CreateEquipmentModal:', equipmentData);
-
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/equipment/`, equipmentData);
-
-      message.success('Прибор успешно создан');
-      onSuccess();
-    } catch (error) {
-      console.error('Ошибка при создании прибора:', error);
-
-      if (error.response?.data) {
-        const serverErrors = error.response.data;
-        const newErrors = {};
-
-        Object.keys(serverErrors).forEach(field => {
-          if (Array.isArray(serverErrors[field])) {
-            newErrors[field] = serverErrors[field][0];
-          } else {
-            newErrors[field] = serverErrors[field];
-          }
-        });
-
-        setErrors(prev => ({ ...prev, ...newErrors }));
-
-        if (Object.keys(newErrors).length === 0 && error.response?.data?.error) {
-          message.error(error.response.data.error);
-        }
-      } else {
-        message.error('Произошла ошибка при создании прибора');
-      }
-    } finally {
-      setLoading(false);
+  const handleSave = () => {
+    if (!validateForm()) {
+      return;
     }
+
+    const equipmentData = {
+      name: formData.name,
+      type: formData.type,
+      serial_number: formData.serial_number,
+      verification_info: formData.verification_info,
+      verification_date: formData.verification_date?.format('YYYY-MM-DD'),
+      verification_end_date: formData.verification_end_date?.format('YYYY-MM-DD'),
+      laboratory: laboratoryId,
+      department: departmentId,
+    };
+
+    onSuccess(equipmentData);
   };
 
   return (
@@ -124,7 +88,6 @@ const CreateEquipmentModal = ({ onClose, onSuccess, laboratoryId, departmentId }
       header="Создание прибора"
       onClose={onClose}
       onSave={handleSave}
-      loading={loading}
       style={{ width: '600px' }}
     >
       <div className="create-equipment-form">

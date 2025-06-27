@@ -1,47 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Input, DatePicker, Select, message, Spin, Table } from 'antd';
-import axios from 'axios';
+import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import locale from 'antd/es/date-picker/locale/ru_RU';
 import Modal from '../ui/Modal';
 import SelectionConditionsForm from '../CreateProtocolModal/SelectionConditionsForm';
+import { protocolsApi } from '../../../shared/api/protocols';
 import './EditProtocolModal.css';
 
 const { Option } = Select;
 
 // Устанавливаем русскую локаль для dayjs
 dayjs.locale('ru');
-
-// Функция для форматирования ввода даты
-const formatDateInput = value => {
-  // Убираем все нецифровые символы
-  const numbers = value.replace(/\D/g, '');
-
-  // Ограничиваем длину до 8 цифр
-  const limitedNumbers = numbers.slice(0, 8);
-
-  // Форматируем в ДД.ММ.ГГГГ
-  if (limitedNumbers.length <= 2) return limitedNumbers;
-  if (limitedNumbers.length <= 4) return `${limitedNumbers.slice(0, 2)}.${limitedNumbers.slice(2)}`;
-  return `${limitedNumbers.slice(0, 2)}.${limitedNumbers.slice(2, 4)}.${limitedNumbers.slice(4)}`;
-};
-
-// Функция для валидации даты
-const isValidDate = dateString => {
-  if (!/^\d{2}\.\d{2}\.\d{4}$/.test(dateString)) return false;
-
-  const [day, month, year] = dateString.split('.').map(Number);
-  const date = new Date(year, month - 1, day);
-
-  return (
-    date.getDate() === day &&
-    date.getMonth() === month - 1 &&
-    date.getFullYear() === year &&
-    year >= 1900 &&
-    year <= 2100
-  );
-};
 
 // Компонент для отображения результатов расчетов одной пробы
 const SampleCalculationsTable = ({ data, sampleNumber }) => {
@@ -64,7 +35,7 @@ const SampleCalculationsTable = ({ data, sampleNumber }) => {
       key: 'inputData',
       width: '33%',
       render: inputData => {
-        if (!inputData || Object.keys(inputData).length === 0) return '-';
+        if (!inputData || inputData === '-') return '-';
         return (
           <div
             style={{
@@ -120,14 +91,19 @@ const SampleCalculationsTable = ({ data, sampleNumber }) => {
   return (
     <div className="sample-calculations">
       <h3 className="sample-title">Проба №{sampleNumber}</h3>
-      <Table columns={columns} dataSource={data} pagination={false} scroll={false} />
+      <Table
+        columns={columns}
+        dataSource={data}
+        pagination={false}
+        scroll={false}
+        rowKey="key"
+        size="small"
+      />
     </div>
   );
 };
 
 const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departmentId }) => {
-  console.log('Protocol prop:', protocol);
-
   const [formData, setFormData] = useState({
     test_protocol_number: protocol.test_protocol_number || '',
     test_protocol_date: protocol.test_protocol_date ? dayjs(protocol.test_protocol_date) : null,
@@ -142,22 +118,29 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const [templates, setTemplates] = useState([]);
-  const [templatesLoading, setTemplatesLoading] = useState(false);
-  const [branches, setBranches] = useState([]);
-  const [branchesLoading, setBranchesLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState(null);
-
-  const [branchSearchValue, setBranchSearchValue] = useState('');
-  const [branchesDropdownVisible, setBranchesDropdownVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState('calculations');
+  const [isAnimating, setIsAnimating] = useState(false);
 
   const branchSearchRef = useRef(null);
 
-  const [activeTab, setActiveTab] = useState('calculations');
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [calculations, setCalculations] = useState([]);
-  const [calculationsLoading, setCalculationsLoading] = useState(false);
+  // Запрос на получение шаблонов
+  const { data: templates = [], isLoading: templatesLoading } = useQuery({
+    queryKey: ['templates', laboratoryId, departmentId],
+    queryFn: () => protocolsApi.getTemplates({ laboratoryId, departmentId }),
+  });
+
+  // Запрос на получение результатов расчетов
+  const { data: calculations = [], isLoading: calculationsLoading } = useQuery({
+    queryKey: ['calculations', protocol.id],
+    queryFn: async () => {
+      const data = await protocolsApi.getCalculations(protocol.id);
+      console.log('Полученные данные расчетов:', data);
+      return data;
+    },
+    enabled: !!protocol.id && activeTab === 'calculations',
+  });
 
   useEffect(() => {
     if (protocol) {
@@ -165,12 +148,8 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
         ...protocol,
         test_protocol_date: protocol.test_protocol_date ? dayjs(protocol.test_protocol_date) : null,
       });
-      setBranchSearchValue(protocol.branch || '');
-
-      // Загружаем шаблоны
-      fetchTemplates(laboratoryId, departmentId);
     }
-  }, [protocol, laboratoryId, departmentId]);
+  }, [protocol]);
 
   const handleInputChange = field => e => {
     const value = e?.target ? e.target.value : e;
@@ -220,13 +199,7 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
         is_accredited: formData.is_accredited,
       };
 
-      await axios.put(
-        `${import.meta.env.VITE_API_URL}/api/protocols/${protocol.id}/`,
-        protocolData
-      );
-
-      message.success('Протокол успешно обновлен');
-      onSuccess();
+      onSuccess(protocolData);
     } catch (error) {
       console.error('Ошибка при обновлении протокола:', error);
       if (error.response?.data?.error) {
@@ -261,13 +234,10 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
       setIsGenerating(true);
       setError(null);
 
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/generate-protocol-excel/?protocol_id=${protocol.id}`,
-        { responseType: 'blob' }
-      );
+      const blob = await protocolsApi.generateProtocolExcel(protocol.id);
 
       // Создаем ссылку для скачивания файла
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement('a');
       link.href = url;
 
@@ -332,156 +302,37 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
     }));
   };
 
-  // useEffect для синхронизации значения шаблона
-  useEffect(() => {
-    if (templates.length > 0 && protocol?.excel_template) {
-      const template = templates.find(t => t.id === protocol.excel_template);
-      if (template) {
-        setFormData(prev => ({
-          ...prev,
-          excel_template: template.id,
-        }));
-      }
+  const handleTabChange = tab => {
+    if (tab !== activeTab) {
+      setIsAnimating(true);
+      setTimeout(() => {
+        setActiveTab(tab);
+        setTimeout(() => {
+          setIsAnimating(false);
+        }, 50);
+      }, 300);
     }
-  }, [templates, protocol]);
-
-  // useEffect для обработки условий отбора
-  useEffect(() => {
-    if (protocol && templates.length > 0) {
-      const template = templates.find(t => t.id === protocol.excel_template);
-      console.log('Found template:', template);
-      console.log('Protocol selection conditions:', protocol.selection_conditions);
-
-      if (template && template.selection_conditions) {
-        // Преобразуем объект условий отбора в массив
-        const conditionsArray = template.selection_conditions.map(condition => ({
-          ...condition,
-          value: protocol.selection_conditions?.[condition.name] || null,
-        }));
-
-        console.log('Setting initial selection conditions:', conditionsArray);
-        setFormData(prev => ({
-          ...prev,
-          selection_conditions: conditionsArray,
-        }));
-      }
-    }
-  }, [protocol, templates]);
-
-  const searchBranches = async searchText => {
-    if (!searchText || searchText.length < 2) {
-      setBranches([]);
-      setBranchesDropdownVisible(false);
-      return;
-    }
-
-    try {
-      setBranchesLoading(true);
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/get-branches/?search=${searchText}`
-      );
-      setBranches(response.data);
-      setBranchesDropdownVisible(true);
-    } catch (error) {
-      console.error('Ошибка при поиске филиалов:', error);
-      message.error('Не удалось загрузить список филиалов');
-    } finally {
-      setBranchesLoading(false);
-    }
-  };
-
-  const fetchCalculations = async protocolId => {
-    try {
-      setCalculationsLoading(true);
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/protocols/${protocolId}/calculations/`
-      );
-
-      const formattedCalculations = response.data.map(calc => {
-        let methodName = calc.research_method.name;
-        if (calc.research_method.is_group_member && calc.research_method.groups?.length > 0) {
-          const groupName = calc.research_method.groups[0].name;
-          const methodNameLower = methodName.charAt(0).toLowerCase() + methodName.slice(1);
-          methodName = `${groupName} ${methodNameLower}`;
-        }
-
-        let formattedResult = calc.result;
-        if (
-          formattedResult &&
-          !isNaN(formattedResult.replace(',', '.')) &&
-          formattedResult.match(/^-?\d*[.,]?\d*$/)
-        ) {
-          const numValue = parseFloat(formattedResult.replace(',', '.'));
-          if (numValue < 0) {
-            formattedResult = `минус ${Math.abs(numValue).toString().replace('.', ',')}`;
-          } else {
-            formattedResult = formattedResult.toString().replace('.', ',');
-          }
-        }
-
-        return {
-          key: calc.key,
-          methodName,
-          unit: calc.unit,
-          inputData: formatInputData(calc.input_data),
-          result: formattedResult,
-          measurementError: formatMeasurementError(calc.measurement_error),
-          equipment: calc.equipment,
-          executor: calc.executor,
-          sampleNumber: calc.sample.registration_number,
-        };
-      });
-
-      setCalculations(formattedCalculations);
-    } catch (error) {
-      console.error('Ошибка при загрузке результатов расчетов:', error);
-      message.error('Не удалось загрузить результаты расчетов');
-    } finally {
-      setCalculationsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (protocol?.id) {
-      fetchCalculations(protocol.id);
-    }
-  }, [protocol?.id]);
-
-  const formatInputData = inputData => {
-    return Object.entries(inputData)
-      .map(([key, value]) => {
-        let formattedValue = value;
-        if (!isNaN(value)) {
-          if (parseFloat(value) < 0) {
-            formattedValue = value.toString().replace('-', '-').replace('.', ',');
-          } else {
-            formattedValue = value.toString().replace('.', ',');
-          }
-        }
-        return `${key} = ${formattedValue}`;
-      })
-      .join('\n');
-  };
-
-  const formatMeasurementError = error => {
-    if (!error || error === '-') return '-';
-    return `±${error.toString().replace('.', ',')}`;
   };
 
   // Группировка результатов по пробам
   const groupedCalculations = React.useMemo(() => {
+    console.log('Группировка расчетов. Входные данные:', calculations);
     if (!calculations || calculations.length === 0) return {};
 
-    return calculations.reduce((acc, calc) => {
+    const grouped = calculations.reduce((acc, calc) => {
       const sampleNumber = calc.sampleNumber;
       if (!acc[sampleNumber]) {
         acc[sampleNumber] = [];
       }
-      // Создаем новый объект без поля sampleNumber
-      const { sampleNumber: _, ...calcWithoutSample } = calc;
-      acc[sampleNumber].push(calcWithoutSample);
+      acc[sampleNumber].push({
+        ...calc,
+        key: `${calc.sampleNumber}-${calc.methodName}`,
+      });
       return acc;
     }, {});
+
+    console.log('Сгруппированные расчеты:', grouped);
+    return grouped;
   }, [calculations]);
 
   const calculationColumns = [
@@ -561,40 +412,6 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
       width: '8%',
     },
   ];
-
-  const handleTabChange = tab => {
-    if (tab !== activeTab) {
-      setIsAnimating(true);
-      setTimeout(() => {
-        setActiveTab(tab);
-        setTimeout(() => {
-          setIsAnimating(false);
-        }, 50);
-      }, 300);
-    }
-  };
-
-  const fetchTemplates = async (laboratoryId, departmentId = null) => {
-    try {
-      setTemplatesLoading(true);
-      const params = { laboratory: laboratoryId };
-      if (departmentId) {
-        params.department = departmentId;
-      }
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/excel-templates/by-laboratory/`,
-        {
-          params,
-        }
-      );
-      setTemplates(response.data);
-    } catch (error) {
-      console.error('Ошибка при загрузке шаблонов:', error);
-      message.error('Не удалось загрузить список шаблонов');
-    } finally {
-      setTemplatesLoading(false);
-    }
-  };
 
   return (
     <Modal
@@ -705,44 +522,11 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
                 <label>Филиал</label>
                 <div className="search-container" ref={branchSearchRef}>
                   <Input
-                    value={branchSearchValue}
-                    onChange={e => {
-                      const value = e.target.value;
-                      setBranchSearchValue(value);
-                      setFormData(prev => ({ ...prev, branch: value }));
-                      searchBranches(value);
-                    }}
-                    onFocus={() => {
-                      if (branchSearchValue && branchSearchValue.length >= 2) {
-                        setBranchesDropdownVisible(true);
-                      }
-                    }}
+                    value={formData.branch}
+                    onChange={handleInputChange('branch')}
                     placeholder="Введите название филиала"
                     style={{ width: '100%' }}
                   />
-                  {branchesDropdownVisible && branches.length > 0 && (
-                    <div className="search-dropdown">
-                      {branchesLoading ? (
-                        <div className="search-loading">
-                          <Spin size="small" />
-                        </div>
-                      ) : (
-                        branches.map((branch, index) => (
-                          <div
-                            key={index}
-                            className="search-option"
-                            onClick={() => {
-                              setFormData(prev => ({ ...prev, branch }));
-                              setBranchSearchValue(branch);
-                              setBranchesDropdownVisible(false);
-                            }}
-                          >
-                            {branch}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
 

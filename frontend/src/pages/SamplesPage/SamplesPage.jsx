@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState } from 'react';
 import { Table, Space, Input, message } from 'antd';
 import { PlusOutlined, SearchOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../../shared/ui/Layout/Layout';
 import SamplesPageWrapper from './SamplesPageWrapper';
 import CreateSampleModal from '../../features/Modals/CreateSampleModal/CreateSampleModal';
 import EditSampleModal from '../../features/Modals/EditSampleModal/EditSampleModal';
 import { Button } from '../../shared/ui/Button/Button';
 import LoadingCard from '../../features/Cards/ui/LoadingCard/LoadingCard';
-import dayjs from 'dayjs';
+import { samplesApi } from '../../shared/api/samples';
 import './SamplesPage.css';
 
 const formatDate = dateString => {
@@ -22,34 +22,67 @@ const formatDate = dateString => {
 };
 
 const SamplesPage = () => {
-  const [laboratories, setLaboratories] = useState([]);
-  const [departments, setDepartments] = useState([]);
+  const queryClient = useQueryClient();
   const [selectedLaboratory, setSelectedLaboratory] = useState(null);
-  const [samples, setSamples] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [searchedColumn, setSearchedColumn] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedSample, setSelectedSample] = useState(null);
-  const [selectedDepartment, setSelectedDepartment] = useState(null);
 
-  // Загрузка списка лабораторий
-  useEffect(() => {
-    const fetchLaboratories = async () => {
-      try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
-        setLaboratories(response.data || []);
-      } catch (error) {
-        console.error('Ошибка при загрузке лабораторий:', error);
-        message.error('Не удалось загрузить список лабораторий');
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Запрос на получение списка лабораторий
+  const { data: laboratories = [], isLoading: laboratoriesLoading } = useQuery({
+    queryKey: ['laboratories'],
+    queryFn: samplesApi.getLaboratories,
+  });
 
-    fetchLaboratories();
-  }, []);
+  // Запрос на получение подразделений
+  const { data: departments = [], isLoading: departmentsLoading } = useQuery({
+    queryKey: ['departments', selectedLaboratory?.id],
+    queryFn: () => samplesApi.getDepartments(selectedLaboratory.id),
+    enabled: !!selectedLaboratory?.id,
+  });
+
+  // Запрос на получение проб
+  const { data: samples = [], isLoading: samplesLoading } = useQuery({
+    queryKey: ['samples', selectedLaboratory?.id, selectedDepartment?.id],
+    queryFn: () =>
+      samplesApi.getSamples({
+        laboratoryId: selectedLaboratory.id,
+        departmentId: selectedDepartment?.id,
+      }),
+    enabled: !!selectedLaboratory?.id,
+  });
+
+  // Мутация для создания пробы
+  const createSampleMutation = useMutation({
+    mutationFn: samplesApi.createSample,
+    onSuccess: () => {
+      message.success('Проба успешно создана');
+      queryClient.invalidateQueries(['samples', selectedLaboratory?.id, selectedDepartment?.id]);
+      setIsCreateModalOpen(false);
+    },
+    onError: error => {
+      console.error('Ошибка при создании пробы:', error);
+      message.error('Не удалось создать пробу');
+    },
+  });
+
+  // Мутация для обновления пробы
+  const updateSampleMutation = useMutation({
+    mutationFn: samplesApi.updateSample,
+    onSuccess: () => {
+      message.success('Проба успешно обновлена');
+      queryClient.invalidateQueries(['samples', selectedLaboratory?.id, selectedDepartment?.id]);
+      setIsEditModalOpen(false);
+      setSelectedSample(null);
+    },
+    onError: error => {
+      console.error('Ошибка при обновлении пробы:', error);
+      message.error('Не удалось обновить пробу');
+    },
+  });
 
   const handleSearch = (selectedKeys, confirm, dataIndex) => {
     confirm();
@@ -154,30 +187,8 @@ const SamplesPage = () => {
     setIsCreateModalOpen(false);
   };
 
-  const handleCreateSuccess = () => {
-    setIsCreateModalOpen(false);
-    loadSamples(selectedLaboratory.id, selectedDepartment?.id); // Обновляем список проб после успешного создания с учетом подразделения
-  };
-
-  const loadSamples = async (laboratoryId, departmentId = null) => {
-    setLoading(true);
-    try {
-      const params = {
-        laboratory: laboratoryId,
-      };
-      if (departmentId) {
-        params.department = departmentId;
-      }
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/samples/`, {
-        params,
-      });
-      setSamples(response.data);
-    } catch (error) {
-      console.error('Ошибка при загрузке проб:', error);
-      message.error('Не удалось загрузить список проб');
-    } finally {
-      setLoading(false);
-    }
+  const handleCreateSuccess = sampleData => {
+    createSampleMutation.mutate(sampleData);
   };
 
   const handleRowClick = record => {
@@ -190,63 +201,36 @@ const SamplesPage = () => {
     setSelectedSample(null);
   };
 
-  const handleEditModalSuccess = () => {
-    setIsEditModalOpen(false);
-    setSelectedSample(null);
-    loadSamples(selectedLaboratory.id, selectedDepartment?.id); // Обновляем список проб после успешного редактирования с учетом подразделения
+  const handleEditModalSuccess = data => {
+    updateSampleMutation.mutate({
+      id: selectedSample.id,
+      data: {
+        ...data,
+        laboratory: selectedLaboratory.id,
+        department: selectedDepartment?.id,
+      },
+    });
   };
 
-  const handleLaboratoryClick = async laboratory => {
-    setLoading(true);
+  const handleLaboratoryClick = laboratory => {
     setSelectedLaboratory(laboratory);
-    try {
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/departments/by_laboratory/?laboratory_id=${laboratory.id}`
-      );
-      const departmentsData = response.data.filter(dept => !dept.is_deleted) || [];
-      setDepartments(departmentsData);
-
-      if (departmentsData.length === 0) {
-        // Если нет подразделений, сразу загружаем пробы для лаборатории
-        await loadSamples(laboratory.id);
-      }
-    } catch (error) {
-      console.error('Ошибка при загрузке данных:', error);
-      message.error('Не удалось загрузить данные');
-    } finally {
-      setLoading(false);
-    }
+    setSelectedDepartment(null);
   };
 
-  const handleDepartmentClick = async department => {
-    setLoading(true);
+  const handleDepartmentClick = department => {
     setSelectedDepartment(department);
-    try {
-      await loadSamples(selectedLaboratory.id, department.id);
-    } catch (error) {
-      console.error('Ошибка при загрузке проб:', error);
-      message.error('Не удалось загрузить пробы');
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleBack = () => {
-    // Если мы на странице с таблицей проб и есть подразделения
     if (selectedDepartment && departments.length > 0) {
-      // Возвращаемся к выбору подразделения
       setSelectedDepartment(null);
-      setSamples([]);
     } else {
-      // Возвращаемся к выбору лаборатории
       setSelectedLaboratory(null);
       setSelectedDepartment(null);
-      setDepartments([]);
-      setSamples([]);
     }
   };
 
-  if (loading) {
+  if (laboratoriesLoading) {
     return (
       <SamplesPageWrapper>
         <Layout title={selectedLaboratory ? selectedLaboratory.name : 'Пробы'}>
@@ -360,7 +344,7 @@ const SamplesPage = () => {
           >
             <Table
               columns={columns}
-              loading={loading}
+              loading={samplesLoading}
               dataSource={samples}
               rowKey="id"
               onRow={record => ({

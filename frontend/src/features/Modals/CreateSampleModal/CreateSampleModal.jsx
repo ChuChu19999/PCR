@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Input, Select, message, Spin, DatePicker } from 'antd';
-import axios from 'axios';
-import Modal from '../ui/Modal';
-import './CreateSampleModal.css';
+import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import locale from 'antd/es/date-picker/locale/ru_RU';
+import Modal from '../ui/Modal';
+import { samplesApi } from '../../../shared/api/samples';
+import { protocolsApi } from '../../../shared/api/protocols';
+import './CreateSampleModal.css';
 
 const { Option } = Select;
 
@@ -22,18 +24,37 @@ const CreateSampleModal = ({ onClose, onSuccess, laboratoryId, departmentId }) =
     receiving_date: null,
   });
 
-  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const [protocolsLoading, setProtocolsLoading] = useState(false);
-  const [protocols, setProtocols] = useState([]);
   const [protocolSearchValue, setProtocolSearchValue] = useState('');
   const [protocolsDropdownVisible, setProtocolsDropdownVisible] = useState(false);
   const protocolSearchRef = useRef(null);
   const [locationSearchValue, setLocationSearchValue] = useState('');
   const [locationsDropdownVisible, setLocationsDropdownVisible] = useState(false);
   const locationSearchRef = useRef(null);
-  const [samplingLocations, setSamplingLocations] = useState([]);
-  const [locationsLoading, setLocationsLoading] = useState(false);
+
+  // Запрос на получение протоколов
+  const { data: protocols = [], isLoading: protocolsLoading } = useQuery({
+    queryKey: ['protocols', protocolSearchValue, laboratoryId, departmentId],
+    queryFn: () =>
+      protocolsApi.getProtocols({
+        laboratoryId,
+        departmentId,
+        search: protocolSearchValue,
+      }),
+    enabled: protocolSearchValue.length > 0,
+  });
+
+  // Запрос на получение мест отбора проб
+  const { data: samplingLocations = [], isLoading: locationsLoading } = useQuery({
+    queryKey: ['samplingLocations', locationSearchValue, laboratoryId, departmentId],
+    queryFn: () =>
+      samplesApi.getSamplingLocations({
+        searchText: locationSearchValue,
+        laboratoryId,
+        departmentId,
+      }),
+    enabled: locationSearchValue.length >= 2,
+  });
 
   useEffect(() => {
     const handleClickOutside = event => {
@@ -77,108 +98,27 @@ const CreateSampleModal = ({ onClose, onSuccess, laboratoryId, departmentId }) =
   };
 
   const handleSave = async () => {
-    try {
-      if (!validateForm()) {
-        return;
-      }
-
-      setLoading(true);
-
-      const dataToSend = {
-        ...formData,
-        laboratory: laboratoryId,
-        department: departmentId,
-        sampling_date: formData.sampling_date
-          ? dayjs(formData.sampling_date).format('YYYY-MM-DD')
-          : null,
-        receiving_date: formData.receiving_date
-          ? dayjs(formData.receiving_date).format('YYYY-MM-DD')
-          : null,
-      };
-
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/samples/`, dataToSend);
-
-      message.success('Проба успешно создана');
-      onSuccess();
-    } catch (error) {
-      console.error('Ошибка при создании пробы:', error);
-
-      if (error.response?.data) {
-        const serverErrors = error.response.data;
-        const newErrors = {};
-
-        Object.keys(serverErrors).forEach(field => {
-          if (Array.isArray(serverErrors[field])) {
-            newErrors[field] = serverErrors[field][0];
-          } else {
-            newErrors[field] = serverErrors[field];
-          }
-        });
-
-        setErrors(prev => ({ ...prev, ...newErrors }));
-
-        if (Object.keys(newErrors).length === 0 && error.response?.data?.error) {
-          message.error(error.response.data.error);
-        }
-      } else {
-        message.error('Произошла ошибка при создании пробы');
-      }
-    } finally {
-      setLoading(false);
+    if (!validateForm()) {
+      return;
     }
-  };
 
-  const fetchProtocols = async (searchValue = '') => {
-    try {
-      setProtocolsLoading(true);
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/protocols/`, {
-        params: {
-          search: searchValue,
-          laboratory: laboratoryId,
-          department: departmentId,
-        },
-      });
-      setProtocols(response.data);
-      setProtocolsDropdownVisible(true);
-    } catch (error) {
-      console.error('Ошибка при загрузке протоколов:', error);
-      message.error('Не удалось загрузить список протоколов');
-    } finally {
-      setProtocolsLoading(false);
-    }
-  };
+    const dataToSend = {
+      ...formData,
+      laboratory: laboratoryId,
+      department: departmentId,
+      sampling_date: formData.sampling_date
+        ? dayjs(formData.sampling_date).format('YYYY-MM-DD')
+        : null,
+      receiving_date: formData.receiving_date
+        ? dayjs(formData.receiving_date).format('YYYY-MM-DD')
+        : null,
+    };
 
-  const searchLocations = async query => {
-    try {
-      setLocationsLoading(true);
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/get-sampling-locations/`,
-        {
-          params: {
-            search: query,
-            laboratory: laboratoryId,
-            department: departmentId,
-          },
-        }
-      );
-      setSamplingLocations(response.data);
-    } catch (error) {
-      console.error('Ошибка при поиске места отбора пробы:', error);
-      message.error('Не удалось найти место отбора пробы');
-      setSamplingLocations([]);
-    } finally {
-      setLocationsLoading(false);
-    }
+    onSuccess(dataToSend);
   };
 
   return (
-    <Modal
-      header="Создание пробы"
-      onClose={onClose}
-      onSave={handleSave}
-      loading={loading}
-      style={{ width: '600px' }}
-    >
+    <Modal header="Создание пробы" onClose={onClose} onSave={handleSave} style={{ width: '600px' }}>
       <div className="create-sample-form">
         <div className="form-group">
           <label>
@@ -222,7 +162,6 @@ const CreateSampleModal = ({ onClose, onSuccess, laboratoryId, departmentId }) =
                 setLocationSearchValue(value);
                 setFormData(prev => ({ ...prev, sampling_location_detail: value }));
                 if (value.length >= 2) {
-                  searchLocations(value);
                   setLocationsDropdownVisible(true);
                 } else {
                   setLocationsDropdownVisible(false);
@@ -230,7 +169,6 @@ const CreateSampleModal = ({ onClose, onSuccess, laboratoryId, departmentId }) =
               }}
               onFocus={() => {
                 if (locationSearchValue && locationSearchValue.length >= 2) {
-                  searchLocations(locationSearchValue);
                   setLocationsDropdownVisible(true);
                 }
               }}
@@ -271,7 +209,11 @@ const CreateSampleModal = ({ onClose, onSuccess, laboratoryId, departmentId }) =
               onChange={e => {
                 const value = e.target.value;
                 setProtocolSearchValue(value);
-                fetchProtocols(value);
+                if (value.length >= 1) {
+                  setProtocolsDropdownVisible(true);
+                } else {
+                  setProtocolsDropdownVisible(false);
+                }
               }}
               onFocus={() => {
                 if (protocolSearchValue && protocolSearchValue.length >= 1) {

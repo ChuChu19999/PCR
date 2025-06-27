@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState } from 'react';
 import { Table, Space, Input, message } from 'antd';
 import { PlusOutlined, SearchOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../../shared/ui/Layout/Layout';
 import ProtocolsPageWrapper from './ProtocolsPageWrapper';
 import CreateProtocolModal from '../../features/Modals/CreateProtocolModal/CreateProtocolModal';
@@ -9,6 +9,7 @@ import EditProtocolModal from '../../features/Modals/EditProtocolModal/EditProto
 import EditTemplateModal from '../../features/Modals/ShablonEditModal/EditTemplateModal';
 import { Button } from '../../shared/ui/Button/Button';
 import LoadingCard from '../../features/Cards/ui/LoadingCard/LoadingCard';
+import { protocolsApi } from '../../shared/api/protocols';
 import dayjs from 'dayjs';
 import './ProtocolsPage.css';
 
@@ -49,41 +50,68 @@ const formatProtocolNumber = (number, date, isAccredited, samples) => {
 };
 
 const ProtocolsPage = () => {
-  const [laboratories, setLaboratories] = useState([]);
-  const [departments, setDepartments] = useState([]);
+  const queryClient = useQueryClient();
   const [selectedLaboratory, setSelectedLaboratory] = useState(null);
-  const [protocols, setProtocols] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchText, setSearchText] = useState('');
-  const [searchedColumn, setSearchedColumn] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [selectedProtocol, setSelectedProtocol] = useState(null);
-  const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
-  const [columnsState, setColumnsState] = useState({
-    test_protocol_number: { width: 200 },
-    sampling_act_number: { width: 200 },
-    is_accredited: { width: 100 },
-    created_at: { width: 200 },
+  const [selectedProtocol, setSelectedProtocol] = useState(null);
+  const [searchText, setSearchText] = useState('');
+  const [searchedColumn, setSearchedColumn] = useState('');
+
+  // Запрос на получение списка лабораторий
+  const { data: laboratories = [], isLoading: isLoadingLaboratories } = useQuery({
+    queryKey: ['laboratories'],
+    queryFn: protocolsApi.getLaboratories,
   });
 
-  // Загрузка списка лабораторий
-  useEffect(() => {
-    const fetchLaboratories = async () => {
-      try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
-        setLaboratories(response.data || []);
-      } catch (error) {
-        console.error('Ошибка при загрузке лабораторий:', error);
-        message.error('Не удалось загрузить список лабораторий');
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Запрос на получение подразделений
+  const { data: departments = [], isLoading: isLoadingDepartments } = useQuery({
+    queryKey: ['departments', selectedLaboratory?.id],
+    queryFn: () => protocolsApi.getDepartments(selectedLaboratory?.id),
+    enabled: !!selectedLaboratory?.id,
+  });
 
-    fetchLaboratories();
-  }, []);
+  // Запрос на получение протоколов
+  const { data: protocols = [], isLoading: isLoadingProtocols } = useQuery({
+    queryKey: ['protocols', selectedLaboratory?.id, selectedDepartment?.id],
+    queryFn: () =>
+      protocolsApi.getProtocols({
+        laboratoryId: selectedLaboratory?.id,
+        departmentId: selectedDepartment?.id,
+      }),
+    enabled: !!selectedLaboratory?.id,
+  });
+
+  // Мутация для создания протокола
+  const createProtocolMutation = useMutation({
+    mutationFn: protocolsApi.createProtocol,
+    onSuccess: () => {
+      message.success('Протокол успешно создан');
+      queryClient.invalidateQueries(['protocols']);
+      setIsCreateModalOpen(false);
+    },
+    onError: error => {
+      console.error('Ошибка при создании протокола:', error);
+      message.error('Произошла ошибка при создании протокола');
+    },
+  });
+
+  // Мутация для обновления протокола
+  const updateProtocolMutation = useMutation({
+    mutationFn: protocolsApi.updateProtocol,
+    onSuccess: () => {
+      message.success('Протокол успешно обновлен');
+      queryClient.invalidateQueries(['protocols']);
+      setIsEditModalOpen(false);
+      setSelectedProtocol(null);
+    },
+    onError: error => {
+      console.error('Ошибка при обновлении протокола:', error);
+      message.error('Произошла ошибка при обновлении протокола');
+    },
+  });
 
   const handleSearch = (selectedKeys, confirm, dataIndex) => {
     confirm();
@@ -137,29 +165,13 @@ const ProtocolsPage = () => {
         ? record[dataIndex].toString().toLowerCase().includes(value.toLowerCase())
         : '';
     },
-    render: (text, record) => {
-      if (dataIndex === 'date') {
-        return formatDate(text, record.is_accredited);
-      }
-      return text;
-    },
   });
-
-  const handleResize =
-    index =>
-    (e, { size }) => {
-      setColumnsState(prev => ({
-        ...prev,
-        [Object.keys(prev)[index]]: { ...prev[Object.keys(prev)[index]], width: size },
-      }));
-    };
 
   const columns = [
     {
       title: '№ протокола',
       dataIndex: 'test_protocol_number',
       key: 'test_protocol_number',
-      width: columnsState.test_protocol_number.width,
       ...getColumnSearchProps('test_protocol_number', 'Номеру протокола'),
       render: (text, record) =>
         formatProtocolNumber(text, record.test_protocol_date, record.is_accredited, record.samples),
@@ -168,7 +180,6 @@ const ProtocolsPage = () => {
       title: 'Номер акта отбора',
       dataIndex: 'sampling_act_number',
       key: 'sampling_act_number',
-      width: columnsState.sampling_act_number.width,
       ...getColumnSearchProps('sampling_act_number', 'Номеру акта отбора'),
       render: text => text || '-',
     },
@@ -176,54 +187,49 @@ const ProtocolsPage = () => {
       title: 'Аккредитован',
       dataIndex: 'is_accredited',
       key: 'is_accredited',
-      width: columnsState.is_accredited.width,
       render: value => (value ? '✓' : '-'),
     },
     {
       title: 'Дата создания',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: columnsState.created_at.width,
       sorter: (a, b) => new Date(a.created_at) - new Date(b.created_at),
       ...getColumnSearchProps('created_at', 'Дате создания'),
       render: text => formatDate(text, true),
     },
-  ].map((col, index) => ({
-    ...col,
-    onHeaderCell: column => ({
-      width: column.width,
-      onResize: handleResize(index),
-    }),
-  }));
+  ];
 
-  const handleCreateModalClose = () => {
-    setIsCreateModalOpen(false);
+  const handleLaboratoryClick = laboratory => {
+    setSelectedLaboratory(laboratory);
+    setSelectedDepartment(null);
   };
 
-  const handleCreateSuccess = () => {
-    setIsCreateModalOpen(false);
-    loadProtocols(selectedLaboratory.id, selectedDepartment?.id);
+  const handleDepartmentClick = department => {
+    setSelectedDepartment(department);
   };
 
-  const loadProtocols = async (laboratoryId, departmentId = null) => {
-    setLoading(true);
-    try {
-      const params = {
-        laboratory: laboratoryId,
-      };
-      if (departmentId) {
-        params.department = departmentId;
-      }
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/protocols/`, {
-        params,
-      });
-      setProtocols(response.data);
-    } catch (error) {
-      console.error('Ошибка при загрузке протоколов:', error);
-      message.error('Не удалось загрузить список протоколов');
-    } finally {
-      setLoading(false);
+  const handleBack = () => {
+    if (selectedDepartment && departments.length > 0) {
+      setSelectedDepartment(null);
+    } else {
+      setSelectedLaboratory(null);
+      setSelectedDepartment(null);
     }
+  };
+
+  const handleCreateModalSuccess = data => {
+    createProtocolMutation.mutate(data);
+  };
+
+  const handleEditModalSuccess = data => {
+    updateProtocolMutation.mutate({
+      id: selectedProtocol.id,
+      data: {
+        ...data,
+        laboratory: selectedLaboratory.id,
+        department: selectedDepartment?.id,
+      },
+    });
   };
 
   const handleRowClick = record => {
@@ -231,71 +237,10 @@ const ProtocolsPage = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleEditModalClose = () => {
-    setIsEditModalOpen(false);
-    setSelectedProtocol(null);
-  };
-
-  const handleEditModalSuccess = () => {
-    setIsEditModalOpen(false);
-    setSelectedProtocol(null);
-    loadProtocols(selectedLaboratory.id, selectedDepartment?.id);
-  };
-
-  const handleLaboratoryClick = async laboratory => {
-    setLoading(true);
-    setSelectedLaboratory(laboratory);
-    try {
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/departments/by_laboratory/?laboratory_id=${laboratory.id}`
-      );
-      const departmentsData = response.data.filter(dept => !dept.is_deleted) || [];
-      setDepartments(departmentsData);
-
-      if (departmentsData.length === 0) {
-        // Если нет подразделений, сразу загружаем протоколы для лаборатории
-        await loadProtocols(laboratory.id);
-      }
-    } catch (error) {
-      console.error('Ошибка при загрузке данных:', error);
-      message.error('Не удалось загрузить данные');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDepartmentClick = async department => {
-    setLoading(true);
-    setSelectedDepartment(department);
-    try {
-      await loadProtocols(selectedLaboratory.id, department.id);
-    } catch (error) {
-      console.error('Ошибка при загрузке протоколов:', error);
-      message.error('Не удалось загрузить протоколы');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleBack = () => {
-    // Если мы на странице с таблицей протоколов и есть подразделения
-    if (selectedDepartment && departments.length > 0) {
-      // Возвращаемся к выбору подразделения
-      setSelectedDepartment(null);
-      setProtocols([]);
-    } else {
-      // Возвращаемся к выбору лаборатории
-      setSelectedLaboratory(null);
-      setSelectedDepartment(null);
-      setDepartments([]);
-      setProtocols([]);
-    }
-  };
-
-  if (loading) {
+  if (isLoadingLaboratories) {
     return (
       <ProtocolsPageWrapper>
-        <Layout title={selectedLaboratory ? selectedLaboratory.name : 'Протоколы'}>
+        <Layout title="Протоколы">
           <div style={{ position: 'relative' }}>
             <LoadingCard />
           </div>
@@ -413,7 +358,7 @@ const ProtocolsPage = () => {
           >
             <Table
               columns={columns}
-              loading={loading}
+              loading={isLoadingProtocols}
               dataSource={protocols}
               rowKey="id"
               onRow={record => ({
@@ -439,8 +384,8 @@ const ProtocolsPage = () => {
 
         {isCreateModalOpen && (
           <CreateProtocolModal
-            onClose={handleCreateModalClose}
-            onSuccess={handleCreateSuccess}
+            onClose={() => setIsCreateModalOpen(false)}
+            onSuccess={handleCreateModalSuccess}
             laboratoryId={selectedLaboratory.id}
             departmentId={selectedDepartment?.id}
           />
@@ -449,7 +394,7 @@ const ProtocolsPage = () => {
         {isEditModalOpen && selectedProtocol && (
           <EditProtocolModal
             isOpen={isEditModalOpen}
-            onClose={handleEditModalClose}
+            onClose={() => setIsEditModalOpen(false)}
             onSuccess={handleEditModalSuccess}
             protocol={selectedProtocol}
             laboratoryId={selectedLaboratory.id}

@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState } from 'react';
 import { Table, Space, Input, message } from 'antd';
 import { PlusOutlined, SearchOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../../shared/ui/Layout/Layout';
 import EquipmentPageWrapper from './EquipmentPageWrapper';
 import CreateEquipmentModal from '../../features/Modals/CreateEquipmentModal/CreateEquipmentModal';
 import EditEquipmentModal from '../../features/Modals/EditEquipmentModal/EditEquipmentModal';
 import { Button } from '../../shared/ui/Button/Button';
 import LoadingCard from '../../features/Cards/ui/LoadingCard/LoadingCard';
+import { equipmentApi } from '../../shared/api/equipment';
 import './EquipmentPage.css';
 
 const formatDate = dateString => {
@@ -21,17 +22,82 @@ const formatDate = dateString => {
 };
 
 const EquipmentPage = () => {
-  const [laboratories, setLaboratories] = useState([]);
-  const [departments, setDepartments] = useState([]);
+  const queryClient = useQueryClient();
   const [selectedLaboratory, setSelectedLaboratory] = useState(null);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
-  const [equipment, setEquipment] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [searchedColumn, setSearchedColumn] = useState('');
+
+  // Запрос на получение списка лабораторий
+  const { data: laboratories = [], isLoading: isLoadingLaboratories } = useQuery({
+    queryKey: ['laboratories'],
+    queryFn: equipmentApi.getLaboratories,
+  });
+
+  // Запрос на получение подразделений
+  const { data: departments = [], isLoading: isLoadingDepartments } = useQuery({
+    queryKey: ['departments', selectedLaboratory?.id],
+    queryFn: () => equipmentApi.getDepartments(selectedLaboratory?.id),
+    enabled: !!selectedLaboratory?.id,
+  });
+
+  // Запрос на получение оборудования
+  const { data: equipment = [], isLoading: isLoadingEquipment } = useQuery({
+    queryKey: ['equipment', selectedLaboratory?.id, selectedDepartment?.id],
+    queryFn: () =>
+      equipmentApi.getEquipment({
+        laboratoryId: selectedLaboratory?.id,
+        departmentId: selectedDepartment?.id,
+      }),
+    enabled: !!selectedLaboratory?.id,
+  });
+
+  // Мутация для создания оборудования
+  const createEquipmentMutation = useMutation({
+    mutationFn: equipmentApi.createEquipment,
+    onSuccess: () => {
+      message.success('Прибор успешно создан');
+      queryClient.invalidateQueries(['equipment']);
+      setIsCreateModalOpen(false);
+    },
+    onError: error => {
+      console.error('Ошибка при создании прибора:', error);
+      message.error('Произошла ошибка при создании прибора');
+    },
+  });
+
+  // Мутация для обновления оборудования
+  const updateEquipmentMutation = useMutation({
+    mutationFn: equipmentApi.updateEquipment,
+    onSuccess: () => {
+      message.success('Прибор успешно обновлен');
+      queryClient.invalidateQueries(['equipment']);
+      setIsEditModalOpen(false);
+      setSelectedEquipment(null);
+    },
+    onError: error => {
+      console.error('Ошибка при обновлении прибора:', error);
+      message.error('Произошла ошибка при обновлении прибора');
+    },
+  });
+
+  // Мутация для удаления оборудования
+  const deleteEquipmentMutation = useMutation({
+    mutationFn: equipmentApi.deleteEquipment,
+    onSuccess: () => {
+      message.success('Прибор успешно удален');
+      queryClient.invalidateQueries(['equipment']);
+      setIsEditModalOpen(false);
+      setSelectedEquipment(null);
+    },
+    onError: error => {
+      console.error('Ошибка при удалении прибора:', error);
+      message.error('Произошла ошибка при удалении прибора');
+    },
+  });
 
   const handleSearch = (selectedKeys, confirm, dataIndex) => {
     confirm();
@@ -91,19 +157,6 @@ const EquipmentPage = () => {
         ? record[dataIndex].toString().toLowerCase().includes(value.toLowerCase())
         : '';
     },
-    render: (text, record) => {
-      if (dataIndex === 'verification_date' || dataIndex === 'verification_end_date') {
-        return formatDate(text);
-      }
-      if (dataIndex === 'type') {
-        const types = {
-          measuring_instrument: 'Средство измерения',
-          test_equipment: 'Испытательное оборудование',
-        };
-        return types[text] || text;
-      }
-      return text;
-    },
   });
 
   const columns = [
@@ -113,6 +166,13 @@ const EquipmentPage = () => {
       key: 'type',
       sorter: (a, b) => a.type.localeCompare(b.type),
       ...getColumnSearchProps('type', 'типу'),
+      render: text => {
+        const types = {
+          measuring_instrument: 'Средство измерения',
+          test_equipment: 'Испытательное оборудование',
+        };
+        return types[text] || text;
+      },
     },
     {
       title: 'Наименование',
@@ -144,95 +204,50 @@ const EquipmentPage = () => {
     },
   ];
 
-  useEffect(() => {
-    const fetchLaboratories = async () => {
-      try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/laboratories/`);
-        setLaboratories(response.data.filter(lab => !lab.is_deleted));
-      } catch (error) {
-        console.error('Ошибка при загрузке лабораторий:', error);
-        message.error('Не удалось загрузить список лабораторий');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchLaboratories();
-  }, []);
-
-  const handleLaboratoryClick = async laboratory => {
-    setLoading(true);
+  const handleLaboratoryClick = laboratory => {
     setSelectedLaboratory(laboratory);
-    try {
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/departments/by_laboratory/?laboratory_id=${laboratory.id}`
-      );
-      const departmentsData = response.data.filter(dept => !dept.is_deleted) || [];
-      setDepartments(departmentsData);
-
-      if (departmentsData.length === 0) {
-        await loadEquipment(laboratory.id);
-      }
-    } catch (error) {
-      console.error('Ошибка при загрузке данных:', error);
-      message.error('Не удалось загрузить данные');
-    } finally {
-      setLoading(false);
-    }
+    setSelectedDepartment(null);
   };
 
-  const handleDepartmentClick = async department => {
-    setLoading(true);
+  const handleDepartmentClick = department => {
     setSelectedDepartment(department);
-    try {
-      await loadEquipment(selectedLaboratory.id, department.id);
-    } catch (error) {
-      console.error('Ошибка при загрузке приборов:', error);
-      message.error('Не удалось загрузить приборы');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadEquipment = async (laboratoryId, departmentId = null) => {
-    try {
-      const params = {
-        laboratory: laboratoryId,
-        is_active: true,
-        is_deleted: false,
-      };
-      if (departmentId) {
-        params.department = departmentId;
-      }
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/equipment/`, {
-        params,
-      });
-      setEquipment(response.data);
-    } catch (error) {
-      console.error('Ошибка при загрузке приборов:', error);
-      message.error('Не удалось загрузить список приборов');
-    }
   };
 
   const handleBack = () => {
     if (selectedDepartment && departments.length > 0) {
       setSelectedDepartment(null);
-      setEquipment([]);
     } else {
       setSelectedLaboratory(null);
       setSelectedDepartment(null);
-      setDepartments([]);
-      setEquipment([]);
     }
   };
 
-  const handleCreateModalClose = () => {
-    setIsCreateModalOpen(false);
+  const handleCreateModalSuccess = data => {
+    createEquipmentMutation.mutate(data);
   };
 
-  const handleCreateModalSuccess = () => {
-    setIsCreateModalOpen(false);
-    loadEquipment(selectedLaboratory.id, selectedDepartment?.id);
+  const handleEditModalSuccess = data => {
+    if (data.delete) {
+      // Если это удаление
+      updateEquipmentMutation.mutate({
+        id: selectedEquipment.id,
+        data: { delete: true },
+      });
+    } else {
+      // Если это обновление
+      updateEquipmentMutation.mutate({
+        id: selectedEquipment.id,
+        data: {
+          ...data,
+          laboratory: selectedLaboratory.id,
+          department: selectedDepartment?.id,
+        },
+      });
+    }
+  };
+
+  const handleDeleteEquipment = id => {
+    deleteEquipmentMutation.mutate(id);
   };
 
   const handleRowClick = record => {
@@ -240,21 +255,10 @@ const EquipmentPage = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleEditModalClose = () => {
-    setIsEditModalOpen(false);
-    setSelectedEquipment(null);
-  };
-
-  const handleEditModalSuccess = () => {
-    setIsEditModalOpen(false);
-    setSelectedEquipment(null);
-    loadEquipment(selectedLaboratory.id, selectedDepartment?.id);
-  };
-
-  if (loading) {
+  if (isLoadingLaboratories) {
     return (
       <EquipmentPageWrapper>
-        <Layout title={selectedLaboratory ? selectedLaboratory.name : 'Приборы'}>
+        <Layout title="Приборы">
           <div style={{ position: 'relative' }}>
             <LoadingCard />
           </div>
@@ -365,7 +369,7 @@ const EquipmentPage = () => {
           >
             <Table
               columns={columns}
-              loading={loading}
+              loading={isLoadingEquipment}
               dataSource={equipment}
               rowKey="id"
               onRow={record => ({
@@ -392,7 +396,7 @@ const EquipmentPage = () => {
         {isCreateModalOpen && (
           <CreateEquipmentModal
             isOpen={isCreateModalOpen}
-            onClose={handleCreateModalClose}
+            onClose={() => setIsCreateModalOpen(false)}
             onSuccess={handleCreateModalSuccess}
             laboratoryId={selectedLaboratory.id}
             departmentId={selectedDepartment?.id}
@@ -402,7 +406,7 @@ const EquipmentPage = () => {
         {isEditModalOpen && selectedEquipment && (
           <EditEquipmentModal
             isOpen={isEditModalOpen}
-            onClose={handleEditModalClose}
+            onClose={() => setIsEditModalOpen(false)}
             onSuccess={handleEditModalSuccess}
             equipment={selectedEquipment}
             laboratoryId={selectedLaboratory.id}

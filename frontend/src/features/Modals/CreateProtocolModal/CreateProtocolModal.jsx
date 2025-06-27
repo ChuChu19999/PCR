@@ -1,48 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Input, DatePicker, Select, message, Checkbox, Spin } from 'antd';
-import axios from 'axios';
+import React, { useState, useRef } from 'react';
+import { Input, DatePicker, Select, message, Spin } from 'antd';
+import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import locale from 'antd/es/date-picker/locale/ru_RU';
 import Modal from '../ui/Modal';
 import SelectionConditionsForm from './SelectionConditionsForm';
+import { protocolsApi } from '../../../shared/api/protocols';
 import './CreateProtocolModal.css';
 
 const { Option } = Select;
 
 // Устанавливаем русскую локаль для dayjs
 dayjs.locale('ru');
-
-// Функция для форматирования ввода даты
-const formatDateInput = value => {
-  // Убираем все нецифровые символы
-  const numbers = value.replace(/\D/g, '');
-
-  // Ограничиваем длину до 8 цифр
-  const limitedNumbers = numbers.slice(0, 8);
-
-  // Форматируем в ДД.ММ.ГГГГ
-  if (limitedNumbers.length <= 2) return limitedNumbers;
-  if (limitedNumbers.length <= 4) return `${limitedNumbers.slice(0, 2)}.${limitedNumbers.slice(2)}`;
-  return `${limitedNumbers.slice(0, 2)}.${limitedNumbers.slice(2, 4)}.${limitedNumbers.slice(4)}`;
-};
-
-// Функция для валидации даты
-const isValidDate = dateString => {
-  if (!/^\d{2}\.\d{2}\.\d{4}$/.test(dateString)) return false;
-
-  const [day, month, year] = dateString.split('.').map(Number);
-  const date = new Date(year, month - 1, day);
-
-  return (
-    date.getDate() === day &&
-    date.getMonth() === month - 1 &&
-    date.getFullYear() === year &&
-    year >= 1900 &&
-    year <= 2100
-  );
-};
 
 const CreateProtocolModal = ({ onClose, onSuccess, laboratoryId, departmentId }) => {
   const [formData, setFormData] = useState({
@@ -59,47 +29,23 @@ const CreateProtocolModal = ({ onClose, onSuccess, laboratoryId, departmentId })
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const [templates, setTemplates] = useState([]);
-  const [templatesLoading, setTemplatesLoading] = useState(false);
-  const [branches, setBranches] = useState([]);
-  const [samplingLocations, setSamplingLocations] = useState([]);
-  const [branchesLoading, setBranchesLoading] = useState(false);
-  const [locationsLoading, setLocationsLoading] = useState(false);
-
   const [branchSearchValue, setBranchSearchValue] = useState('');
-  const [locationSearchValue, setLocationSearchValue] = useState('');
   const [branchesDropdownVisible, setBranchesDropdownVisible] = useState(false);
-  const [locationsDropdownVisible, setLocationsDropdownVisible] = useState(false);
 
   const branchSearchRef = useRef(null);
-  const locationSearchRef = useRef(null);
 
-  useEffect(() => {
-    // Загружаем шаблоны при монтировании компонента
-    fetchTemplates(laboratoryId, departmentId);
-  }, [laboratoryId, departmentId]);
+  // Запрос на получение шаблонов
+  const { data: templates = [], isLoading: templatesLoading } = useQuery({
+    queryKey: ['templates', laboratoryId, departmentId],
+    queryFn: () => protocolsApi.getTemplates({ laboratoryId, departmentId }),
+  });
 
-  const fetchTemplates = async (laboratoryId, departmentId = null) => {
-    try {
-      setTemplatesLoading(true);
-      const params = { laboratory: laboratoryId };
-      if (departmentId) {
-        params.department = departmentId;
-      }
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/excel-templates/by-laboratory/`,
-        {
-          params,
-        }
-      );
-      setTemplates(response.data);
-    } catch (error) {
-      console.error('Ошибка при загрузке шаблонов:', error);
-      message.error('Не удалось загрузить список шаблонов');
-    } finally {
-      setTemplatesLoading(false);
-    }
-  };
+  // Запрос на поиск филиалов
+  const { data: branches = [], isLoading: branchesLoading } = useQuery({
+    queryKey: ['branches', branchSearchValue],
+    queryFn: () => protocolsApi.searchBranches(branchSearchValue),
+    enabled: branchSearchValue.length >= 2,
+  });
 
   const handleInputChange = field => e => {
     const value = e?.target ? e.target.value : e;
@@ -163,10 +109,7 @@ const CreateProtocolModal = ({ onClose, onSuccess, laboratoryId, departmentId })
         is_accredited: formData.is_accredited,
       };
 
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/protocols/`, protocolData);
-
-      message.success('Протокол успешно создан');
-      onSuccess();
+      onSuccess(protocolData);
     } catch (error) {
       console.error('Ошибка при создании протокола:', error);
 
@@ -192,50 +135,6 @@ const CreateProtocolModal = ({ onClose, onSuccess, laboratoryId, departmentId })
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  const searchBranches = async searchText => {
-    if (!searchText || searchText.length < 2) {
-      setBranches([]);
-      setBranchesDropdownVisible(false);
-      return;
-    }
-
-    try {
-      setBranchesLoading(true);
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/get-branches/?search=${searchText}`
-      );
-      setBranches(response.data);
-      setBranchesDropdownVisible(true);
-    } catch (error) {
-      console.error('Ошибка при поиске филиалов:', error);
-      message.error('Не удалось загрузить список филиалов');
-    } finally {
-      setBranchesLoading(false);
-    }
-  };
-
-  const searchLocations = async searchText => {
-    if (!searchText || searchText.length < 2) {
-      setSamplingLocations([]);
-      setLocationsDropdownVisible(false);
-      return;
-    }
-
-    try {
-      setLocationsLoading(true);
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/get-sampling-locations/?search=${searchText}`
-      );
-      setSamplingLocations(response.data);
-      setLocationsDropdownVisible(true);
-    } catch (error) {
-      console.error('Ошибка при поиске мест отбора:', error);
-      message.error('Не удалось загрузить список мест отбора');
-    } finally {
-      setLocationsLoading(false);
     }
   };
 
@@ -355,7 +254,6 @@ const CreateProtocolModal = ({ onClose, onSuccess, laboratoryId, departmentId })
                 const value = e.target.value;
                 setBranchSearchValue(value);
                 setFormData(prev => ({ ...prev, branch: value }));
-                searchBranches(value);
               }}
               onFocus={() => {
                 if (branchSearchValue && branchSearchValue.length >= 2) {
