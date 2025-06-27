@@ -2,7 +2,7 @@ import 'ag-grid-enterprise';
 import '../shared/assets/fonts/fonts.css';
 import './App.css';
 import { LicenseManager } from 'ag-grid-enterprise';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { message } from 'antd';
 import { routersData } from './data';
@@ -25,6 +25,11 @@ message.config({
 });
 
 LicenseManager.setLicenseKey('BOARD4ALL_NDEwMjM1MTIwMDAwMA==8f4481b5cc626ad79fe91bc5f4e52e3d');
+
+// Компонент для промежуточной перезагрузки
+const ReloadComponent = () => {
+  return <Navigate to="/" replace />;
+};
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -92,6 +97,7 @@ export default function App() {
             <Route path="/laboratories/:id/oil-products" element={<OilProductsPage />} />
             <Route path="/departments/:id/oil-products" element={<OilProductsPage />} />
             <Route path="/research-method" element={<ResearchMethodPage />} />
+            <Route path="/reload" element={<ReloadComponent />} />
             <>
               {allRoutes.map((item, index) => (
                 <Route key={`${item.path}-${index}`} path={item.path} element={item.element} />

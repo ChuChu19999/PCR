@@ -83,7 +83,10 @@ const Sidebar = ({ username, onMinimizeChange }) => {
             (currentPath === '/' &&
               (localion.pathname.startsWith('/laboratory/') ||
                 localion.pathname.startsWith('/laboratories/') ||
-                localion.pathname.startsWith('/departments/'))))) ||
+                localion.pathname.startsWith('/departments/'))) ||
+            (currentPath === '/samples' &&
+              (localion.pathname.startsWith('/samples') ||
+                localion.pathname.startsWith('/research-method'))))) ||
         isOpen;
 
       const openSubmenu = e => {
@@ -99,9 +102,15 @@ const Sidebar = ({ username, onMinimizeChange }) => {
       };
 
       const navigateOnClick = () => {
-        if (location.pathname === currentPath) return;
-
-        navigate(currentPath || '/');
+        const targetPath = currentPath || '/';
+        if (localion.pathname === targetPath) {
+          navigate('/reload', { replace: true });
+          setTimeout(() => {
+            navigate(targetPath, { replace: true });
+          }, 0);
+        } else {
+          navigate(targetPath, { replace: true });
+        }
         setOpenSubmenus([]);
       };
 
