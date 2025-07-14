@@ -194,6 +194,7 @@ const EquipmentPage = () => {
       key: 'verification_date',
       sorter: (a, b) => new Date(a.verification_date) - new Date(b.verification_date),
       ...getColumnSearchProps('verification_date', 'дате поверки'),
+      render: text => formatDate(text),
     },
     {
       title: 'Дата окончания поверки',
@@ -201,6 +202,7 @@ const EquipmentPage = () => {
       key: 'verification_end_date',
       sorter: (a, b) => new Date(a.verification_end_date) - new Date(b.verification_end_date),
       ...getColumnSearchProps('verification_end_date', 'дате окончания поверки'),
+      render: text => formatDate(text),
     },
   ];
 
