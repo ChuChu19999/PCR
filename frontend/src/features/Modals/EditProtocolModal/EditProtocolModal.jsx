@@ -144,12 +144,26 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
 
   useEffect(() => {
     if (protocol) {
+      // Находим шаблон и его условия отбора
+      let selectionConditions = null;
+      if (templates.length > 0 && protocol.excel_template) {
+        const selectedTemplate = templates.find(t => t.id === protocol.excel_template);
+        if (selectedTemplate?.selection_conditions) {
+          selectionConditions = selectedTemplate.selection_conditions.map(condition => ({
+            ...condition,
+            value: protocol.selection_conditions?.[condition.name] || null,
+          }));
+        }
+      }
+
+      // Устанавливаем все данные формы, включая условия отбора
       setFormData({
         ...protocol,
         test_protocol_date: protocol.test_protocol_date ? dayjs(protocol.test_protocol_date) : null,
+        selection_conditions: selectionConditions,
       });
     }
-  }, [protocol]);
+  }, [protocol, templates]);
 
   const handleInputChange = field => e => {
     const value = e?.target ? e.target.value : e;

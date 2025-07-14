@@ -130,6 +130,14 @@ export const protocolsApi = {
     });
   },
 
+  // Получение протокола по ID
+  getProtocolById: async protocolId => {
+    const response = await axios.get(
+      `${import.meta.env.VITE_API_URL}/api/protocols/${protocolId}/`
+    );
+    return response.data;
+  },
+
   // Генерация Excel-файла протокола
   generateProtocolExcel: async protocolId => {
     const response = await axios.get(

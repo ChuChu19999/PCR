@@ -298,6 +298,19 @@ const EquipmentPage = () => {
     );
   }
 
+  // Если идет загрузка подразделений, показываем загрузку
+  if (isLoadingDepartments) {
+    return (
+      <EquipmentPageWrapper>
+        <Layout title={selectedLaboratory.name}>
+          <div style={{ position: 'relative' }}>
+            <LoadingCard />
+          </div>
+        </Layout>
+      </EquipmentPageWrapper>
+    );
+  }
+
   // Если есть подразделения и подразделение еще не выбрано, показываем список подразделений
   if (departments.length > 0 && !selectedDepartment) {
     return (

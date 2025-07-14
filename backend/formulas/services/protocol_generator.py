@@ -1,1945 +1,2092 @@
-import json
 import logging
-from copy import copy
 from io import BytesIO
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
-from openpyxl import load_workbook, Workbook
-from openpyxl.styles import Font, Alignment
-from openpyxl.cell.cell import MergedCell
-from openpyxl.worksheet.page import PageMargins
-from rest_framework import status
+import openpyxl
+from copy import copy
+from django.http import HttpResponse, HttpResponseBadRequest
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from ..models import (
-    ExcelTemplate,
-    Protocol,
-    Calculation,
-    Equipment,
-    Sample,
-    ResearchObject,
-    ResearchObjectMethod,
-)
-from ..utils.excel_utils import (
-    A4_HEIGHT_POINTS,
-    DEFAULT_ROW_HEIGHT,
-    save_row_dimensions,
-    restore_row_dimensions,
-    format_result,
-    get_content_height,
-    find_table_headers,
-    get_table_header_rows,
-    format_decimal_ru,
-    get_object_suffix,
-    format_protocol_number,
-)
+from ..models import Protocol, ExcelTemplate, ResearchObjectMethod
+from django.db import models
+from ..models import Equipment
+from django.utils import formats
 
 logger = logging.getLogger(__name__)
+
+# Константы для размеров листа А4
+A4_HEIGHT_POINTS = 841.89  # Высота А4 в точках
+DEFAULT_ROW_HEIGHT = 15  # Стандартная высота строки в Excel
+
+
+def format_decimal_ru(value) -> str:
+    """
+    Форматирует десятичное число для отображения в русском формате.
+    """
+    if value is None:
+        return ""
+
+    try:
+        if isinstance(value, (int, float)):
+            return str(value).replace(".", ",")
+        return str(value)
+    except:
+        return str(value)
+
+
+def copy_cell_style(source_cell, target_cell):
+    """
+    Безопасное копирование стилей из одной ячейки в другую
+    """
+    if not source_cell or not source_cell.has_style:
+        return
+
+    target_cell.font = copy(source_cell.font)
+    target_cell.fill = copy(source_cell.fill)
+    target_cell.border = copy(source_cell.border)
+    target_cell.alignment = copy(source_cell.alignment)
+    target_cell.number_format = source_cell.number_format
+    target_cell.protection = copy(source_cell.protection)
+
+
+def copy_row_with_styles(
+    source_sheet: openpyxl.worksheet.worksheet.Worksheet,
+    target_sheet: openpyxl.worksheet.worksheet.Worksheet,
+    source_row: int,
+    target_row: int,
+) -> None:
+    """
+    Копирует строку с сохранением стилей из исходного листа в целевой.
+    """
+    try:
+        logger.debug(f"Начинаем копирование строки {source_row} в строку {target_row}")
+
+        # Получаем максимальное количество столбцов
+        max_col = source_sheet.max_column
+        logger.debug(f"Максимальное количество столбцов: {max_col}")
+
+        # Копируем каждую ячейку в строке
+        for col in range(1, max_col + 1):
+            try:
+                source_cell = source_sheet.cell(row=source_row, column=col)
+
+                target_cell = target_sheet.cell(row=target_row, column=col)
+
+                target_cell.value = source_cell.value
+
+                copy_cell_style(source_cell, target_cell)
+
+                logger.debug(
+                    f"Скопирована ячейка [{source_row}, {col}] -> [{target_row}, {col}]"
+                )
+
+            except Exception as cell_error:
+                logger.error(
+                    f"Ошибка при копировании ячейки [{source_row}, {col}]: {str(cell_error)}"
+                )
+                continue
+
+        logger.debug(f"Успешно скопирована строка {source_row} -> {target_row}")
+
+    except Exception as e:
+        logger.error(f"Ошибка при копировании строки {source_row}: {str(e)}")
+        raise
+
+
+def copy_row_formatting(
+    source_sheet, target_sheet, source_row, target_row, merged_cells_map=None
+):
+    """
+    Копирует все форматирование строки: стили, размеры и объединенные ячейки
+    """
+    if source_row in source_sheet.row_dimensions:
+        target_sheet.row_dimensions[target_row] = copy(
+            source_sheet.row_dimensions[source_row]
+        )
+
+    copy_row_with_styles(source_sheet, target_sheet, source_row, target_row)
+
+    if merged_cells_map is not None:
+        for merged_range in source_sheet.merged_cells.ranges:
+            if merged_range.min_row == source_row:
+                new_range = openpyxl.worksheet.cell_range.CellRange(
+                    min_col=merged_range.min_col,
+                    min_row=target_row,
+                    max_col=merged_range.max_col,
+                    max_row=target_row + (merged_range.max_row - merged_range.min_row),
+                )
+                merged_cells_map.add(new_range)
+
+
+def calculate_current_height(sheet) -> float:
+    """
+    Рассчитывает текущую высоту листа в точках
+    """
+    total_height = 0
+    for row_num in range(1, sheet.max_row + 1):
+        if row_num in sheet.row_dimensions:
+            total_height += sheet.row_dimensions[row_num].height or DEFAULT_ROW_HEIGHT
+        else:
+            total_height += DEFAULT_ROW_HEIGHT
+    return total_height
+
+
+def copy_column_dimensions(source_sheet, target_sheet):
+    """
+    Копирует размеры столбцов из исходного листа в целевой.
+    """
+    try:
+        for key, value in source_sheet.column_dimensions.items():
+            target_sheet.column_dimensions[key].width = value.width
+            target_sheet.column_dimensions[key].hidden = value.hidden
+    except Exception as e:
+        logger.error(f"Ошибка при копировании размеров столбцов: {str(e)}")
+
+
+def process_cell_markers(protocol: Protocol, cell_value: str) -> str:
+    """
+    Обрабатывает все метки в ячейке.
+    """
+    if not cell_value or not isinstance(cell_value, str):
+        return cell_value
+
+    # Быстрая проверка на наличие меток
+    if "{" not in cell_value:
+        return cell_value
+
+    try:
+        result = cell_value
+
+        # Находим все метки сразу
+        start = 0
+        while True:
+            start = result.find("{", start)
+            if start == -1:
+                break
+
+            end = result.find("}", start)
+            if end == -1:
+                break
+
+            marker = result[start + 1 : end]
+
+            # Пропускаем метки условий отбора
+            if not marker.startswith("sel_cond_") and not marker == "bu":
+                value = get_marker_value_title(protocol, marker)
+                result = result.replace(f"{{{marker}}}", value)
+
+            start = end + 1
+
+        # Обрабатываем условия отбора один раз в конце
+        return process_selection_conditions_row(protocol, result)
+
+    except Exception as e:
+        logger.error(f"Ошибка при обработке меток в ячейке: {str(e)}")
+        return cell_value
+
+
+def get_marker_value_title(protocol: Protocol, marker: str) -> str:
+    """
+    Возвращает значение для метки в заголовке протокола.
+    """
+    try:
+        if marker == "test_protocol_number":
+            if not protocol.test_protocol_number:
+                return ""
+
+            base_number = protocol.test_protocol_number
+
+            # Если протокол аккредитован, добавляем суффикс
+            if protocol.is_accredited:
+                # Получаем все объекты испытаний из проб протокола
+                test_objects = ", ".join(
+                    [
+                        sample.test_object
+                        for sample in protocol.samples.filter(is_deleted=False)
+                    ]
+                )
+
+                # Определяем суффикс на основе объектов испытаний
+                suffix = ""
+                objects = [obj.strip().lower() for obj in test_objects.split(",")]
+                for test_object in objects:
+                    if "конденсат" in test_object:
+                        suffix = "дк"
+                        break
+                    elif "нефть" in test_object:
+                        suffix = "н"
+                        break
+
+                base_number = (
+                    f"{protocol.test_protocol_number}/07/{suffix}"
+                    if suffix
+                    else f"{protocol.test_protocol_number}/07"
+                )
+
+            # Добавляем дату протокола
+            if protocol.test_protocol_date:
+                return f"{base_number} от {protocol.test_protocol_date.strftime('%d.%m.%Y')}"
+            return base_number
+
+        elif marker == "subd":
+            return protocol.branch or ""
+        elif marker == "tel":
+            return protocol.phone or ""
+        elif marker == "res_object":
+            # Получаем объекты испытаний из всех проб
+            objects = [
+                sample.test_object
+                for sample in protocol.samples.filter(is_deleted=False)
+            ]
+            return ", ".join(objects) if objects else ""
+        elif marker == "sampling_location":
+            locations = [
+                sample.sampling_location_detail
+                for sample in protocol.samples.filter(is_deleted=False)
+                if sample.sampling_location_detail
+            ]
+            return ", ".join(locations) if locations else ""
+        elif marker == "sampling_date":
+            dates = sorted(
+                set(
+                    sample.sampling_date.strftime("%d.%m.%Y")
+                    for sample in protocol.samples.filter(is_deleted=False)
+                    if sample.sampling_date
+                )
+            )
+            return ", ".join(dates) if dates else ""
+        elif marker == "receiving_date":
+            dates = sorted(
+                set(
+                    sample.receiving_date.strftime("%d.%m.%Y")
+                    for sample in protocol.samples.filter(is_deleted=False)
+                    if sample.receiving_date
+                )
+            )
+            return ", ".join(dates) if dates else ""
+        elif marker == "laboratory_activity_dates":
+            # Получаем все даты лабораторной деятельности из расчетов
+            dates = [
+                calc.laboratory_activity_date
+                for sample in protocol.samples.filter(is_deleted=False)
+                for calc in sample.calculations.filter(is_deleted=False)
+                if calc.laboratory_activity_date
+            ]
+            if dates:
+                min_date = min(dates).strftime("%d.%m.%Y")
+                max_date = max(dates).strftime("%d.%m.%Y")
+                return f"{min_date}-{max_date}" if min_date != max_date else min_date
+            return ""
+        elif marker == "lab_location":
+            return protocol.laboratory_location or ""
+        elif marker == "sampling_act_number":
+            return protocol.sampling_act_number or ""
+        elif marker == "registration_number":
+            numbers = [
+                sample.registration_number
+                for sample in protocol.samples.filter(is_deleted=False)
+            ]
+            return ", ".join(numbers) if numbers else ""
+
+        return ""
+    except Exception as e:
+        logger.error(f"Ошибка при получении значения для метки {marker}: {str(e)}")
+        return ""
+
+
+def copy_table_header(
+    source_sheet, target_sheet, start_marker, end_marker
+) -> tuple[int, int]:
+    """
+    Копирует шапку таблицы между маркерами в новый лист.
+    Возвращает номер строки начала и конца шапки.
+    """
+    header_start = None
+    header_end = None
+    current_row_new = 1
+
+    for current_row in range(1, source_sheet.max_row + 1):
+        row = list(
+            source_sheet.iter_rows(
+                min_row=current_row, max_row=current_row, values_only=True
+            )
+        )[0]
+
+        if header_start is None:
+            if any(cell and str(cell).strip() == start_marker for cell in row):
+                header_start = current_row
+                continue
+        else:
+            if any(cell and str(cell).strip() == end_marker for cell in row):
+                header_end = current_row
+                break
+
+            copy_row_with_styles(
+                source_sheet, target_sheet, current_row, current_row_new
+            )
+            current_row_new += 1
+
+    return header_start, header_end
+
+
+def add_standalone_method(
+    calc,
+    current_row,
+    current_sheet,
+    template_sheet,
+    table_header_start,
+    table_header_end,
+    template_row_num,
+    merged_cells_map,
+    idx,
+    sheet_number,
+):
+    """
+    Добавляет одиночный метод в таблицу.
+    """
+    # Проверяем высоту листа
+    current_height = calculate_current_height(current_sheet)
+    if current_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
+        sheet_number += 1
+        current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
+        current_row = 1
+
+        # Создаем новую карту объединенных ячеек для нового листа
+        sheet_merged_cells_map = current_sheet.merged_cells
+
+        # Копируем шапку таблицы с сохранением форматирования и объединенных ячеек
+        for row_num in range(table_header_start + 1, table_header_end):
+            copy_row_formatting(
+                template_sheet,
+                current_sheet,
+                row_num,
+                current_row,
+                sheet_merged_cells_map,
+            )
+            current_row += 1
+    else:
+        sheet_merged_cells_map = current_sheet.merged_cells
+
+    # Копируем шаблонную строку с сохранением форматирования и объединенных ячеек
+    copy_row_formatting(
+        template_sheet,
+        current_sheet,
+        template_row_num,
+        current_row,
+        sheet_merged_cells_map,
+    )
+
+    # Заполняем значения
+    for col in range(1, template_sheet.max_column + 1):
+        cell = current_sheet.cell(row=current_row, column=col)
+        if not cell.value:
+            continue
+
+        value = str(cell.value)
+        if "{id_method}" in value:
+            cell.value = value.replace("{id_method}", str(idx))
+        elif "{name_method}" in value:
+            cell.value = value.replace("{name_method}", calc.research_method.name)
+        elif "{unit}" in value:
+            cell.value = value.replace("{unit}", calc.unit or "не указано")
+        elif "{result}" in value:
+            cell.value = value.replace("{result}", format_decimal_ru(calc.result))
+        elif "{measurement_error}" in value:
+            error_value = calc.measurement_error
+            formatted_error = (
+                error_value
+                if error_value and error_value.startswith("-")
+                else (
+                    f"±{error_value}"
+                    if error_value and error_value != "не указано"
+                    else "не указано"
+                )
+            )
+            cell.value = value.replace("{measurement_error}", formatted_error)
+        elif "{measurement_method}" in value:
+            cell.value = value.replace(
+                "{measurement_method}",
+                calc.research_method.measurement_method or "не указано",
+            )
+
+    return current_row + 1, current_sheet, sheet_number
+
+
+def add_group_methods(
+    group_data,
+    current_row,
+    current_sheet,
+    template_sheet,
+    table_header_start,
+    table_header_end,
+    template_row_num,
+    merged_cells_map,
+    idx,
+    sheet_number,
+):
+    """
+    Добавляет группу методов в таблицу.
+    """
+    # Проверяем высоту листа
+    current_height = calculate_current_height(current_sheet)
+    if (
+        current_height + DEFAULT_ROW_HEIGHT * (len(group_data["calculations"]) + 1)
+        > A4_HEIGHT_POINTS
+    ):
+        sheet_number += 1
+        current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
+        current_row = 1
+
+        # Создаем новую карту объединенных ячеек для нового листа
+        sheet_merged_cells_map = current_sheet.merged_cells
+
+        # Копируем шапку таблицы с сохранением форматирования и объединенных ячеек
+        for row_num in range(table_header_start + 1, table_header_end):
+            copy_row_formatting(
+                template_sheet,
+                current_sheet,
+                row_num,
+                current_row,
+                sheet_merged_cells_map,
+            )
+            current_row += 1
+    else:
+        sheet_merged_cells_map = current_sheet.merged_cells
+
+    # Получаем общие данные для группы
+    measurement_methods = set(
+        method.measurement_method for method in group_data["methods"]
+    )
+    units = set(calc.unit for calc in group_data["calculations"])
+
+    common_measurement_method = (
+        next(iter(measurement_methods)) if len(measurement_methods) == 1 else None
+    )
+    common_unit = next(iter(units)) if len(units) == 1 else None
+
+    # Копируем шаблонную строку для заголовка группы с сохранением форматирования и объединенных ячеек
+    copy_row_formatting(
+        template_sheet,
+        current_sheet,
+        template_row_num,
+        current_row,
+        sheet_merged_cells_map,
+    )
+
+    # Заполняем заголовок группы
+    for col in range(1, template_sheet.max_column + 1):
+        cell = current_sheet.cell(row=current_row, column=col)
+
+        # Убираем нижнюю границу
+        if cell.border:
+            new_border = copy(cell.border)
+            new_border.bottom = None
+            cell.border = new_border
+
+        if not cell.value:
+            continue
+
+        value = str(cell.value)
+        if "{id_method}" in value:
+            cell.value = value.replace("{id_method}", str(idx))
+        elif "{name_method}" in value:
+            cell.value = value.replace("{name_method}", group_data["name"])
+        elif "{unit}" in value:
+            cell.value = value.replace("{unit}", common_unit or "не указано")
+        elif "{measurement_method}" in value:
+            cell.value = value.replace(
+                "{measurement_method}",
+                common_measurement_method or "не указано",
+            )
+        else:
+            # Для остальных полей в заголовке группы ставим пустые значения
+            for placeholder in ["{result}", "{measurement_error}"]:
+                if placeholder in value:
+                    cell.value = value.replace(placeholder, "")
+
+    current_row += 1
+
+    # Добавляем методы группы
+    for i, calc in enumerate(group_data["calculations"]):
+        # Копируем шаблонную строку для метода с сохранением форматирования и объединенных ячеек
+        copy_row_formatting(
+            template_sheet,
+            current_sheet,
+            template_row_num,
+            current_row,
+            sheet_merged_cells_map,
+        )
+
+        # Особая обработка границ
+        last_method_in_group = i == len(group_data["calculations"]) - 1
+        for col in range(1, template_sheet.max_column + 1):
+            cell = current_sheet.cell(row=current_row, column=col)
+            if cell.border:
+                new_border = copy(cell.border)
+                new_border.top = None  # Всегда убираем верхнюю границу
+
+                if not last_method_in_group:
+                    new_border.bottom = (
+                        None  # Убираем нижнюю границу для всех кроме последнего
+                    )
+                cell.border = new_border
+
+        # Заполняем значения метода
+        for col in range(1, template_sheet.max_column + 1):
+            cell = current_sheet.cell(row=current_row, column=col)
+            if not cell.value:
+                continue
+
+            value = str(cell.value)
+            if "{id_method}" in value:
+                cell.value = ""  # Пустой ID для методов в группе
+            elif "{name_method}" in value:
+                # Делаем первую букву метода строчной
+                method_name = calc.research_method.name
+                if method_name:
+                    method_name = method_name[0].lower() + method_name[1:]
+                    cell.value = method_name
+            elif "{result}" in value:
+                cell.value = value.replace("{result}", format_decimal_ru(calc.result))
+            elif "{measurement_error}" in value:
+                error_value = calc.measurement_error
+                formatted_error = (
+                    error_value
+                    if error_value and error_value.startswith("-")
+                    else (
+                        f"±{error_value}"
+                        if error_value and error_value != "не указано"
+                        else "не указано"
+                    )
+                )
+                cell.value = value.replace("{measurement_error}", formatted_error)
+            elif "{unit}" in value:
+                cell.value = ""  # Пустая единица измерения для методов в группе
+            elif "{measurement_method}" in value:
+                cell.value = ""  # Пустой метод измерения для методов в группе
+
+        current_row += 1
+
+    return current_row, current_sheet, sheet_number
+
+
+def process_selection_conditions_row(protocol, cell_value: str) -> str:
+    """
+    Обрабатывает метки условий отбора в ячейке.
+    Если условий отбора нет в шаблоне, ставит "б/у" и пропускает строки с метками условий.
+    """
+    if not cell_value or not isinstance(cell_value, str):
+        return cell_value
+
+    # Быстрая проверка на наличие меток
+    if "{sel_cond_" not in cell_value and "{bu}" not in cell_value:
+        return cell_value
+
+    # Проверяем наличие условий отбора
+    selection_conditions = protocol.selection_conditions or {}
+
+    # Проверяем, есть ли хотя бы одно не-null значение
+    has_conditions = any(
+        value is not None and value != "" for value in selection_conditions.values()
+    )
+
+    # Если есть метка {bu} и нет значений условий отбора, заменяем на "б/у"
+    if "{bu}" in cell_value and not has_conditions:
+        return cell_value.replace("{bu}", "б/у")
+
+    # Если нет значений условий отбора и это строка с метками условий, пропускаем её
+    if not has_conditions and any(
+        f"{{sel_cond_{type}_{i}}}" in cell_value
+        for type in ["name", "val", "unit"]
+        for i in range(1, 6)
+    ):
+        return None
+
+    # Если есть условия отбора, обрабатываем их
+    if has_conditions:
+        # Получаем единицы измерения из шаблона протокола
+        template_conditions = (
+            protocol.excel_template.selection_conditions
+            if protocol.excel_template
+            else []
+        )
+        units_map = (
+            {item["name"]: item["unit"] for item in template_conditions}
+            if template_conditions
+            else {}
+        )
+
+        # Преобразуем selection_conditions в список, только не-null значения
+        selection_conditions_list = []
+        for name, value in selection_conditions.items():
+            if value is not None and value != "":
+                selection_conditions_list.append(
+                    {"name": name, "value": value, "unit": units_map.get(name, "")}
+                )
+
+        result = cell_value
+
+        # Проверяем наличие любых меток условий в строке
+        has_condition_tags = any(
+            f"{{sel_cond_{type}_{i}}}" in result
+            for type in ["name", "val", "unit"]
+            for i in range(1, 6)
+        )
+
+        # Если в строке есть метки условий, но нет значений для заполнения - пропускаем строку
+        if has_condition_tags and not selection_conditions_list:
+            return None
+
+        # Определяем индекс для текущей строки
+        current_index = None
+        for i in range(1, 6):
+            name_tag = f"{{sel_cond_name_{i}}}"
+            val_tag = f"{{sel_cond_val_{i}}}"
+            unit_tag = f"{{sel_cond_unit_{i}}}"
+
+            # Если в текущей строке есть хотя бы одна метка с этим индексом
+            if name_tag in result or val_tag in result or unit_tag in result:
+                current_index = i
+                break
+
+        # Если нашли индекс и он больше количества значений - пропускаем строку
+        if current_index is not None:
+            if current_index > len(selection_conditions_list):
+                return None
+
+            # Заполняем значения для текущего индекса
+            condition = selection_conditions_list[current_index - 1]
+            name_tag = f"{{sel_cond_name_{current_index}}}"
+            val_tag = f"{{sel_cond_val_{current_index}}}"
+            unit_tag = f"{{sel_cond_unit_{current_index}}}"
+
+            if name_tag in result:
+                result = result.replace(name_tag, condition["name"] + ":")
+            if val_tag in result:
+                formatted_value = format_decimal_ru(condition["value"])
+                result = result.replace(val_tag, formatted_value)
+            if unit_tag in result:
+                result = result.replace(unit_tag, condition["unit"])
+
+        # Обрабатываем метку {bu} - если есть условия, просто убираем метку
+        if "{bu}" in result:
+            result = result.replace("{bu}", "")
+
+        return result
+
+    return cell_value
+
+
+def check_method_name(method_name, test_objects):
+    """
+    Проверяет, соответствует ли метод объекту испытаний
+    """
+    method_lower = method_name.lower()
+    test_objects_lower = [obj.lower() for obj in test_objects]
+
+    logger.debug(f"Проверка метода: {method_name}")
+    logger.debug(f"Объекты испытаний: {', '.join(test_objects)}")
+
+    # Если в методе есть "нефть", но в объектах испытаний нет нефти
+    if "нефть" in method_lower and not any(
+        "нефть" in obj for obj in test_objects_lower
+    ):
+        logger.info(
+            f"Метод '{method_name}' содержит слово 'нефть', но в объектах испытаний нет нефти"
+        )
+        return False
+
+    # Если в методе есть "конденсат", проверяем наличие конденсата в объектах испытаний
+    if "конденсат" in method_lower:
+        has_condensate = any("конденсат" in obj for obj in test_objects_lower)
+        if has_condensate:
+            logger.debug(
+                f"Метод '{method_name}' подходит для объектов испытаний (найден конденсат)"
+            )
+            return True
+        else:
+            logger.info(
+                f"Метод '{method_name}' содержит слово 'конденсат', но в объектах испытаний нет конденсата"
+            )
+            return False
+
+    # Если метод не содержит специфических слов "нефть" или "конденсат" - считаем что он подходит
+    logger.debug(
+        f"Метод '{method_name}' прошел проверку на соответствие объектам испытаний (общий метод)"
+    )
+    return True
+
+
+def process_header(protocol, template_sheet, new_sheet, merged_cells_map):
+    """
+    Обрабатывает шапку протокола.
+    """
+    current_row_new = 1
+    found_start = False
+
+    # Идем по строкам шаблона, ищем начало шапки
+    for current_row in range(1, template_sheet.max_row + 1):
+        row = list(
+            template_sheet.iter_rows(
+                min_row=current_row, max_row=current_row, values_only=True
+            )
+        )[0]
+
+        # Ждем начало шапки
+        if not found_start:
+            if any(cell and str(cell).strip() == "{{start_header}}" for cell in row):
+                found_start = True
+            continue
+
+        # Если дошли до конца шапки - выходим
+        if any(cell and str(cell).strip() == "{{end_header}}" for cell in row):
+            return current_row + 1  # Возвращаем следующую строку после метки
+
+        # Пропускаем строку аккредитации если нужно
+        if (
+            not protocol.is_accredited
+            and protocol.excel_template
+            and current_row == protocol.excel_template.accreditation_header_row
+        ):
+            continue
+
+        # Копируем размеры строк
+        if current_row in template_sheet.row_dimensions:
+            new_sheet.row_dimensions[current_row_new] = copy(
+                template_sheet.row_dimensions[current_row]
+            )
+
+        # Копируем объединенные ячейки для текущей строки
+        for merged_range in template_sheet.merged_cells.ranges:
+            if merged_range.min_row == current_row:
+                # Создаем новый диапазон с учетом смещения строк
+                new_range = openpyxl.worksheet.cell_range.CellRange(
+                    min_col=merged_range.min_col,
+                    min_row=current_row_new,
+                    max_col=merged_range.max_col,
+                    max_row=current_row_new
+                    + (merged_range.max_row - merged_range.min_row),
+                )
+                merged_cells_map.add(new_range)
+
+        copy_row_with_styles(template_sheet, new_sheet, current_row, current_row_new)
+
+        # Обрабатываем метки в скопированной строке
+        skip_row = False
+        for col in range(1, template_sheet.max_column + 1):
+            cell = new_sheet.cell(row=current_row_new, column=col)
+            if cell.value:
+                processed_value = process_cell_markers(protocol, str(cell.value))
+                if processed_value is None:
+                    skip_row = True
+                    break
+                cell.value = processed_value
+
+        if skip_row:
+            # Удаляем размеры строки и объединенные ячейки
+            if current_row_new in new_sheet.row_dimensions:
+                del new_sheet.row_dimensions[current_row_new]
+            for merged_range in list(new_sheet.merged_cells.ranges):
+                if merged_range.min_row == current_row_new:
+                    new_sheet.merged_cells.remove(merged_range)
+            continue
+
+        current_row_new += 1
+
+    return current_row
+
+
+def process_header_and_conditions(
+    protocol, template_sheet, new_sheet, start_row, merged_cells_map
+):
+    """
+    Обрабатывает заголовок и условия отбора после шапки до начала таблицы.
+    """
+    current_row_new = new_sheet.max_row + 1
+
+    # Продолжаем со строки после шапки
+    for current_row in range(start_row, template_sheet.max_row + 1):
+        row = list(
+            template_sheet.iter_rows(
+                min_row=current_row, max_row=current_row, values_only=True
+            )
+        )[0]
+
+        # Если дошли до начала таблицы - выходим
+        if any(cell and str(cell).strip() == "{{start_table1}}" for cell in row):
+            return current_row
+
+        # Проверяем, нужно ли пропустить строку
+        skip_row = False
+        processed_values = []
+
+        # Обрабатываем метки в строке перед копированием
+        for cell_value in row:
+            if cell_value:
+                processed_value = process_cell_markers(protocol, str(cell_value))
+                if processed_value is None:
+                    skip_row = True
+                    break
+                processed_values.append(processed_value)
+            else:
+                processed_values.append(cell_value)
+
+        if skip_row:
+            continue
+
+        if current_row in template_sheet.row_dimensions:
+            new_sheet.row_dimensions[current_row_new] = copy(
+                template_sheet.row_dimensions[current_row]
+            )
+
+        for merged_range in template_sheet.merged_cells.ranges:
+            if merged_range.min_row == current_row:
+                # Создаем новый диапазон с учетом смещения строк
+                new_range = openpyxl.worksheet.cell_range.CellRange(
+                    min_col=merged_range.min_col,
+                    min_row=current_row_new,
+                    max_col=merged_range.max_col,
+                    max_row=current_row_new
+                    + (merged_range.max_row - merged_range.min_row),
+                )
+                merged_cells_map.add(new_range)
+
+        copy_row_with_styles(template_sheet, new_sheet, current_row, current_row_new)
+
+        # Заполняем обработанные значения
+        for col, processed_value in enumerate(processed_values, start=1):
+            if (
+                processed_value is not None
+            ):  # Проверяем на None, чтобы не заполнены стили пустым значением
+                cell = new_sheet.cell(row=current_row_new, column=col)
+                cell.value = processed_value
+
+        current_row_new += 1
+
+    return current_row
+
+
+def process_methods_table(
+    protocol,
+    template_sheet,
+    new_sheet,
+    table_start,
+    merged_cells_map,
+    current_row,
+    sheet_number,
+):
+    """
+    Обрабатывает таблицу с методами исследования
+    """
+    current_sheet = new_sheet
+    workbook = new_sheet.parent
+
+    # Получаем объекты испытаний из проб протокола
+    test_objects = []
+    for sample in protocol.samples.filter(is_deleted=False):
+        if sample.test_object:
+            test_objects.append(sample.test_object)
+
+    logger.info(f"Объекты испытаний: {', '.join(test_objects)}")
+
+    # Получаем все расчеты для протокола
+    calculations = []
+    for sample in protocol.samples.filter(is_deleted=False):
+        calcs = (
+            sample.calculations.filter(is_deleted=False)
+            .select_related("research_method")
+            .annotate(
+                method_sort_order=models.Subquery(
+                    ResearchObjectMethod.objects.filter(
+                        research_method=models.OuterRef("research_method"),
+                        research_object__laboratory=protocol.laboratory,
+                        research_object__department=protocol.department,
+                        is_deleted=False,
+                    ).values("sort_order")[:1]
+                )
+            )
+            .order_by("method_sort_order", "research_method__name", "created_at")
+        )
+        calculations.extend(calcs)
+
+    # Фильтруем методы по соответствию объектам испытаний
+    valid_calculations = []
+    for calc in calculations:
+        if check_method_name(calc.research_method.name, test_objects):
+            valid_calculations.append(calc)
+
+    # Если нет методов для вывода - пропускаем таблицу
+    if not valid_calculations:
+        logger.info("Нет методов для вывода в таблице 1, пропускаем таблицу")
+        return current_sheet
+
+    # Ищем начало и конец таблицы
+    table_header_start = None
+    table_header_end = None
+    table_end = None
+
+    for row_num in range(table_start, template_sheet.max_row + 1):
+        row = list(
+            template_sheet.iter_rows(min_row=row_num, max_row=row_num, values_only=True)
+        )[0]
+
+        # Проверяем метки таблицы
+        for cell in row:
+            if cell:
+                cell_str = str(cell).strip()
+                if table_header_start is None and cell_str == "{{start_table1}}":
+                    table_header_start = row_num
+                    break
+                elif table_header_start is not None and cell_str == "{start_table1}":
+                    table_header_end = row_num
+                    break
+                elif cell_str == "{{end_table1}}":
+                    table_end = row_num
+                    break
+
+    # Если не нашли начало таблицы - пропускаем
+    if table_header_start is None:
+        logger.info("Не найдена метка {{start_table1}} в шаблоне, пропускаем таблицу")
+        return current_sheet
+
+    # Если не нашли конец шапки - используем следующую строку после начала
+    if table_header_end is None:
+        table_header_end = table_header_start + 1
+        logger.info(
+            "Не найдена метка {start_table1}, используем следующую строку после {{start_table1}}"
+        )
+
+    # Копируем шапку таблицы
+    for row_num in range(table_header_start + 1, table_header_end):
+        copy_row_formatting(
+            template_sheet, current_sheet, row_num, current_row, merged_cells_map
+        )
+        current_row += 1
+
+    # Находим шаблонную строку между {start_table1} и {end_table1}
+    template_row = None
+    template_row_num = None
+
+    # Ищем шаблонную строку начиная с позиции table_header_end
+    for row_num in range(table_header_end, template_sheet.max_row + 1):
+        row = list(
+            template_sheet.iter_rows(min_row=row_num, max_row=row_num, values_only=True)
+        )[0]
+
+        if any(cell and str(cell).strip() == "{start_table1}" for cell in row):
+            template_row_num = row_num + 1
+            template_row = list(
+                template_sheet.iter_rows(
+                    min_row=template_row_num, max_row=template_row_num, values_only=True
+                )
+            )[0]
+            break
+        elif any(cell and str(cell).strip() == "{end_table1}" for cell in row):
+            break
+
+    # Если не нашли шаблонную строку - пропускаем таблицу
+    if not template_row:
+        logger.info("Не найдена шаблонная строка таблицы, пропускаем таблицу")
+        return current_sheet
+
+    # Группируем методы, но сохраняем порядок
+    grouped_calculations = {}
+    processed_calculations = []  # Список для сохранения порядка методов
+
+    for calc in valid_calculations:
+        # Проверяем, входит ли метод в группу
+        if (
+            calc.research_method.is_group_member
+            and calc.research_method.groups.exists()
+        ):
+            group = calc.research_method.groups.first()
+            group_id = group.id
+            group_name = group.name
+
+            if group_id not in grouped_calculations:
+                grouped_calculations[group_id] = {
+                    "name": group_name,
+                    "calculations": [],
+                    "methods": [],
+                }
+
+            grouped_calculations[group_id]["calculations"].append(calc)
+            grouped_calculations[group_id]["methods"].append(calc.research_method)
+            processed_calculations.append(
+                {"type": "group", "group_id": group_id, "calc": calc}
+            )
+        else:
+            processed_calculations.append({"type": "standalone", "calc": calc})
+
+    # Счетчик для нумерации методов
+    idx = 1
+
+    # Обрабатываем методы в порядке их следования
+    current_group = None
+    group_methods = []
+
+    for item in processed_calculations:
+        if item["type"] == "standalone":
+            # Если перед этим была группа, выводим её
+            if group_methods:
+                group_id = current_group
+                group_data = grouped_calculations[group_id]
+
+                # Проверяем, содержит ли группа методы с "нефть" или "конденсат"
+                has_special_methods = any(
+                    "нефть" in method.name.lower() or "конденсат" in method.name.lower()
+                    for method in group_data["methods"]
+                )
+
+                if has_special_methods:
+                    # Создаем копию первого расчета группы
+                    group_calc = copy(group_data["calculations"][0])
+                    # Меняем название метода на название группы
+                    group_calc.research_method.name = group_data["name"]
+                    current_row, current_sheet, sheet_number = add_standalone_method(
+                        group_calc,
+                        current_row,
+                        current_sheet,
+                        template_sheet,
+                        table_header_start,
+                        table_header_end,
+                        template_row_num,
+                        merged_cells_map,
+                        idx,
+                        sheet_number,
+                    )
+                else:
+                    # Добавляем группу как есть
+                    current_row, current_sheet, sheet_number = add_group_methods(
+                        group_data,
+                        current_row,
+                        current_sheet,
+                        template_sheet,
+                        table_header_start,
+                        table_header_end,
+                        template_row_num,
+                        merged_cells_map,
+                        idx,
+                        sheet_number,
+                    )
+                idx += 1
+                group_methods = []
+                current_group = None
+
+            # Добавляем одиночный метод
+            current_row, current_sheet, sheet_number = add_standalone_method(
+                item["calc"],
+                current_row,
+                current_sheet,
+                template_sheet,
+                table_header_start,
+                table_header_end,
+                template_row_num,
+                merged_cells_map,
+                idx,
+                sheet_number,
+            )
+            idx += 1
+        else:  # type == "group"
+            if current_group is None:
+                current_group = item["group_id"]
+                group_methods = [item]
+            elif current_group == item["group_id"]:
+                group_methods.append(item)
+            else:
+                # Выводим предыдущую группу
+                group_data = grouped_calculations[current_group]
+
+                # Проверяем, содержит ли группа методы с "нефть" или "конденсат"
+                has_special_methods = any(
+                    "нефть" in method.name.lower() or "конденсат" in method.name.lower()
+                    for method in group_data["methods"]
+                )
+
+                if has_special_methods:
+                    # Создаем копию первого расчета группы
+                    group_calc = copy(group_data["calculations"][0])
+                    # Меняем название метода на название группы
+                    group_calc.research_method.name = group_data["name"]
+                    current_row, current_sheet, sheet_number = add_standalone_method(
+                        group_calc,
+                        current_row,
+                        current_sheet,
+                        template_sheet,
+                        table_header_start,
+                        table_header_end,
+                        template_row_num,
+                        merged_cells_map,
+                        idx,
+                        sheet_number,
+                    )
+                else:
+                    # Добавляем группу как есть
+                    current_row, current_sheet, sheet_number = add_group_methods(
+                        group_data,
+                        current_row,
+                        current_sheet,
+                        template_sheet,
+                        table_header_start,
+                        table_header_end,
+                        template_row_num,
+                        merged_cells_map,
+                        idx,
+                        sheet_number,
+                    )
+                idx += 1
+
+                # Начинаем новую группу
+                current_group = item["group_id"]
+                group_methods = [item]
+
+    # Обрабатываем последнюю группу, если она есть
+    if group_methods:
+        group_data = grouped_calculations[current_group]
+
+        # Проверяем, содержит ли группа методы с "нефть" или "конденсат"
+        has_special_methods = any(
+            "нефть" in method.name.lower() or "конденсат" in method.name.lower()
+            for method in group_data["methods"]
+        )
+
+        if has_special_methods:
+            # Создаем копию первого расчета группы
+            group_calc = copy(group_data["calculations"][0])
+            # Меняем название метода на название группы
+            group_calc.research_method.name = group_data["name"]
+            current_row, current_sheet, sheet_number = add_standalone_method(
+                group_calc,
+                current_row,
+                current_sheet,
+                template_sheet,
+                table_header_start,
+                table_header_end,
+                template_row_num,
+                merged_cells_map,
+                idx,
+                sheet_number,
+            )
+        else:
+            # Добавляем группу как есть
+            current_row, current_sheet, sheet_number = add_group_methods(
+                group_data,
+                current_row,
+                current_sheet,
+                template_sheet,
+                table_header_start,
+                table_header_end,
+                template_row_num,
+                merged_cells_map,
+                idx,
+                sheet_number,
+            )
+
+    return current_sheet
+
+
+def process_equipment_table(
+    protocol,
+    template_sheet,
+    current_sheet,
+    table_start,
+    merged_cells_map,
+    current_row,
+    sheet_number,
+):
+    """
+    Обрабатывает таблицу с оборудованием
+    """
+    logger.info(f"Начинаем поиск меток таблицы оборудования с строки {table_start}")
+
+    # Получаем уникальное оборудование из всех расчетов протокола
+    equipment_ids = set()
+    for sample in protocol.samples.filter(is_deleted=False):
+        for calc in sample.calculations.filter(is_deleted=False):
+            if calc.equipment_data:
+                # Обрабатываем список словарей с ID оборудования
+                if isinstance(calc.equipment_data, list):
+                    for item in calc.equipment_data:
+                        if isinstance(item, dict) and "id" in item:
+                            equipment_ids.add(item["id"])
+                        elif isinstance(item, (int, str)):
+                            equipment_ids.add(int(item))
+                elif (
+                    isinstance(calc.equipment_data, dict)
+                    and "id" in calc.equipment_data
+                ):
+                    equipment_ids.add(calc.equipment_data["id"])
+                elif isinstance(calc.equipment_data, (int, str)):
+                    equipment_ids.add(int(calc.equipment_data))
+
+    # Получаем оборудование
+    equipment_list = Equipment.objects.filter(
+        id__in=list(equipment_ids), is_deleted=False
+    ).order_by("name", "version")
+
+    # Если нет оборудования - пропускаем таблицу
+    if not equipment_list.exists():
+        logger.info("Нет оборудования для вывода в таблице 2, пропускаем таблицу")
+        return current_sheet
+
+    # Находим шапку таблицы оборудования
+    table_header_start = None
+    table_header_end = None
+    table_end = None
+
+    for row_num in range(table_start, template_sheet.max_row + 1):
+        row = list(
+            template_sheet.iter_rows(min_row=row_num, max_row=row_num, values_only=True)
+        )[0]
+
+        cell_values = [str(cell).strip() if cell else "" for cell in row]
+        logger.debug(f"Строка {row_num}: {cell_values}")
+
+        if table_header_start is None:
+            if any(cell and str(cell).strip() == "{{start_table2}}" for cell in row):
+                table_header_start = row_num
+                logger.info(
+                    f"Найдена метка начала таблицы оборудования в строке {row_num}"
+                )
+                continue
+        else:
+            if any(cell and str(cell).strip() == "{start_table2}" for cell in row):
+                table_header_end = row_num
+                logger.info(
+                    f"Найдена метка конца шапки таблицы оборудования в строке {row_num}"
+                )
+                break
+            elif any(cell and str(cell).strip() == "{{end_table2}}" for cell in row):
+                table_end = row_num
+                break
+
+    # Если не нашли начало таблицы - пропускаем
+    if table_header_start is None:
+        logger.info("Не найдена метка {{start_table2}} в шаблоне, пропускаем таблицу")
+        return current_sheet
+
+    # Если не нашли конец шапки - используем следующую строку после начала
+    if table_header_end is None:
+        table_header_end = table_header_start + 1
+        logger.info(
+            "Не найдена метка {start_table2}, используем следующую строку после {{start_table2}}"
+        )
+
+    # Копируем шапку таблицы
+    for row_num in range(table_header_start + 1, table_header_end):
+        copy_row_formatting(
+            template_sheet, current_sheet, row_num, current_row, merged_cells_map
+        )
+        current_row += 1
+
+    # Находим шаблонную строку
+    template_row = None
+    template_row_num = None
+
+    for row_num in range(table_header_end, template_sheet.max_row + 1):
+        row = list(
+            template_sheet.iter_rows(min_row=row_num, max_row=row_num, values_only=True)
+        )[0]
+
+        if any(cell and str(cell).strip() == "{start_table2}" for cell in row):
+            template_row_num = row_num + 1
+            template_row = list(
+                template_sheet.iter_rows(
+                    min_row=template_row_num, max_row=template_row_num, values_only=True
+                )
+            )[0]
+            break
+        elif any(cell and str(cell).strip() == "{end_table2}" for cell in row):
+            break
+
+    # Если не нашли шаблонную строку - пропускаем таблицу
+    if not template_row:
+        logger.info(
+            "Не найдена шаблонная строка таблицы оборудования, пропускаем таблицу"
+        )
+        return current_sheet
+
+    # Создаем новую карту объединенных ячеек для каждого листа
+    sheet_merged_cells_map = current_sheet.merged_cells
+
+    # Добавляем строки с оборудованием
+    idx = 1
+    for equipment in equipment_list:
+        # Проверяем высоту листа
+        current_height = calculate_current_height(current_sheet)
+        if current_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
+            sheet_number += 1
+            current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
+            current_row = 1
+
+            # Копируем размеры столбцов
+            copy_column_dimensions(template_sheet, current_sheet)
+
+            # Создаем новую карту объединенных ячеек для нового листа
+            sheet_merged_cells_map = current_sheet.merged_cells
+
+            # Копируем шапку таблицы с сохранением форматирования и объединенных ячеек
+            for row_num in range(table_header_start + 1, table_header_end):
+                copy_row_formatting(
+                    template_sheet,
+                    current_sheet,
+                    row_num,
+                    current_row,
+                    sheet_merged_cells_map,
+                )
+                current_row += 1
+
+        # Копируем шаблонную строку с сохранением форматирования и объединенных ячеек
+        copy_row_formatting(
+            template_sheet,
+            current_sheet,
+            template_row_num,
+            current_row,
+            sheet_merged_cells_map,
+        )
+
+        # Заполняем значения
+        for col in range(1, template_sheet.max_column + 1):
+            cell = current_sheet.cell(row=current_row, column=col)
+            if not cell.value:
+                continue
+
+            value = str(cell.value)
+            if "{id_equipment}" in value:
+                cell.value = value.replace("{id_equipment}", str(idx))
+            elif "{name_equipment}" in value:
+                cell.value = value.replace("{name_equipment}", equipment.name)
+            elif "{serial_num}" in value:
+                cell.value = value.replace("{serial_num}", equipment.serial_number)
+            elif "{ver_info}" in value:
+                cell.value = value.replace("{ver_info}", equipment.verification_info)
+            elif "{ver_date}" in value:
+                formatted_date = formats.date_format(
+                    equipment.verification_date, "d.m.Y"
+                )
+                cell.value = value.replace("{ver_date}", formatted_date)
+            elif "{ver_end_date}" in value:
+                formatted_date = formats.date_format(
+                    equipment.verification_end_date, "d.m.Y"
+                )
+                cell.value = value.replace("{ver_end_date}", formatted_date)
+
+        current_row += 1
+        idx += 1
+
+    return current_sheet
+
+
+def process_nd_table(
+    protocol,
+    template_sheet,
+    current_sheet,
+    table_start,
+    merged_cells_map,
+    current_row,
+    sheet_number,
+):
+    """
+    Обрабатывает таблицу с нормативными документами
+    """
+    # Получаем все расчеты для протокола в нужном порядке
+    calculations = []
+    for sample in protocol.samples.filter(is_deleted=False):
+        calcs = (
+            sample.calculations.filter(is_deleted=False)
+            .select_related("research_method")
+            .annotate(
+                method_sort_order=models.Subquery(
+                    ResearchObjectMethod.objects.filter(
+                        research_method=models.OuterRef("research_method"),
+                        research_object__laboratory=protocol.laboratory,
+                        research_object__department=protocol.department,
+                        is_deleted=False,
+                    ).values("sort_order")[:1]
+                )
+            )
+            .order_by("method_sort_order", "research_method__name", "created_at")
+        )
+        calculations.extend(calcs)
+
+    # Получаем объекты испытаний из проб протокола
+    test_objects = []
+    for sample in protocol.samples.filter(is_deleted=False):
+        if sample.test_object:
+            test_objects.append(sample.test_object)
+
+    # Собираем НД в порядке методов
+    nd_list = []
+    seen_nd = set()  # Для отслеживания уникальных НД
+
+    for calc in calculations:
+        # Проверяем соответствие метода объекту испытаний
+        if not check_method_name(calc.research_method.name, test_objects):
+            continue
+
+        nd_key = (calc.research_method.nd_code, calc.research_method.nd_name)
+        if nd_key not in seen_nd:
+            seen_nd.add(nd_key)
+            nd_list.append(nd_key)
+
+    # Если нет НД - пропускаем таблицу
+    if not nd_list:
+        logger.info(
+            "Нет нормативных документов для вывода в таблице 3, пропускаем таблицу"
+        )
+        return current_sheet
+
+    # Находим шапку таблицы НД
+    table_header_start = None
+    table_header_end = None
+    table_end = None
+
+    for row_num in range(table_start, template_sheet.max_row + 1):
+        row = list(
+            template_sheet.iter_rows(min_row=row_num, max_row=row_num, values_only=True)
+        )[0]
+
+        if table_header_start is None:
+            if any(cell and str(cell).strip() == "{{start_table3}}" for cell in row):
+                table_header_start = row_num
+                continue
+        else:
+            if any(cell and str(cell).strip() == "{start_table3}" for cell in row):
+                table_header_end = row_num
+                break
+            elif any(cell and str(cell).strip() == "{{end_table3}}" for cell in row):
+                table_end = row_num
+                break
+
+    # Если не нашли начало таблицы - пропускаем
+    if table_header_start is None:
+        logger.info("Не найдена метка {{start_table3}} в шаблоне, пропускаем таблицу")
+        return current_sheet
+
+    # Если не нашли конец шапки - используем следующую строку после начала
+    if table_header_end is None:
+        table_header_end = table_header_start + 1
+        logger.info(
+            "Не найдена метка {start_table3}, используем следующую строку после {{start_table3}}"
+        )
+
+    # Создаем новую карту объединенных ячеек для каждого листа
+    sheet_merged_cells_map = current_sheet.merged_cells
+
+    # Копируем шапку таблицы
+    for row_num in range(table_header_start + 1, table_header_end):
+        copy_row_formatting(
+            template_sheet, current_sheet, row_num, current_row, sheet_merged_cells_map
+        )
+        current_row += 1
+
+    # Находим шаблонную строку
+    template_row = None
+    template_row_num = None
+
+    for row_num in range(table_header_end, template_sheet.max_row + 1):
+        row = list(
+            template_sheet.iter_rows(min_row=row_num, max_row=row_num, values_only=True)
+        )[0]
+
+        if any(cell and str(cell).strip() == "{start_table3}" for cell in row):
+            template_row_num = row_num + 1
+            template_row = list(
+                template_sheet.iter_rows(
+                    min_row=template_row_num, max_row=template_row_num, values_only=True
+                )
+            )[0]
+            break
+        elif any(cell and str(cell).strip() == "{end_table3}" for cell in row):
+            break
+
+    # Если не нашли шаблонную строку - пропускаем таблицу
+    if not template_row:
+        logger.info("Не найдена шаблонная строка таблицы НД, пропускаем таблицу")
+        return current_sheet
+
+    # Добавляем строки с НД
+    idx = 1
+    for nd_code, nd_name in nd_list:
+        # Проверяем высоту листа
+        current_height = calculate_current_height(current_sheet)
+        if current_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
+            sheet_number += 1
+            current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
+            current_row = 1
+
+            # Копируем размеры столбцов
+            copy_column_dimensions(template_sheet, current_sheet)
+
+            # Создаем новую карту объединенных ячеек для нового листа
+            sheet_merged_cells_map = current_sheet.merged_cells
+
+            # Копируем шапку таблицы с сохранением форматирования и объединенных ячеек
+            for row_num in range(table_header_start + 1, table_header_end):
+                copy_row_formatting(
+                    template_sheet,
+                    current_sheet,
+                    row_num,
+                    current_row,
+                    sheet_merged_cells_map,
+                )
+                current_row += 1
+
+        # Копируем шаблонную строку с сохранением форматирования и объединенных ячеек
+        copy_row_formatting(
+            template_sheet,
+            current_sheet,
+            template_row_num,
+            current_row,
+            sheet_merged_cells_map,
+        )
+
+        # Заполняем значения
+        for col in range(1, template_sheet.max_column + 1):
+            cell = current_sheet.cell(row=current_row, column=col)
+            if not cell.value:
+                continue
+
+            value = str(cell.value)
+            if "{id_nd}" in value:
+                cell.value = value.replace("{id_nd}", str(idx))
+            elif "{nd_code}" in value:
+                cell.value = value.replace("{nd_code}", nd_code)
+            elif "{name_nd}" in value:
+                cell.value = value.replace("{name_nd}", nd_name)
+
+        current_row += 1
+        idx += 1
+
+    return current_sheet
+
+
+def process_between_tables(
+    protocol,
+    template_sheet,
+    current_sheet,
+    table_end,
+    merged_cells_map,
+    current_row,
+    sheet_number,
+):
+    """
+    Обрабатывает данные между таблицами.
+    """
+    # Создаем новую карту объединенных ячеек для каждого листа
+    sheet_merged_cells_map = current_sheet.merged_cells
+
+    # Ищем следующую таблицу
+    next_table_start = None
+    for row_num in range(table_end + 1, template_sheet.max_row + 1):
+        row = list(
+            template_sheet.iter_rows(min_row=row_num, max_row=row_num, values_only=True)
+        )[0]
+        if any(cell and str(cell).strip().startswith("{{start_table") for cell in row):
+            next_table_start = row_num
+            break
+
+    if not next_table_start:
+        return current_sheet, current_row
+
+    # Получаем всех уникальных исполнителей из расчетов
+    executors = set()
+    for sample in protocol.samples.filter(is_deleted=False):
+        for calc in sample.calculations.filter(is_deleted=False):
+            if calc.executor:
+                executors.add(calc.executor)
+
+    executors = sorted(executors) if executors else []
+
+    # Копируем и обрабатываем строки между таблицами
+    row_with_executor = None
+    executor_column = None
+
+    # Сначала найдем строку с меткой {executor}
+    for row_num in range(table_end + 1, next_table_start):
+        row = list(
+            template_sheet.iter_rows(min_row=row_num, max_row=row_num, values_only=True)
+        )[0]
+
+        # Пропускаем строки с метками конца таблиц
+        if any(
+            cell
+            and str(cell).strip()
+            in [
+                "{end_table1}",
+                "{end_table2}",
+                "{end_table3}",
+                "{{end_table1}}",
+                "{{end_table2}}",
+                "{{end_table3}}",
+            ]
+            for cell in row
+        ):
+            continue
+
+        # Проверяем, есть ли в строке метка {executor}
+        for col_idx, cell_value in enumerate(row, 1):
+            if cell_value and "{executor}" in str(cell_value):
+                row_with_executor = row_num
+                executor_column = col_idx
+                break
+
+        if row_with_executor:
+            break
+
+    # Обрабатываем все строки
+    for row_num in range(table_end + 1, next_table_start):
+        row = list(
+            template_sheet.iter_rows(min_row=row_num, max_row=row_num, values_only=True)
+        )[0]
+
+        # Пропускаем строки с метками конца таблиц
+        if any(
+            cell
+            and str(cell).strip()
+            in [
+                "{end_table1}",
+                "{end_table2}",
+                "{end_table3}",
+                "{{end_table1}}",
+                "{{end_table2}}",
+                "{{end_table3}}",
+            ]
+            for cell in row
+        ):
+            continue
+
+        # Проверяем высоту листа
+        current_height = calculate_current_height(current_sheet)
+        if current_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
+            sheet_number += 1
+            current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
+            current_row = 1
+
+            # Копируем размеры столбцов
+            copy_column_dimensions(template_sheet, current_sheet)
+
+            # Создаем новую карту объединенных ячеек для нового листа
+            sheet_merged_cells_map = current_sheet.merged_cells
+
+        # Копируем форматирование строки
+        copy_row_formatting(
+            template_sheet, current_sheet, row_num, current_row, sheet_merged_cells_map
+        )
+
+        # Если это строка с меткой {executor} и есть исполнители
+        if row_num == row_with_executor and executors and executor_column:
+            # Обрабатываем первого исполнителя в текущей строке
+            for col in range(1, template_sheet.max_column + 1):
+                cell = current_sheet.cell(row=current_row, column=col)
+                if cell.value:
+                    if col == executor_column and "{executor}" in str(cell.value):
+                        # Заменяем метку на первого исполнителя
+                        cell.value = str(cell.value).replace("{executor}", executors[0])
+                    else:
+                        # Обрабатываем другие метки
+                        processed_value = process_cell_markers(
+                            protocol, str(cell.value)
+                        )
+                        if processed_value is not None:
+                            cell.value = processed_value
+
+            current_row += 1
+
+            # Создаем дополнительные строки для остальных исполнителей
+            for executor in executors[1:]:
+                # Проверяем высоту листа перед добавлением новой строки
+                current_height = calculate_current_height(current_sheet)
+                if current_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
+                    sheet_number += 1
+                    current_sheet = current_sheet.parent.create_sheet(
+                        f"Лист{sheet_number}"
+                    )
+                    current_row = 1
+
+                    # Копируем размеры столбцов
+                    copy_column_dimensions(template_sheet, current_sheet)
+
+                    # Создаем новую карту объединенных ячеек для нового листа
+                    sheet_merged_cells_map = current_sheet.merged_cells
+
+                # Копируем форматирование строки для дополнительного исполнителя
+                copy_row_formatting(
+                    template_sheet,
+                    current_sheet,
+                    row_num,
+                    current_row,
+                    sheet_merged_cells_map,
+                )
+
+                # Заполняем значения в строке
+                for col in range(1, template_sheet.max_column + 1):
+                    cell = current_sheet.cell(row=current_row, column=col)
+                    if cell.value:
+                        if col == executor_column and "{executor}" in str(cell.value):
+                            # Заменяем метку на текущего исполнителя
+                            cell.value = str(cell.value).replace("{executor}", executor)
+                        else:
+                            # Для всех остальных ячеек ставим пустое значение
+                            cell.value = ""
+
+                current_row += 1
+        else:
+            # Обрабатываем обычные строки (без метки {executor})
+            for col in range(1, template_sheet.max_column + 1):
+                cell = current_sheet.cell(row=current_row, column=col)
+                if cell.value:
+                    # Обрабатываем метки
+                    processed_value = process_cell_markers(protocol, str(cell.value))
+                    if processed_value is not None:
+                        cell.value = processed_value
+
+            current_row += 1
+
+    return current_sheet, current_row
+
+
+def process_footer(
+    protocol,
+    template_sheet,
+    current_sheet,
+    footer_start,
+    merged_cells_map,
+    current_row,
+    sheet_number,
+):
+    """
+    Обрабатывает оставшиеся строки после последней таблицы (подвал протокола).
+    """
+    # Создаем новую карту объединенных ячеек для текущего листа
+    sheet_merged_cells_map = current_sheet.merged_cells
+
+    # Копируем и обрабатываем все оставшиеся строки
+    for row_num in range(footer_start + 1, template_sheet.max_row + 1):
+        # Пропускаем строки с метками концов таблиц
+        row = list(
+            template_sheet.iter_rows(min_row=row_num, max_row=row_num, values_only=True)
+        )[0]
+        if any(
+            cell
+            and str(cell).strip()
+            in [
+                "{end_table1}",
+                "{end_table2}",
+                "{end_table3}",
+                "{{end_table1}}",
+                "{{end_table2}}",
+                "{{end_table3}}",
+            ]
+            for cell in row
+        ):
+            continue
+
+        # Проверяем высоту листа
+        current_height = calculate_current_height(current_sheet)
+        if current_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
+            sheet_number += 1
+            current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
+            current_row = 1
+
+            # Копируем размеры столбцов
+            copy_column_dimensions(template_sheet, current_sheet)
+
+            # Создаем новую карту объединенных ячеек для нового листа
+            sheet_merged_cells_map = current_sheet.merged_cells
+
+        # Копируем размеры строк
+        if row_num in template_sheet.row_dimensions:
+            current_sheet.row_dimensions[current_row] = copy(
+                template_sheet.row_dimensions[row_num]
+            )
+
+        # Копируем объединенные ячейки для текущей строки
+        for merged_range in template_sheet.merged_cells.ranges:
+            if merged_range.min_row == row_num:
+                # Создаем новый диапазон с учетом смещения строк
+                new_range = openpyxl.worksheet.cell_range.CellRange(
+                    min_col=merged_range.min_col,
+                    min_row=current_row,
+                    max_col=merged_range.max_col,
+                    max_row=current_row + (merged_range.max_row - merged_range.min_row),
+                )
+                sheet_merged_cells_map.add(new_range)
+
+        # Копируем содержимое и стили ячеек, но без границ
+        for col in range(1, template_sheet.max_column + 1):
+            source_cell = template_sheet.cell(row=row_num, column=col)
+            target_cell = current_sheet.cell(row=current_row, column=col)
+
+            # Копируем значение
+            target_cell.value = source_cell.value
+
+            # Копируем стили кроме границ
+            if source_cell.has_style:
+                if source_cell.font:
+                    target_cell.font = copy(source_cell.font)
+                if source_cell.fill:
+                    target_cell.fill = copy(source_cell.fill)
+                if source_cell.alignment:
+                    target_cell.alignment = copy(source_cell.alignment)
+                if source_cell.number_format:
+                    target_cell.number_format = source_cell.number_format
+                if source_cell.protection:
+                    target_cell.protection = copy(source_cell.protection)
+                # Границы не копируем
+
+        # Обрабатываем метки в строке
+        for col in range(1, template_sheet.max_column + 1):
+            cell = current_sheet.cell(row=current_row, column=col)
+            if cell.value:
+                # Обрабатываем метки
+                processed_value = process_cell_markers(protocol, str(cell.value))
+                if processed_value is not None:
+                    cell.value = processed_value
+
+        current_row += 1
+
+    return current_sheet
+
+
+def find_text_in_workbook(workbook, search_text):
+    """
+    Ищет указанный текст во всех листах книги Excel.
+    Возвращает список всех найденных вхождений в формате [(лист, строка, столбец), ...].
+    """
+    try:
+        results = []
+        for sheet_name in workbook.sheetnames:
+            sheet = workbook[sheet_name]
+            for row_idx, row in enumerate(sheet.iter_rows(values_only=True), 1):
+                for col_idx, cell_value in enumerate(row, 1):
+                    if (
+                        cell_value
+                        and isinstance(cell_value, str)
+                        and search_text.lower() in cell_value.lower()
+                    ):
+                        results.append((sheet_name, row_idx, col_idx))
+        return results
+    except Exception as e:
+        logger.error(f"Ошибка при поиске текста '{search_text}': {str(e)}")
+        return []
 
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def generate_protocol_excel(request):
     """
-    Создает файл протокола
+    Генерирует Excel файл протокола.
     """
     try:
-        protocol_id = request.query_params.get("protocol_id")
-        registration_number = request.query_params.get("registration_number")
+        protocol_id = request.GET.get("protocol_id")
+        if not protocol_id:
+            return HttpResponseBadRequest("Не указан protocol_id")
 
-        if not protocol_id and not registration_number:
-            return Response(
-                {"error": "Необходимо указать ID протокола или регистрационный номер"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        logger.info(f"Начинаем генерацию протокола {protocol_id}")
 
-        if registration_number:
-            # Ищем пробу по регистрационному номеру
-            sample = Sample.objects.filter(
-                registration_number=registration_number, is_deleted=False
-            ).first()
-            if not sample:
-                return Response(
-                    {
-                        "error": f"Проба с регистрационным номером {registration_number} не найдена"
-                    },
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-            protocol = sample.protocol
-            if not protocol:
-                return Response(
-                    {
-                        "error": f"Для пробы с регистрационным номером {registration_number} не найден протокол"
-                    },
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-        else:
-            protocol = Protocol.objects.get(id=protocol_id)
-
-        # Получаем все пробы протокола
-        samples = Sample.objects.filter(protocol=protocol, is_deleted=False)
-        if not samples.exists():
-            return Response(
-                {"error": "Для протокола не найдены пробы"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        # Собираем все расчеты из всех проб
-        calculations = []
-        for sample in samples:
-            sample_calculations = Calculation.objects.filter(
-                sample=sample, is_deleted=False
-            ).order_by("laboratory_activity_date")
-            calculations.extend(sample_calculations)
-
-        if not calculations:
-            return Response(
-                {"error": "Для проб протокола не найдены расчеты"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        # Получаем данные из available_methods для сравнения
-        research_page = ResearchObject.objects.filter(
-            laboratory_id=protocol.laboratory_id,
-            department_id=protocol.department_id,
-            type="oil_products",
-            is_deleted=False,
-        ).first()
-
-        if not research_page:
-            logger.error(
-                "Не найдена страница исследований для сравнения порядка методов"
-            )
-        else:
-            # Получаем методы как в available_methods
-            research_methods_from_api = (
-                ResearchObjectMethod.objects.filter(
-                    research_object=research_page, is_active=True, is_deleted=False
-                )
-                .select_related("research_method")
-                .order_by("sort_order", "created_at")
-            )
-
-            logger.info("=== СРАВНЕНИЕ ПОРЯДКА МЕТОДОВ ===")
-            logger.info("\nМетоды из available_methods:")
-            for rom in research_methods_from_api:
-                logger.info(
-                    f"ID: {rom.research_method_id}, Method: {rom.research_method.name}, sort_order: {rom.sort_order}"
-                )
-
-            logger.info("\nТекущие расчеты до сортировки:")
-            for calc in calculations:
-                logger.info(
-                    f"ID: {calc.research_method_id}, Method: {calc.research_method.name}"
-                )
-
-            # Создаем словарь для сортировки
-            method_order = {
-                rom.research_method_id: rom.sort_order
-                for rom in research_methods_from_api
-            }
-            logger.info("\nСловарь сортировки:")
-            for method_id, sort_order in method_order.items():
-                logger.info(f"Method ID: {method_id}, sort_order: {sort_order}")
-
-            # Сортируем расчеты
-            calculations.sort(
-                key=lambda x: (
-                    method_order.get(x.research_method_id, float("inf")),
-                    x.research_method.name,
-                )
-            )
-
-            logger.info("\nРасчеты после сортировки:")
-            for calc in calculations:
-                logger.info(
-                    f"ID: {calc.research_method_id}, Method: {calc.research_method.name}, sort_order: {method_order.get(calc.research_method_id, 'не найден')}"
-                )
-
-            logger.info("=== КОНЕЦ СРАВНЕНИЯ ===\n")
-
-        min_date = calculations[0].laboratory_activity_date
-        max_date = calculations[-1].laboratory_activity_date
-
-        laboratory_activity_dates = (
-            f"{min_date.strftime('%d.%m.%Y')}-{max_date.strftime('%d.%m.%Y')}"
-        )
-        if min_date == max_date:
-            laboratory_activity_dates = min_date.strftime("%d.%m.%Y")
+        protocol = Protocol.objects.get(id=protocol_id)
 
         if not protocol.excel_template:
-            return Response(
-                {"error": "Для протокола не выбран шаблон Excel"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return HttpResponseBadRequest("У протокола отсутствует шаблон Excel")
 
         # Загружаем шаблон
-        template_bytes = protocol.excel_template.file
-        workbook = load_workbook(BytesIO(template_bytes))
-        worksheet = workbook.active
-
-        # Получаем всех исполнителей из расчетов
-        executors = list(set([calc.executor for calc in calculations if calc.executor]))
-        executors_str = ", ".join(executors)
-
-        # Формируем строки с уникальными регистрационными номерами и объектами испытаний
-        unique_registration_numbers = set()
-        unique_test_objects = set()
-
-        for sample in samples:
-            unique_registration_numbers.add(sample.registration_number)
-            unique_test_objects.add(sample.test_object)
-
-        registration_numbers = ", ".join(sorted(unique_registration_numbers))
-        test_objects = ", ".join(sorted(unique_test_objects))
-
-        # Подготавливаем данные для замены в шаблоне
-        replacements = {
-            "{test_protocol_number}": protocol.test_protocol_number or "",
-            "{registration_number}": registration_numbers,
-            "{test_object}": test_objects,
-            "{laboratory_location}": protocol.laboratory_location or "",
-            "{branch}": protocol.branch or "",
-            "{sampling_location_detail}": ", ".join(
-                filter(None, [sample.sampling_location_detail for sample in samples])
-            )
-            or "",
-            "{phone}": protocol.phone or "",
-            "{sampling_act_number}": protocol.sampling_act_number or "",
-            "{sampling_date}": ", ".join(
-                filter(
-                    None,
-                    [
-                        (
-                            sample.sampling_date.strftime("%d.%m.%Y")
-                            if sample.sampling_date
-                            else ""
-                        )
-                        for sample in samples
-                    ],
-                )
-            )
-            or "",
-            "{receiving_date}": ", ".join(
-                filter(
-                    None,
-                    [
-                        (
-                            sample.receiving_date.strftime("%d.%m.%Y")
-                            if sample.receiving_date
-                            else ""
-                        )
-                        for sample in samples
-                    ],
-                )
-            )
-            or "",
-            "{executor}": executors_str,
-            "{lab_location}": protocol.laboratory_location or "",
-            "{subd}": protocol.branch,
-            "{sampling_location}": ", ".join(
-                filter(None, [sample.sampling_location_detail for sample in samples])
-            )
-            or "",
-            "{tel}": protocol.phone,
-            "{res_object}": test_objects,
-            "{laboratory_activity_dates}": laboratory_activity_dates,
-        }
-
-        # Обработка условий отбора
-        selection_conditions = protocol.selection_conditions or {}
-        selection_conditions_list = []
-
-        # Преобразуем selection_conditions в список, если это словарь
-        if isinstance(selection_conditions, dict):
-            for name, data in selection_conditions.items():
-                if isinstance(data, dict):
-                    selection_conditions_list.append(
-                        {
-                            "name": name,
-                            "value": data.get("value"),
-                            "unit": data.get("unit"),
-                        }
-                    )
-                else:
-                    selection_conditions_list.append(
-                        {"name": name, "value": data, "unit": ""}
-                    )
-        elif isinstance(selection_conditions, list):
-            selection_conditions_list = selection_conditions
-
-        has_filled_conditions = False
-        rows_to_delete = set()
-
-        # Находим все строки с метками условий отбора
-        for row_idx, row in enumerate(worksheet.iter_rows(), 1):
-            has_condition_tags = False
-            all_tags_empty = True
-            bu_cell = None
-
-            # Проверяем аккредитацию и удаляем строку шапки если нужно
-            if (
-                not protocol.is_accredited
-                and protocol.excel_template.accreditation_header_row
-            ):
-                if row_idx == protocol.excel_template.accreditation_header_row:
-                    rows_to_delete.add(row_idx)
-                    continue
-
-            # Проверяем наличие меток условий отбора в строке
-            for cell in row:
-                if not cell.value or not isinstance(cell.value, str):
-                    continue
-
-                # Проверяем наличие меток условий отбора в строке
-                for i in range(1, 100):  # Предполагаем максимум 99 условий
-                    name_tag = f"{{sel_cond_name_{i}}}"
-                    val_tag = f"{{sel_cond_val_{i}}}"
-                    unit_tag = f"{{sel_cond_unit_{i}}}"
-
-                    if (
-                        name_tag in cell.value
-                        or val_tag in cell.value
-                        or unit_tag in cell.value
-                    ):
-                        has_condition_tags = True
-                        if i <= len(selection_conditions_list):
-                            condition = selection_conditions_list[i - 1]
-                            if condition.get("value") is not None:
-                                all_tags_empty = False
-                                cell_value = cell.value
-                                if name_tag in cell_value:
-                                    cell.value = cell_value.replace(
-                                        name_tag, condition.get("name", "") + ":"
-                                    )
-                                elif val_tag in cell_value:
-                                    # Форматируем значение с заменой точки на запятую
-                                    formatted_value = format_decimal_ru(
-                                        condition.get("value", "")
-                                    )
-                                    cell.value = cell_value.replace(
-                                        val_tag, formatted_value
-                                    )
-                                elif unit_tag in cell_value:
-                                    cell.value = cell_value.replace(
-                                        unit_tag, condition.get("unit", "")
-                                    )
-                                has_filled_conditions = True
-
-                if "{bu}" in cell.value:
-                    bu_cell = cell
-
-            # Если в строке есть метки условий и все они пустые, добавляем строку к удалению
-            if has_condition_tags and all_tags_empty:
-                rows_to_delete.add(row_idx)
-
-        # Обрабатываем метку {bu}
-        if has_filled_conditions:
-            # Если есть заполненные условия, очищаем метку {bu}
-            for row in worksheet.iter_rows():
-                for cell in row:
-                    if (
-                        cell.value
-                        and isinstance(cell.value, str)
-                        and "{bu}" in cell.value
-                    ):
-                        cell.value = cell.value.replace("{bu}", "")
-        else:
-            # Если нет заполненных условий, заменяем {bu} на "б/у"
-            for row in worksheet.iter_rows():
-                for cell in row:
-                    if (
-                        cell.value
-                        and isinstance(cell.value, str)
-                        and "{bu}" in cell.value
-                    ):
-                        cell.value = cell.value.replace("{bu}", "б/у")
-
-        # Заменяем метки в файле
-        for row in worksheet.iter_rows():
-            for cell in row:
-                if cell.value and isinstance(cell.value, str):
-                    for tag, value in replacements.items():
-                        if tag in cell.value:
-                            if tag == "{test_protocol_number}":
-                                formatted_number = format_protocol_number(
-                                    protocol, protocol.excel_template
-                                )
-                                cell.value = cell.value.replace(tag, formatted_number)
-                            else:
-                                cell.value = cell.value.replace(tag, str(value))
-
-        # Обработка таблицы 1 (результаты расчетов)
-        start_row = None
-        end_row = None
-        template_row = None
-
-        # Находим границы таблицы 1
-        for row_idx, row in enumerate(worksheet.iter_rows(), 1):
-            for cell in row:
-                if cell.value == "{start_table1}":
-                    start_row = row_idx
-                elif cell.value == "{end_table1}":
-                    end_row = row_idx
-                    break
-            if start_row and end_row:
-                break
-
-        if start_row and end_row:
-            template_row = start_row + 1
-            rows_needed = len(calculations)
-
-            logger.info(
-                f"Найдены границы таблицы 1: start_row={start_row}, end_row={end_row}"
-            )
-            logger.info(f"Шаблонная строка: {template_row}")
-            logger.info(f"Необходимо вставить строк: {rows_needed}")
-
-            logger.info("Данные для вставки в таблицу 1:")
-            for idx, calc in enumerate(calculations, 1):
-                logger.info(
-                    f"Строка {idx}:\n"
-                    f"  - ID метода: {idx}\n"
-                    f"  - Название метода: {calc.research_method.name}\n"
-                    f"  - Единица измерения: {calc.unit or 'не указано'}\n"
-                    f"  - Результат: {calc.result or 'не указано'}\n"
-                    f"  - Погрешность: {calc.measurement_error or 'не указано'}\n"
-                    f"  - Метод измерения: {calc.research_method.measurement_method or 'не указано'}\n"
-                    f"  - Имеет группы: {calc.research_method.groups.exists()}\n"
-                    f"  - Группы: {[g.name for g in calc.research_method.groups.all()]}"
-                )
-
-            # Сохраняем размеры строк перед любыми изменениями
-            original_dimensions = save_row_dimensions(worksheet)
-
-            # Обработка групп методов
-            grouped_calculations = {}
-            standalone_calculations = []
-
-            logger.info("Анализ методов исследования и их групп:")
-            for idx, calc in enumerate(calculations, 1):
-                method = calc.research_method
-                logger.info(f"Метод #{idx}: {method.name}")
-                logger.info(f"  - ID метода: {method.id}")
-
-                # Проверка атрибута groups
-                if hasattr(method, "groups"):
-                    logger.info(f"  - Метод имеет атрибут groups")
-                    groups_count = method.groups.count()
-                    logger.info(f"  - Количество групп у метода: {groups_count}")
-
-                    if groups_count > 0:
-                        groups = method.groups.all()
-                        for group in groups:
-                            logger.info(f"  - Группа: id={group.id}, name={group.name}")
-                else:
-                    logger.info(f"  - Метод НЕ имеет атрибут groups")
-
-            # Сначала собираем все методы в группы или как одиночные
-            for calc in calculations:
-                group = None
-                group_id = None
-                group_name = None
-
-                if hasattr(calc.research_method, "groups"):
-                    if calc.research_method.groups.exists():
-                        group = calc.research_method.groups.first()
-                        group_id = group.id
-                        group_name = group.name
-                        logger.info(
-                            f"Метод {calc.research_method.name} принадлежит группе {group_name}"
-                        )
-
-                if group_id is not None:
-                    if group_id not in grouped_calculations:
-                        grouped_calculations[group_id] = {
-                            "name": group_name,
-                            "calculations": [],
-                            "methods": [],
-                            "sort_order": method_order.get(
-                                calc.research_method_id, float("inf")
-                            ),
-                        }
-                        logger.info(f"Создана новая группа для расчетов: {group_name}")
-
-                    grouped_calculations[group_id]["calculations"].append(calc)
-                    grouped_calculations[group_id]["methods"].append(
-                        calc.research_method
-                    )
-                    # Обновляем sort_order группы минимальным значением из её методов
-                    current_sort_order = method_order.get(
-                        calc.research_method_id, float("inf")
-                    )
-                    if (
-                        current_sort_order
-                        < grouped_calculations[group_id]["sort_order"]
-                    ):
-                        grouped_calculations[group_id][
-                            "sort_order"
-                        ] = current_sort_order
-                    logger.info(
-                        f"Метод {calc.research_method.name} добавлен в группу {group_name}"
-                    )
-                else:
-                    standalone_calculations.append(calc)
-                    logger.info(
-                        f"Метод {calc.research_method.name} добавлен как отдельный (не в группе)"
-                    )
-
-            logger.info(
-                f"Итоговые сгруппированные методы: {[(k, v['name'], [m.name for m in v['methods']], v['sort_order']) for k, v in grouped_calculations.items()]}"
-            )
-            logger.info(
-                f"Итоговые одиночные методы: {[c.research_method.name for c in standalone_calculations]}"
-            )
-
-            # Проверяем методы на наличие "конденсат" и "нефть"
-            def check_method_name(method_name):
-                return (
-                    "конденсат" in method_name.lower() or "нефть" in method_name.lower()
-                )
-
-            # Модифицируем группировку если нужно
-            modified_grouped_calculations = {}
-            for group_id, group_data in sorted(
-                grouped_calculations.items(), key=lambda x: x[1]["sort_order"]
-            ):
-                logger.info(f"Проверка группы: {group_data['name']}")
-
-                # Проверяем каждый метод в группе
-                for calc in group_data["calculations"]:
-                    method_name = calc.research_method.name
-                    logger.info(f"Проверка метода в группе: {method_name}")
-
-                    if check_method_name(method_name):
-                        logger.info(
-                            f"Найден метод с ключевым словом (конденсат/нефть): {method_name}"
-                        )
-                        # Создаем копию первого расчета группы
-                        group_calc = copy(group_data["calculations"][0])
-                        # Меняем название метода на название группы
-                        group_calc.research_method.name = group_data["name"]
-                        # Сохраняем sort_order группы
-                        group_calc.research_method.sort_order = group_data["sort_order"]
-                        logger.info(
-                            f"Группа будет выведена как одиночный метод с названием: {group_data['name']} и sort_order: {group_data['sort_order']}"
-                        )
-                        standalone_calculations.append(group_calc)
-                        break
-                else:
-                    # Если не нашли методы с ключевыми словами, оставляем группу как есть
-                    logger.info(f"Группа {group_data['name']} остается без изменений")
-                    modified_grouped_calculations[group_id] = group_data
-
-            grouped_calculations = modified_grouped_calculations
-
-            # Сортируем одиночные методы по sort_order
-            standalone_calculations.sort(
-                key=lambda x: method_order.get(x.research_method_id, float("inf"))
-            )
-
-            logger.info(f"Итоговое количество групп: {len(grouped_calculations)}")
-            logger.info(
-                f"Итоговое количество одиночных методов: {len(standalone_calculations)}"
-            )
-            logger.info("Отсортированные одиночные методы:")
-            for calc in standalone_calculations:
-                logger.info(
-                    f"  - {calc.research_method.name} (sort_order: {method_order.get(calc.research_method_id, 'не задан')})"
-                )
-
-            # Вычисляем последнюю строку таблицы и правильное количество строк для вставки
-            total_rows = 0
-            for group_data in grouped_calculations.values():
-                # +1 для строки с названием группы
-                total_rows += len(group_data["calculations"]) + 1
-            total_rows += len(standalone_calculations)
-
-            # Определяем количество строк для вставки с учетом дополнительных строк для названий групп
-            rows_to_insert = 0
-
-            if total_rows > 1:
-                # Вычитаем 1, так как одна строка уже есть в шаблоне
-                rows_to_insert = total_rows - 1
-                logger.info(
-                    f"Для размещения всех методов и групп необходимо {total_rows} строк"
-                )
-                logger.info(f"Будет вставлено {rows_to_insert} дополнительных строк")
-
-            # Сохраняем существующие объединенные ячейки во временный список
-            merged_ranges = []
-            for merge_range in worksheet.merged_cells.ranges:
-                merged_ranges.append(
-                    {
-                        "min_row": merge_range.min_row,
-                        "max_row": merge_range.max_row,
-                        "min_col": merge_range.min_col,
-                        "max_col": merge_range.max_col,
-                    }
-                )
-
-            if rows_to_insert > 0:
-                # Вставляем новые строки
-                worksheet.insert_rows(template_row + 1, rows_to_insert)
-                logger.info(
-                    f"Вставлено {rows_to_insert} новых строк после строки {template_row}"
-                )
-
-                # Копируем стили для новых строк
-                for i in range(rows_to_insert):
-                    new_row = template_row + 1 + i
-                    logger.info(f"Копирование стилей для новой строки {new_row}")
-
-                    for col in range(1, worksheet.max_column + 1):
-                        source_cell = worksheet.cell(row=template_row, column=col)
-                        target_cell = worksheet.cell(row=new_row, column=col)
-
-                        # Копируем стили только если в исходной ячейке есть значение или это ячейка с границами таблицы
-                        if source_cell.has_style and (
-                            source_cell.value is not None
-                            or col in [1, worksheet.max_column]
-                        ):
-                            target_cell._style = copy(source_cell._style)
-
-                        target_cell.value = source_cell.value
-
-            # Восстанавливаем и обновляем объединенные ячейки
-            worksheet.merged_cells.ranges.clear()
-            for merge_range in merged_ranges:
-                if merge_range["max_row"] < template_row:
-                    worksheet.merge_cells(
-                        start_row=merge_range["min_row"],
-                        start_column=merge_range["min_col"],
-                        end_row=merge_range["max_row"],
-                        end_column=merge_range["max_col"],
-                    )
-                elif merge_range["min_row"] > template_row:
-                    worksheet.merge_cells(
-                        start_row=merge_range["min_row"] + rows_to_insert,
-                        start_column=merge_range["min_col"],
-                        end_row=merge_range["max_row"] + rows_to_insert,
-                        end_column=merge_range["max_col"],
-                    )
-                elif merge_range["min_row"] == template_row:
-                    for i in range(rows_needed):
-                        worksheet.merge_cells(
-                            start_row=template_row + i,
-                            start_column=merge_range["min_col"],
-                            end_row=template_row + i,
-                            end_column=merge_range["max_col"],
-                        )
-
-            # Заполняем данные таблицы 1
-            current_row = template_row
-
-            # Вычисляем последнюю строку таблицы
-            total_rows = 0
-            for group_data in grouped_calculations.values():
-                # +1 для строки с названием группы
-                total_rows += len(group_data["calculations"]) + 1
-            total_rows += len(standalone_calculations)
-            last_row = template_row + total_rows - 1
-
-            # Проверяем, есть ли только один группированный метод и нет одиночных
-            only_one_group = (
-                len(grouped_calculations) == 1 and len(standalone_calculations) == 0
-            )
-
-            if only_one_group:
-                logger.info(
-                    "Обнаружен только один группированный метод без одиночных методов, применяется специальная обработка"
-                )
-
-                # Получаем единственную группу
-                group_id = next(iter(grouped_calculations.keys()))
-                group_data = grouped_calculations[group_id]
-
-                logger.info(
-                    f"Группа: {group_data['name']}, методов в группе: {len(group_data['calculations'])}"
-                )
-
-                # Получаем общий метод измерения и единицу измерения для группы
-                measurement_methods = set(
-                    method.measurement_method for method in group_data["methods"]
-                )
-                units = set(calc.unit for calc in group_data["calculations"])
-
-                common_measurement_method = (
-                    next(iter(measurement_methods))
-                    if len(measurement_methods) == 1
-                    else None
-                )
-                common_unit = next(iter(units)) if len(units) == 1 else None
-
-                logger.info(
-                    f"Общий метод измерения для группы: {common_measurement_method}"
-                )
-                logger.info(f"Общая единица измерения для группы: {common_unit}")
-
-                # Находим объединенные ячейки в шаблонной строке
-                template_merged_cells = []
-                for merge_range in worksheet.merged_cells.ranges:
-                    if (
-                        merge_range.min_row == template_row
-                        and merge_range.max_row == template_row
-                    ):
-                        template_merged_cells.append(
-                            {
-                                "min_col": merge_range.min_col,
-                                "max_col": merge_range.max_col,
-                            }
-                        )
-                        logger.info(
-                            f"Найдены объединенные ячейки в шаблоне: колонки {merge_range.min_col}-{merge_range.max_col}"
-                        )
-
-                # В первой строке выводим название группы и общие данные
-                for col in range(1, worksheet.max_column + 1):
-                    cell = worksheet.cell(row=current_row, column=col)
-                    # Убираем нижнюю границу у ячеек в строке с названием группы
-                    if cell.border:
-                        new_border = copy(cell.border)
-                        new_border.bottom = None
-                        cell.border = new_border
-
-                    if cell.value and isinstance(cell.value, str):
-                        if "{id_method}" in cell.value:
-                            cell.value = cell.value.replace("{id_method}", "1")
-                        elif "{name_method}" in cell.value:
-                            cell.value = f"{group_data['name']}"
-                        elif "{unit}" in cell.value:
-                            # Выводим единицу измерения на уровне группы
-                            cell.value = cell.value.replace(
-                                "{unit}", common_unit or "не указано"
-                            )
-                        elif "{measurement_method}" in cell.value:
-                            # Выводим метод измерения на уровне группы
-                            cell.value = cell.value.replace(
-                                "{measurement_method}",
-                                common_measurement_method or "не указано",
-                            )
-                        else:
-                            # Для остальных полей в первой строке ставим пустые значения
-                            for placeholder in [
-                                "{result}",
-                                "{measurement_error}",
-                                "{nd_code1}",
-                                "{nd_name1}",
-                            ]:
-                                if placeholder in cell.value:
-                                    cell.value = cell.value.replace(placeholder, "")
-
-                # Применяем объединение ячеек для строки с названием группы
-                for merged_cell in template_merged_cells:
-                    worksheet.merge_cells(
-                        start_row=current_row,
-                        start_column=merged_cell["min_col"],
-                        end_row=current_row,
-                        end_column=merged_cell["max_col"],
-                    )
-                    logger.info(
-                        f"Объединены ячейки в строке с названием группы: {current_row}, колонки {merged_cell['min_col']}-{merged_cell['max_col']}"
-                    )
-
-                current_row += 1
-
-                # Выводим методы группы
-                for i, calc in enumerate(group_data["calculations"]):
-                    # Применяем объединение ячеек для строки метода в группе
-                    for merged_cell in template_merged_cells:
-                        worksheet.merge_cells(
-                            start_row=current_row,
-                            start_column=merged_cell["min_col"],
-                            end_row=current_row,
-                            end_column=merged_cell["max_col"],
-                        )
-                        logger.info(
-                            f"Объединены ячейки в строке метода: {current_row}, колонки {merged_cell['min_col']}-{merged_cell['max_col']}"
-                        )
-
-                    for col in range(1, worksheet.max_column + 1):
-                        cell = worksheet.cell(row=current_row, column=col)
-
-                        # Особая обработка для последнего метода в группе
-                        last_method_in_group = i == len(group_data["calculations"]) - 1
-
-                        if cell.border:
-                            new_border = copy(cell.border)
-
-                            # Удаляем верхнюю и нижнюю границы для всех ячеек в строке
-                            for col in range(1, worksheet.max_column + 1):
-                                cell = worksheet.cell(row=current_row, column=col)
-                                if cell.border:
-                                    new_border = copy(cell.border)
-                                    # Всегда удаляем верхнюю границу для методов в группе
-                                    new_border.top = None
-
-                                    # Для последнего метода в группе сохраняем нижнюю границу
-                                    if last_method_in_group:
-                                        template_cell = worksheet.cell(
-                                            row=template_row, column=col
-                                        )
-                                        if (
-                                            template_cell.border
-                                            and template_cell.border.bottom
-                                        ):
-                                            new_border.bottom = copy(
-                                                template_cell.border.bottom
-                                            )
-                                    else:
-                                        # Для остальных методов в группе убираем нижнюю границу
-                                        new_border.bottom = None
-
-                                    cell.border = new_border
-
-                        if cell.value and isinstance(cell.value, str):
-                            if "{id_method}" in cell.value:
-                                cell.value = ""  # Пустой ID для методов в группе
-                            elif "{name_method}" in cell.value:
-                                # Делаем первую букву метода строчной
-                                method_name = calc.research_method.name
-                                if method_name:
-                                    method_name = (
-                                        method_name[0].lower() + method_name[1:]
-                                    )
-                                    cell.value = method_name
-                                logger.info(
-                                    f"Установлено название метода в группе: {method_name}"
-                                )
-                            elif "{result}" in cell.value:
-                                cell.value = cell.value.replace(
-                                    "{result}", format_result(calc.result)
-                                )
-                                logger.info(f"Установлен результат: {calc.result}")
-                            elif "{measurement_error}" in cell.value:
-                                error_value = calc.measurement_error
-                                formatted_error = (
-                                    error_value
-                                    if error_value and error_value.startswith("-")
-                                    else (
-                                        f"±{error_value}"
-                                        if error_value and error_value != "не указано"
-                                        else "не указано"
-                                    )
-                                )
-                                cell.value = cell.value.replace(
-                                    "{measurement_error}",
-                                    formatted_error,
-                                )
-                            elif "{unit}" in cell.value:
-                                cell.value = cell.value.replace(
-                                    "{unit}", ""
-                                )  # Пустая единица измерения для методов в группе
-                            elif "{measurement_method}" in cell.value:
-                                cell.value = cell.value.replace(
-                                    "{measurement_method}", ""
-                                )  # Пустой метод измерения для методов в группе
-                            elif "{nd_code1}" in cell.value:
-                                cell.value = cell.value.replace(
-                                    "{nd_code1}",
-                                    calc.research_method.nd_code or "не указано",
-                                )
-                            elif "{nd_name1}" in cell.value:
-                                cell.value = cell.value.replace(
-                                    "{nd_name1}",
-                                    calc.research_method.nd_name or "не указано",
-                                )
-
-                    current_row += 1
-
-            else:
-                # Стандартная обработка для нескольких групп или одиночных методов
-                # Сначала обрабатываем сгруппированные методы
-                idx = 1
-                logger.info(
-                    f"Начинаем вывод сгруппированных методов. Всего групп: {len(grouped_calculations)}"
-                )
-
-                # Находим объединенные ячейки в шаблонной строке
-                template_merged_cells = []
-                for merge_range in worksheet.merged_cells.ranges:
-                    if (
-                        merge_range.min_row == template_row
-                        and merge_range.max_row == template_row
-                    ):
-                        template_merged_cells.append(
-                            {
-                                "min_col": merge_range.min_col,
-                                "max_col": merge_range.max_col,
-                            }
-                        )
-                        logger.info(
-                            f"Найдены объединенные ячейки в шаблоне: колонки {merge_range.min_col}-{merge_range.max_col}"
-                        )
-
-                for group_id, group_data in grouped_calculations.items():
-                    logger.info(
-                        f"Обработка группы: {group_data['name']}, методов в группе: {len(group_data['calculations'])}"
-                    )
-
-                    # Получаем общий метод измерения и единицу измерения для группы
-                    measurement_methods = set(
-                        method.measurement_method for method in group_data["methods"]
-                    )
-                    units = set(calc.unit for calc in group_data["calculations"])
-
-                    common_measurement_method = (
-                        next(iter(measurement_methods))
-                        if len(measurement_methods) == 1
-                        else None
-                    )
-                    common_unit = next(iter(units)) if len(units) == 1 else None
-
-                    logger.info(
-                        f"Общий метод измерения для группы: {common_measurement_method}"
-                    )
-                    logger.info(f"Общая единица измерения для группы: {common_unit}")
-
-                    # В первой строке выводим только название группы
-                    for col in range(1, worksheet.max_column + 1):
-                        cell = worksheet.cell(row=current_row, column=col)
-                        # Убираем нижнюю границу у ячеек в строке с названием группы
-                        if cell.border:
-                            new_border = copy(cell.border)
-                            new_border.bottom = None
-                            cell.border = new_border
-
-                        if cell.value and isinstance(cell.value, str):
-                            if "{id_method}" in cell.value:
-                                cell.value = cell.value.replace("{id_method}", str(idx))
-                                logger.info(
-                                    f"Установлен ID метода {idx} для группы {group_data['name']}"
-                                )
-                            elif "{name_method}" in cell.value:
-                                cell.value = f"{group_data['name']}"
-                                logger.info(
-                                    f"Установлено название группы: {group_data['name']}"
-                                )
-                            elif "{unit}" in cell.value:
-                                # Выводим единицу измерения на уровне группы
-                                cell.value = cell.value.replace(
-                                    "{unit}", common_unit or "не указано"
-                                )
-                            elif "{measurement_method}" in cell.value:
-                                # Выводим метод измерения на уровне группы
-                                cell.value = cell.value.replace(
-                                    "{measurement_method}",
-                                    common_measurement_method or "не указано",
-                                )
-                            else:
-                                # Для остальных полей в первой строке ставим пустые значения
-                                for placeholder in [
-                                    "{result}",
-                                    "{measurement_error}",
-                                    "{nd_code1}",
-                                    "{nd_name1}",
-                                ]:
-                                    if placeholder in cell.value:
-                                        cell.value = cell.value.replace(placeholder, "")
-
-                    # Применяем объединение ячеек для строки с названием группы
-                    for merged_cell in template_merged_cells:
-                        worksheet.merge_cells(
-                            start_row=current_row,
-                            start_column=merged_cell["min_col"],
-                            end_row=current_row,
-                            end_column=merged_cell["max_col"],
-                        )
-                        logger.info(
-                            f"Объединены ячейки в строке с названием группы: {current_row}, колонки {merged_cell['min_col']}-{merged_cell['max_col']}"
-                        )
-
-                    current_row += 1
-                    logger.info(
-                        f"Строка с названием группы обработана, переход к строке {current_row}"
-                    )
-
-                    # Выводим все методы группы
-                    for i, calc in enumerate(group_data["calculations"]):
-                        logger.info(
-                            f"Обработка метода в группе: {calc.research_method.name}"
-                        )
-
-                        # Применяем объединение ячеек для строки метода в группе
-                        for merged_cell in template_merged_cells:
-                            worksheet.merge_cells(
-                                start_row=current_row,
-                                start_column=merged_cell["min_col"],
-                                end_row=current_row,
-                                end_column=merged_cell["max_col"],
-                            )
-                            logger.info(
-                                f"Объединены ячейки в строке метода: {current_row}, колонки {merged_cell['min_col']}-{merged_cell['max_col']}"
-                            )
-
-                        # Определяем, является ли метод последним в группе
-                        last_method_in_group = i == len(group_data["calculations"]) - 1
-
-                        # Удаляем верхнюю и нижнюю границы для всех ячеек в строке
-                        for col in range(1, worksheet.max_column + 1):
-                            cell = worksheet.cell(row=current_row, column=col)
-                            if cell.border:
-                                new_border = copy(cell.border)
-                                # Всегда удаляем верхнюю границу для методов в группе
-                                new_border.top = None
-
-                                # Для последнего метода в группе сохраняем нижнюю границу
-                                if last_method_in_group:
-                                    template_cell = worksheet.cell(
-                                        row=template_row, column=col
-                                    )
-                                    if (
-                                        template_cell.border
-                                        and template_cell.border.bottom
-                                    ):
-                                        new_border.bottom = copy(
-                                            template_cell.border.bottom
-                                        )
-                                else:
-                                    # Для остальных методов в группе убираем нижнюю границу
-                                    new_border.bottom = None
-
-                                cell.border = new_border
-
-                            if cell.value and isinstance(cell.value, str):
-                                if "{id_method}" in cell.value:
-                                    cell.value = ""  # Пустой ID для методов в группе
-                                elif "{name_method}" in cell.value:
-                                    # Делаем первую букву метода строчной
-                                    method_name = calc.research_method.name
-                                    if method_name:
-                                        method_name = (
-                                            method_name[0].lower() + method_name[1:]
-                                        )
-                                    cell.value = method_name
-                                    logger.info(
-                                        f"Установлено название метода в группе: {method_name}"
-                                    )
-                                elif "{result}" in cell.value:
-                                    cell.value = cell.value.replace(
-                                        "{result}", format_result(calc.result)
-                                    )
-                                    logger.info(f"Установлен результат: {calc.result}")
-                                elif "{measurement_error}" in cell.value:
-                                    error_value = calc.measurement_error
-                                    formatted_error = (
-                                        error_value
-                                        if error_value and error_value.startswith("-")
-                                        else (
-                                            f"±{error_value}"
-                                            if error_value
-                                            and error_value != "не указано"
-                                            else "не указано"
-                                        )
-                                    )
-                                    cell.value = cell.value.replace(
-                                        "{measurement_error}",
-                                        formatted_error,
-                                    )
-                                elif "{unit}" in cell.value:
-                                    cell.value = cell.value.replace(
-                                        "{unit}", ""
-                                    )  # Пустая единица измерения для методов в группе
-                                elif "{measurement_method}" in cell.value:
-                                    cell.value = cell.value.replace(
-                                        "{measurement_method}", ""
-                                    )  # Пустой метод измерения для методов в группе
-                                elif "{nd_code1}" in cell.value:
-                                    cell.value = cell.value.replace(
-                                        "{nd_code1}",
-                                        calc.research_method.nd_code or "не указано",
-                                    )
-                                elif "{nd_name1}" in cell.value:
-                                    cell.value = cell.value.replace(
-                                        "{nd_name1}",
-                                        calc.research_method.nd_name or "не указано",
-                                    )
-
-                        current_row += 1
-                        logger.info(
-                            f"Метод в группе обработан, переход к строке {current_row}"
-                        )
-
-                    idx += 1
-                    logger.info(
-                        f"Группа {group_data['name']} обработана, переход к следующей группе/методу"
-                    )
-
-                # Затем обрабатываем одиночные методы
-                for calc in standalone_calculations:
-                    # Применяем объединение ячеек для одиночного метода
-                    for merged_cell in template_merged_cells:
-                        worksheet.merge_cells(
-                            start_row=current_row,
-                            start_column=merged_cell["min_col"],
-                            end_row=current_row,
-                            end_column=merged_cell["max_col"],
-                        )
-                        logger.info(
-                            f"Объединены ячейки в строке одиночного метода: {current_row}, колонки {merged_cell['min_col']}-{merged_cell['max_col']}"
-                        )
-
-                    for col in range(1, worksheet.max_column + 1):
-                        cell = worksheet.cell(row=current_row, column=col)
-                        source_cell = worksheet.cell(row=template_row, column=col)
-
-                        # Копируем стили из шаблонной строки
-                        if source_cell.has_style:
-                            cell._style = copy(source_cell._style)
-
-                        # Обработка значений ячеек
-                        if cell.value and isinstance(cell.value, str):
-                            # Форматируем погрешность с добавлением ±
-                            error_value = calc.measurement_error
-                            formatted_error = (
-                                error_value
-                                if error_value and error_value.startswith("-")
-                                else (
-                                    f"±{error_value}"
-                                    if error_value and error_value != "не указано"
-                                    else "не указано"
-                                )
-                            )
-
-                            value = (
-                                cell.value.replace("{id_method}", str(idx))
-                                .replace("{name_method}", calc.research_method.name)
-                                .replace("{result}", format_result(calc.result))
-                                .replace(
-                                    "{measurement_error}",
-                                    formatted_error,
-                                )
-                                .replace("{unit}", calc.unit or "не указано")
-                                .replace(
-                                    "{measurement_method}",
-                                    calc.research_method.measurement_method
-                                    or "не указано",
-                                )
-                                .replace(
-                                    "{nd_code1}",
-                                    calc.research_method.nd_code or "не указано",
-                                )
-                                .replace(
-                                    "{nd_name1}",
-                                    calc.research_method.nd_name or "не указано",
-                                )
-                            )
-                            cell.value = value
-
-                    current_row += 1
-                    idx += 1
-
-            # Восстанавливаем размеры строк с учетом сдвига
-            restore_row_dimensions(
-                worksheet, original_dimensions, template_row, rows_to_insert
-            )
-
-        # Обработка таблицы 2 (оборудование)
-        start_row_table2 = None
-        end_row_table2 = None
-        template_row_table2 = None
-
-        # Находим границы таблицы 2
-        for row_idx, row in enumerate(worksheet.iter_rows(), 1):
-            for cell in row:
-                if cell.value == "{start_table2}":
-                    start_row_table2 = row_idx
-                    logger.info(f"Найдена метка start_table2 в строке {row_idx}")
-                elif cell.value == "{end_table2}":
-                    end_row_table2 = row_idx
-                    logger.info(f"Найдена метка end_table2 в строке {row_idx}")
-                    break
-            if start_row_table2 and end_row_table2:
-                break
-
-        if start_row_table2 and end_row_table2:
-            template_row_table2 = start_row_table2 + 1
-
-            # Получаем уникальные приборы из всех расчетов
-            unique_equipment = []
-            seen_equipment = set()
-
-            # Собираем все ID оборудования из всех расчетов
-            equipment_ids = set()
-            for calc in calculations:
-                if calc.equipment_data:
-                    for equipment_item in calc.equipment_data:
-                        if isinstance(equipment_item, dict) and "id" in equipment_item:
-                            equipment_ids.add(equipment_item["id"])
-                        elif isinstance(equipment_item, int):  # Поддержка числовых ID
-                            equipment_ids.add(equipment_item)
-
-            # Получаем все оборудование из базы данных
-            if equipment_ids:
-                equipment_list = Equipment.objects.filter(id__in=equipment_ids)
-                for equipment in equipment_list:
-                    equipment_key = (equipment.name, equipment.serial_number)
-                    if equipment_key not in seen_equipment:
-                        seen_equipment.add(equipment_key)
-                        unique_equipment.append(equipment)
-
-            rows_needed = len(unique_equipment)
-
-            logger.info(
-                f"Найдены границы таблицы 2: start_row={start_row_table2}, end_row={end_row_table2}"
-            )
-            logger.info(f"Шаблонная строка таблицы 2: {template_row_table2}")
-            logger.info(
-                f"Необходимо вставить строк для уникального оборудования: {rows_needed}"
-            )
-            logger.info(
-                f"Уникальное оборудование: {[equip.name for equip in unique_equipment]}"
-            )
-
-            # Проверяем содержимое шаблонной строки
-            for col in range(1, worksheet.max_column + 1):
-                cell = worksheet.cell(row=template_row_table2, column=col)
-                if cell.value:
-                    logger.info(f"Ячейка [{template_row_table2}, {col}]: {cell.value}")
-
-            # Сохраняем размеры строк перед любыми изменениями
-            original_dimensions = save_row_dimensions(worksheet)
-
-            # Вставляем новые строки, если их больше одной
-            if rows_needed > 1:
-                # Сохраняем существующие объединенные ячейки
-                merged_ranges = []
-                for merge_range in worksheet.merged_cells.ranges:
-                    merged_ranges.append(
-                        {
-                            "min_row": merge_range.min_row,
-                            "max_row": merge_range.max_row,
-                            "min_col": merge_range.min_col,
-                            "max_col": merge_range.max_col,
-                        }
-                    )
-
-                # Вставляем новые строки
-                rows_to_insert = rows_needed - 1  # Одна строка уже есть
-                worksheet.insert_rows(template_row_table2 + 1, rows_to_insert)
-                logger.info(
-                    f"Вставлено {rows_to_insert} новых строк после строки {template_row_table2}"
-                )
-
-                # Копируем стили для каждой новой строки
-                for idx in range(rows_to_insert):
-                    new_row = template_row_table2 + 1 + idx
-                    logger.info(f"Копирование стилей для новой строки {new_row}")
-
-                    for col in range(1, worksheet.max_column + 1):
-                        source_cell = worksheet.cell(
-                            row=template_row_table2, column=col
-                        )
-                        target_cell = worksheet.cell(row=new_row, column=col)
-
-                        # Копируем стили только если в исходной ячейке есть значение или это ячейка с границами таблицы
-                        if source_cell.has_style and (
-                            source_cell.value is not None
-                            or col in [1, worksheet.max_column]
-                        ):
-                            target_cell._style = copy(source_cell._style)
-
-                        target_cell.value = source_cell.value
-
-                # Восстанавливаем и обновляем объединенные ячейки
-                worksheet.merged_cells.ranges.clear()
-                for merge_range in merged_ranges:
-                    if merge_range["max_row"] < template_row_table2:
-                        worksheet.merge_cells(
-                            start_row=merge_range["min_row"],
-                            start_column=merge_range["min_col"],
-                            end_row=merge_range["max_row"],
-                            end_column=merge_range["max_col"],
-                        )
-                    elif merge_range["min_row"] > template_row_table2:
-                        worksheet.merge_cells(
-                            start_row=merge_range["min_row"] + rows_to_insert,
-                            start_column=merge_range["min_col"],
-                            end_row=merge_range["max_row"] + rows_to_insert,
-                            end_column=merge_range["max_col"],
-                        )
-                    elif merge_range["min_row"] == template_row_table2:
-                        for i in range(rows_needed):
-                            worksheet.merge_cells(
-                                start_row=template_row_table2 + i,
-                                start_column=merge_range["min_col"],
-                                end_row=template_row_table2 + i,
-                                end_column=merge_range["max_col"],
-                            )
-
-            # Заполняем данные таблицы 2
-            current_row = template_row_table2
-            for idx, equipment in enumerate(unique_equipment, 1):
-                for col in range(1, worksheet.max_column + 1):
-                    cell = worksheet.cell(row=current_row, column=col)
-                    if cell.value and isinstance(cell.value, str):
-                        # Форматируем даты в нужный формат
-                        verification_date = (
-                            equipment.verification_date.strftime("%d.%m.%Y")
-                            if equipment.verification_date
-                            else "не указано"
-                        )
-                        verification_end_date = (
-                            equipment.verification_end_date.strftime("%d.%m.%Y")
-                            if equipment.verification_end_date
-                            else "не указано"
-                        )
-
-                        value = (
-                            cell.value.replace("{id_equipment}", str(idx))
-                            .replace("{name_equipment}", equipment.name or "не указано")
-                            .replace(
-                                "{serial_num}", equipment.serial_number or "не указано"
-                            )
-                            .replace(
-                                "{ver_info}",
-                                equipment.verification_info or "не указано",
-                            )
-                            .replace("{ver_date}", verification_date)
-                            .replace("{ver_end_date}", verification_end_date)
-                        )
-                        cell.value = value
-                current_row += 1
-
-            # Восстанавливаем размеры строк с учетом сдвига
-            restore_row_dimensions(
-                worksheet, original_dimensions, template_row_table2, rows_needed - 1
-            )
-
-        # Обработка таблицы 3 (НД методов испытаний)
-        start_row_table3 = None
-        end_row_table3 = None
-        template_row_table3 = None
-
-        # Находим границы таблицы 3
-        for row_idx, row in enumerate(worksheet.iter_rows(), 1):
-            for cell in row:
-                if cell.value == "{start_table3}":
-                    start_row_table3 = row_idx
-                    logger.info(f"Найдена метка start_table3 в строке {row_idx}")
-                elif cell.value == "{end_table3}":
-                    end_row_table3 = row_idx
-                    logger.info(f"Найдена метка end_table3 в строке {row_idx}")
-                    break
-            if start_row_table3 and end_row_table3:
-                break
-
-        if start_row_table3 and end_row_table3:
-            template_row_table3 = start_row_table3 + 1
-
-            # Получаем уникальные методы исследования
-            unique_methods = []
-            seen_methods = set()
-
-            for calc in calculations:
-                method = calc.research_method
-                method_key = (method.nd_code or "", method.nd_name or "")
-
-                if method_key not in seen_methods:
-                    seen_methods.add(method_key)
-                    unique_methods.append(method)
-
-            rows_needed = len(unique_methods)
-
-            logger.info(
-                f"Найдены границы таблицы 3: start_row={start_row_table3}, end_row={end_row_table3}"
-            )
-            logger.info(f"Шаблонная строка таблицы 3: {template_row_table3}")
-            logger.info(
-                f"Необходимо вставить строк для уникальных методов: {rows_needed}"
-            )
-            logger.info(
-                f"Уникальные методы: {[method.name for method in unique_methods]}"
-            )
-
-            # Проверяем содержимое шаблонной строки
-            for col in range(1, worksheet.max_column + 1):
-                cell = worksheet.cell(row=template_row_table3, column=col)
-                if cell.value:
-                    logger.info(f"Ячейка [{template_row_table3}, {col}]: {cell.value}")
-
-            # Сохраняем размеры строк перед любыми изменениями
-            original_dimensions = save_row_dimensions(worksheet)
-
-            # Вставляем новые строки, если их больше одной
-            if rows_needed > 1:
-                # Сохраняем существующие объединенные ячейки
-                merged_ranges = []
-                for merge_range in worksheet.merged_cells.ranges:
-                    merged_ranges.append(
-                        {
-                            "min_row": merge_range.min_row,
-                            "max_row": merge_range.max_row,
-                            "min_col": merge_range.min_col,
-                            "max_col": merge_range.max_col,
-                        }
-                    )
-
-                # Вставляем новые строки
-                rows_to_insert = rows_needed - 1  # Одна строка уже есть
-                worksheet.insert_rows(template_row_table3 + 1, rows_to_insert)
-                logger.info(
-                    f"Вставлено {rows_to_insert} новых строк после строки {template_row_table3}"
-                )
-
-                # Копируем стили для каждой новой строки
-                for idx in range(rows_to_insert):
-                    new_row = template_row_table3 + 1 + idx
-                    logger.info(f"Копирование стилей для новой строки {new_row}")
-
-                    for col in range(1, worksheet.max_column + 1):
-                        source_cell = worksheet.cell(
-                            row=template_row_table3, column=col
-                        )
-                        target_cell = worksheet.cell(row=new_row, column=col)
-
-                        # Копируем стили только если в исходной ячейке есть значение или это ячейка с границами таблицы
-                        if source_cell.has_style and (
-                            source_cell.value is not None
-                            or col in [1, worksheet.max_column]
-                        ):
-                            target_cell._style = copy(source_cell._style)
-
-                        target_cell.value = source_cell.value
-
-                # Восстанавливаем и обновляем объединенные ячейки
-                worksheet.merged_cells.ranges.clear()
-                for merge_range in merged_ranges:
-                    if merge_range["max_row"] < template_row_table3:
-                        worksheet.merge_cells(
-                            start_row=merge_range["min_row"],
-                            start_column=merge_range["min_col"],
-                            end_row=merge_range["max_row"],
-                            end_column=merge_range["max_col"],
-                        )
-                    elif merge_range["min_row"] > template_row_table3:
-                        worksheet.merge_cells(
-                            start_row=merge_range["min_row"] + rows_to_insert,
-                            start_column=merge_range["min_col"],
-                            end_row=merge_range["max_row"] + rows_to_insert,
-                            end_column=merge_range["max_col"],
-                        )
-                    elif merge_range["min_row"] == template_row_table3:
-                        for i in range(rows_needed):
-                            worksheet.merge_cells(
-                                start_row=template_row_table3 + i,
-                                start_column=merge_range["min_col"],
-                                end_row=template_row_table3 + i,
-                                end_column=merge_range["max_col"],
-                            )
-
-            # Заполняем данные таблицы 3
-            current_row = template_row_table3
-            for idx, method in enumerate(unique_methods, 1):
-                for col in range(1, worksheet.max_column + 1):
-                    cell = worksheet.cell(row=current_row, column=col)
-                    if cell.value and isinstance(cell.value, str):
-                        value = (
-                            cell.value.replace("{id_nd}", str(idx))
-                            .replace("{nd_code}", method.nd_code or "не указано")
-                            .replace("{name_nd}", method.nd_name or "не указано")
-                        )
-                        cell.value = value
-                current_row += 1
-
-            # Восстанавливаем размеры строк с учетом сдвига
-            restore_row_dimensions(
-                worksheet, original_dimensions, template_row_table3, rows_needed - 1
-            )
-
-        # Сохраняем промежуточный результат
-        temp_output = BytesIO()
-        workbook.save(temp_output)
-        temp_output.seek(0)
-
-        # Создаем новый файл из промежуточного результата
-        source_workbook = load_workbook(temp_output)
-        source_worksheet = source_workbook.active
+        template_bytes = BytesIO(protocol.excel_template.file)
+        template_workbook = openpyxl.load_workbook(template_bytes)
+        template_sheet = template_workbook.active
+
+        logger.info("Шаблон успешно загружен")
+        logger.debug(
+            f"Размеры шаблона: строк={template_sheet.max_row}, столбцов={template_sheet.max_column}"
+        )
 
         # Создаем новый файл
-        target_workbook = Workbook()
-        target_worksheet = target_workbook.active
-        target_worksheet.title = "Лист1"
+        new_workbook = openpyxl.Workbook()
+        new_sheet = new_workbook.active
 
-        # Копируем настройки страницы из шаблона
-        source_page_setup = source_worksheet.page_setup
-        source_page_margins = source_worksheet.page_margins
+        copy_column_dimensions(template_sheet, new_sheet)
 
-        for sheet in target_workbook.worksheets:
-            if (
-                hasattr(source_page_setup, "orientation")
-                and source_page_setup.orientation is not None
-            ):
-                sheet.page_setup.orientation = source_page_setup.orientation
-            if (
-                hasattr(source_page_setup, "paperSize")
-                and source_page_setup.paperSize is not None
-            ):
-                sheet.page_setup.paperSize = source_page_setup.paperSize
+        # Устанавливаем размеры листа как в шаблоне
+        new_sheet._current_row = template_sheet.max_row
+        new_sheet._max_column = template_sheet.max_column
 
-            # Устанавливаем базовые настройки страницы для масштабирования
-            sheet.page_setup.fitToPage = True
-            sheet.page_setup.fitToWidth = 1
-            sheet.page_setup.fitToHeight = 0
+        # Создаем карту объединенных ячеек
+        merged_cells_map = new_sheet.merged_cells
 
-            # Копируем поля страницы
-            if source_page_margins:
-                sheet.page_margins = PageMargins(
-                    left=(
-                        source_page_margins.left
-                        if hasattr(source_page_margins, "left")
-                        else 0.591
-                    ),
-                    right=(
-                        source_page_margins.right
-                        if hasattr(source_page_margins, "right")
-                        else 0.394
-                    ),
-                    top=(
-                        source_page_margins.top
-                        if hasattr(source_page_margins, "top")
-                        else 0.433
-                    ),
-                    bottom=(
-                        source_page_margins.bottom
-                        if hasattr(source_page_margins, "bottom")
-                        else 0.354
-                    ),
+        # Обрабатываем шапку
+        header_end = process_header(
+            protocol, template_sheet, new_sheet, merged_cells_map
+        )
+        if header_end == 0:
+            return HttpResponseBadRequest("Ошибка при обработке шапки протокола")
+
+        # Обрабатываем заголовок и условия отбора
+        table_start = process_header_and_conditions(
+            protocol, template_sheet, new_sheet, header_end, merged_cells_map
+        )
+
+        # Обрабатываем первую таблицу с методами
+        current_sheet = process_methods_table(
+            protocol,
+            template_sheet,
+            new_sheet,
+            table_start,
+            merged_cells_map,
+            new_sheet.max_row + 1,
+            1,
+        )
+        if not current_sheet:
+            return HttpResponseBadRequest("Ошибка при обработке таблицы методов")
+
+        # Находим конец первой таблицы
+        table1_end = None
+        for row_num in range(table_start, template_sheet.max_row + 1):
+            row = list(
+                template_sheet.iter_rows(
+                    min_row=row_num, max_row=row_num, values_only=True
                 )
+            )[0]
+            if any(cell and str(cell).strip() == "{end_table1}" for cell in row):
+                table1_end = row_num
+                break
 
-                # Копируем header и footer только если они есть в шаблоне
-                if hasattr(source_page_margins, "header"):
-                    sheet.page_margins.header = source_page_margins.header
-                if hasattr(source_page_margins, "footer"):
-                    sheet.page_margins.footer = source_page_margins.footer
-            else:
-                # Устанавливаем стандартные поля если их нет в шаблоне
-                sheet.page_margins = PageMargins(
-                    left=0.591,  # 1.5 см
-                    right=0.394,  # 1.0 см
-                    top=0.433,  # 1.1 см
-                    bottom=0.354,  # 0.9 см
-                )
-
-        # Копируем размеры столбцов
-        for column in source_worksheet.column_dimensions:
-            target_worksheet.column_dimensions[column] = copy(
-                source_worksheet.column_dimensions[column]
+        if table1_end:
+            # Обрабатываем данные между таблицами 1 и 2
+            current_sheet, current_row = process_between_tables(
+                protocol,
+                template_sheet,
+                current_sheet,
+                table1_end,
+                merged_cells_map,
+                current_sheet.max_row + 1,
+                len(new_workbook.sheetnames),
             )
 
-        markers = [
-            "{start_header}",
-            "{end_header}",
-            "{start_table1}",
-            "{end_table1}",
-            "{start_table2}",
-            "{end_table2}",
-            "{start_table3}",
-            "{end_table3}",
-            "{{start_table}}",
-            "{{end_table}}",
-        ]
+            # Обрабатываем вторую таблицу
+            current_sheet = process_equipment_table(
+                protocol,
+                template_sheet,
+                current_sheet,
+                table1_end + 1,
+                merged_cells_map,
+                current_row,
+                len(new_workbook.sheetnames),
+            )
+            if not current_sheet:
+                return HttpResponseBadRequest(
+                    "Ошибка при обработке таблицы оборудования"
+                )
 
-        table_ranges = []
-        start_table_row = None
-
-        # Находим все диапазоны с двойными фигурными скобками
-        for source_row in range(1, source_worksheet.max_row + 1):
-            for col in range(1, source_worksheet.max_column + 1):
-                cell = source_worksheet.cell(row=source_row, column=col)
-                if cell.value and isinstance(cell.value, str):
-                    if "{{start_table}}" in cell.value:
-                        start_table_row = source_row
-                    elif "{{end_table}}" in cell.value and start_table_row is not None:
-                        table_ranges.append((start_table_row, source_row))
-                        start_table_row = None
-
-        # Определяем строки, которые нужно пропустить из-за наличия фигурных скобок
-        skip_rows = set()
-        for start_row, end_row in table_ranges:
-            has_braces = False
-            for row in range(start_row, end_row + 1):
-                for col in range(1, source_worksheet.max_column + 1):
-                    cell = source_worksheet.cell(row=row, column=col)
-                    if cell.value and isinstance(cell.value, str):
-                        cell_value = cell.value
-                        # Удаляем из проверки все метки start_table и end_table с цифрами
-                        for i in range(10):
-                            cell_value = cell_value.replace(f"{{start_table{i}}}", "")
-                            cell_value = cell_value.replace(f"{{end_table{i}}}", "")
-                        # Удаляем метки с двойными скобками
-                        cell_value = cell_value.replace("{{start_table}}", "")
-                        cell_value = cell_value.replace("{{end_table}}", "")
-                        if "{" in cell_value or "}" in cell_value:
-                            has_braces = True
-                            break
-                if has_braces:
+            # Находим конец второй таблицы
+            table2_end = None
+            for row_num in range(table1_end + 1, template_sheet.max_row + 1):
+                row = list(
+                    template_sheet.iter_rows(
+                        min_row=row_num, max_row=row_num, values_only=True
+                    )
+                )[0]
+                if any(cell and str(cell).strip() == "{end_table2}" for cell in row):
+                    table2_end = row_num
                     break
 
-            if has_braces:
-                skip_rows.update(range(start_row, end_row + 1))
+            if table2_end:
+                # Обрабатываем данные между таблицами 2 и 3
+                current_sheet, current_row = process_between_tables(
+                    protocol,
+                    template_sheet,
+                    current_sheet,
+                    table2_end,
+                    merged_cells_map,
+                    current_sheet.max_row + 1,
+                    len(new_workbook.sheetnames),
+                )
 
-        # Добавляем строки с пустыми условиями отбора
-        skip_rows.update(rows_to_delete)
+                # Обрабатываем третью таблицу
+                current_sheet = process_nd_table(
+                    protocol,
+                    template_sheet,
+                    current_sheet,
+                    table2_end + 1,
+                    merged_cells_map,
+                    current_row,
+                    len(new_workbook.sheetnames),
+                )
+                if not current_sheet:
+                    return HttpResponseBadRequest("Ошибка при обработке таблицы НД")
 
-        # Создаем словарь для маппинга исходных строк в целевые
-        row_mapping = {}
-        target_row = 1
-
-        # Создаем список маркеров, которые нужно пропустить при маппинге
-        skip_markers = [
-            "{start_header}",
-            "{end_header}",
-            "{{start_table}}",
-            "{{end_table}}",
-        ]
-
-        # Создаем множество для строк с маркерами таблиц
-        table_marker_rows = set()
-
-        # Сначала определяем маппинг строк, пропуская строки с пустыми условиями отбора
-        for source_row in range(1, source_worksheet.max_row + 1):
-            if source_row in skip_rows:
-                continue
-
-            skip_row = False
-            for col in range(1, source_worksheet.max_column + 1):
-                cell = source_worksheet.cell(row=source_row, column=col)
-                if cell.value and isinstance(cell.value, str):
-                    cell_value = str(cell.value)
-                    # Проверяем маркеры таблиц
+                # Находим конец третьей таблицы
+                table3_end = None
+                for row_num in range(table2_end + 1, template_sheet.max_row + 1):
+                    row = list(
+                        template_sheet.iter_rows(
+                            min_row=row_num, max_row=row_num, values_only=True
+                        )
+                    )[0]
                     if any(
-                        marker in cell_value
-                        for marker in [
-                            "{start_table1}",
-                            "{end_table1}",
-                            "{start_table2}",
-                            "{end_table2}",
-                            "{start_table3}",
-                            "{end_table3}",
-                        ]
+                        cell and str(cell).strip() == "{end_table3}" for cell in row
                     ):
-                        table_marker_rows.add(source_row)
-                        skip_row = True
-                        break
-                    # Проверяем другие маркеры
-                    if any(marker in cell_value for marker in skip_markers):
-                        skip_row = True
+                        table3_end = row_num
                         break
 
-            if not skip_row and source_row not in table_marker_rows:
-                row_mapping[source_row] = target_row
-                target_row += 1
+                if table3_end:
+                    # Обрабатываем оставшиеся строки после таблицы 3
+                    current_sheet = process_footer(
+                        protocol,
+                        template_sheet,
+                        current_sheet,
+                        table3_end,
+                        merged_cells_map,
+                        current_sheet.max_row + 1,
+                        len(new_workbook.sheetnames),
+                    )
 
-        # Группируем строки по листам с учетом шапок таблиц
-        sheets_content = []
-        current_sheet_rows = []
-        current_sheet_height = 0
-        last_header_row = None
-        last_header_rows = []
-        is_table_complete = False  # Флаг для отслеживания заполненности таблицы
-        current_table = None  # Текущая обрабатываемая таблица
+        logger.info("Начинаем сохранение файла")
+        logger.debug(
+            f"Размеры нового листа: строк={new_sheet.max_row}, столбцов={new_sheet.max_column}"
+        )
 
-        # Создаем словарь для отслеживания состояния таблиц
-        table_states = {
-            "table1": {"complete": False, "header_rows": []},
-            "table2": {"complete": False, "header_rows": []},
-            "table3": {"complete": False, "header_rows": []},
-        }
+        try:
+            # Ищем все ячейки с текстом "конец протокола"
+            end_protocol_locations = find_text_in_workbook(
+                new_workbook, "конец протокола"
+            )
+            if end_protocol_locations:
+                for location in end_protocol_locations:
+                    sheet_name, row_idx, col_idx = location
+                    logger.info(
+                        f"Найден текст 'конец протокола' в листе '{sheet_name}', ячейка: строка {row_idx}, столбец {col_idx}"
+                    )
+                logger.info(
+                    f"Всего найдено вхождений 'конец протокола': {len(end_protocol_locations)}"
+                )
+            else:
+                logger.info(
+                    "Текст 'конец протокола' не найден в сгенерированном документе"
+                )
 
-        # Создаем временный список для всех строк
-        all_rows = []
+            # Сохраняем результат
+            output = BytesIO()
+            new_workbook.save(output)
+            output.seek(0)
 
-        for source_row, target_row in row_mapping.items():
-            # Получаем высоту строки
-            row_height = (
-                source_worksheet.row_dimensions[source_row].height
-                if source_row in source_worksheet.row_dimensions
-                else DEFAULT_ROW_HEIGHT
+            logger.info("Файл успешно сохранен в BytesIO")
+
+            response = HttpResponse(
+                output.getvalue(),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            response["Content-Disposition"] = (
+                f'attachment; filename="protocol_{protocol_id}.xlsx"'
             )
 
-            # Проверяем маркеры начала и конца таблиц в исходных строках (включая пропущенные)
-            for check_row in range(
-                source_row - 1, source_row + 2
-            ):  # Проверяем текущую строку и соседние
-                if check_row < 1 or check_row > source_worksheet.max_row:
-                    continue
+            logger.info("Протокол успешно сгенерирован")
+            return response
 
-                for col in range(1, source_worksheet.max_column + 1):
-                    cell = source_worksheet.cell(row=check_row, column=col)
-                    if cell.value and isinstance(cell.value, str):
-                        cell_value = str(cell.value)
+        except Exception as save_error:
+            logger.error(f"Ошибка при сохранении файла: {str(save_error)}")
+            return HttpResponseBadRequest("Ошибка при сохранении файла")
 
-                        # Проверяем начало таблиц
-                        if "{start_table1}" in cell_value:
-                            current_table = "table1"
-                            table_states["table1"]["complete"] = False
-                        elif "{start_table2}" in cell_value:
-                            current_table = "table2"
-                            table_states["table2"]["complete"] = False
-                        elif "{start_table3}" in cell_value:
-                            current_table = "table3"
-                            table_states["table3"]["complete"] = False
-
-                        # Проверяем конец таблиц
-                        elif "{end_table1}" in cell_value:
-                            table_states["table1"]["complete"] = True
-                            if current_table == "table1":
-                                current_table = None
-                        elif "{end_table2}" in cell_value:
-                            table_states["table2"]["complete"] = True
-                            if current_table == "table2":
-                                current_table = None
-                        elif "{end_table3}" in cell_value:
-                            table_states["table3"]["complete"] = True
-                            if current_table == "table3":
-                                current_table = None
-
-            # Проверяем, является ли текущая строка частью таблицы
-            header_row = find_table_headers(source_worksheet, source_row)
-
-            # Если нашли шапку таблицы, сохраняем её и получаем все строки шапки
-            if header_row is not None:
-                last_header_row = header_row
-                last_header_rows = get_table_header_rows(
-                    source_worksheet, header_row, source_row
-                )
-                if current_table:
-                    table_states[current_table]["header_rows"] = last_header_rows
-
-            # Если текущий лист превысит высоту А4
-            if (
-                current_sheet_height + row_height > A4_HEIGHT_POINTS
-                and current_sheet_rows
-            ):
-                sheets_content.append(current_sheet_rows)
-                current_sheet_rows = []
-                current_sheet_height = 0
-
-                # Если есть шапка таблицы и текущая таблица не завершена, добавляем шапку в начало нового листа
-                if current_table and not table_states[current_table]["complete"]:
-                    header_rows = table_states[current_table]["header_rows"]
-                    if header_rows:
-                        header_height = 0
-                        for header_row in header_rows:
-                            if header_row in row_mapping:
-                                header_row_height = (
-                                    source_worksheet.row_dimensions[header_row].height
-                                    if header_row in source_worksheet.row_dimensions
-                                    else DEFAULT_ROW_HEIGHT
-                                )
-                                header_height += header_row_height
-                                current_sheet_rows.append(header_row)
-                        current_sheet_height = header_height
-
-            current_sheet_rows.append(source_row)
-            current_sheet_height += row_height
-
-        # Добавляем последний набор строк
-        if current_sheet_rows:
-            sheets_content.append(current_sheet_rows)
-
-        # Создаем и заполняем листы
-        for sheet_index, sheet_rows in enumerate(sheets_content):
-            if sheet_index == 0:
-                # Используем первый лист
-                current_sheet = target_worksheet
-            else:
-                # Создаем новый лист для следующей части данных
-                current_sheet = target_workbook.create_sheet(f"Лист {sheet_index + 1}")
-
-                # Копируем настройки страницы
-                if (
-                    hasattr(source_worksheet.page_setup, "orientation")
-                    and source_worksheet.page_setup.orientation is not None
-                ):
-                    current_sheet.page_setup.orientation = (
-                        source_worksheet.page_setup.orientation
-                    )
-                if (
-                    hasattr(source_worksheet.page_setup, "paperSize")
-                    and source_worksheet.page_setup.paperSize is not None
-                ):
-                    current_sheet.page_setup.paperSize = (
-                        source_worksheet.page_setup.paperSize
-                    )
-
-                # Устанавливаем базовые настройки страницы для масштабирования
-                current_sheet.page_setup.fitToPage = True
-                current_sheet.page_setup.fitToWidth = 1
-                current_sheet.page_setup.fitToHeight = 0
-
-                # Копируем поля страницы
-                if source_worksheet.page_margins:
-                    current_sheet.page_margins = PageMargins(
-                        left=(
-                            source_worksheet.page_margins.left
-                            if hasattr(source_worksheet.page_margins, "left")
-                            else 0.591
-                        ),
-                        right=(
-                            source_worksheet.page_margins.right
-                            if hasattr(source_worksheet.page_margins, "right")
-                            else 0.394
-                        ),
-                        top=(
-                            source_worksheet.page_margins.top
-                            if hasattr(source_worksheet.page_margins, "top")
-                            else 0.433
-                        ),
-                        bottom=(
-                            source_worksheet.page_margins.bottom
-                            if hasattr(source_worksheet.page_margins, "bottom")
-                            else 0.354
-                        ),
-                    )
-
-                    # Копируем header и footer только если они есть в шаблоне
-                    if hasattr(source_worksheet.page_margins, "header"):
-                        current_sheet.page_margins.header = (
-                            source_worksheet.page_margins.header
-                        )
-                    if hasattr(source_worksheet.page_margins, "footer"):
-                        current_sheet.page_margins.footer = (
-                            source_worksheet.page_margins.footer
-                        )
-                else:
-                    # Устанавливаем стандартные поля если их нет в шаблоне
-                    current_sheet.page_margins = PageMargins(
-                        left=0.591,  # 1.5 см
-                        right=0.394,  # 1.0 см
-                        top=0.433,  # 1.1 см
-                        bottom=0.354,  # 0.9 см
-                    )
-
-                # Копируем размеры столбцов
-                for column in source_worksheet.column_dimensions:
-                    current_sheet.column_dimensions[column] = copy(
-                        source_worksheet.column_dimensions[column]
-                    )
-
-            current_sheet_row = 1
-
-            # Копируем содержимое для текущего листа
-            for source_row in sheet_rows:
-                # Копируем высоту строки
-                if source_row in source_worksheet.row_dimensions:
-                    current_sheet.row_dimensions[current_sheet_row] = copy(
-                        source_worksheet.row_dimensions[source_row]
-                    )
-
-                # Копируем ячейки и их стили
-                for col in range(1, source_worksheet.max_column + 1):
-                    source_cell = source_worksheet.cell(row=source_row, column=col)
-                    target_cell = current_sheet.cell(row=current_sheet_row, column=col)
-
-                    # Копируем значение
-                    target_cell.value = source_cell.value
-
-                    # Копируем стили
-                    if source_cell.has_style:
-                        if source_cell.font:
-                            target_cell.font = Font(
-                                name=source_cell.font.name,
-                                size=source_cell.font.size,
-                                bold=source_cell.font.bold,
-                                italic=source_cell.font.italic,
-                                vertAlign=source_cell.font.vertAlign,
-                                underline=source_cell.font.underline,
-                                strike=source_cell.font.strike,
-                                color=source_cell.font.color,
-                            )
-
-                        if source_cell.alignment:
-                            target_cell.alignment = Alignment(
-                                horizontal=source_cell.alignment.horizontal,
-                                vertical=source_cell.alignment.vertical,
-                                textRotation=source_cell.alignment.textRotation,
-                                wrapText=source_cell.alignment.wrapText,
-                                shrinkToFit=source_cell.alignment.shrinkToFit,
-                                indent=source_cell.alignment.indent,
-                            )
-
-                        if source_cell.border:
-                            target_cell.border = copy(source_cell.border)
-
-                        if source_cell.fill:
-                            target_cell.fill = copy(source_cell.fill)
-
-                        target_cell.number_format = source_cell.number_format
-
-                current_sheet_row += 1
-
-            # Обновляем объединенные ячейки для текущего листа
-            current_merged_cells = []
-            for merge_range in source_worksheet.merged_cells.ranges:
-                min_row = merge_range.min_row
-                max_row = merge_range.max_row
-
-                # Проверяем, что объединенные ячейки находятся в текущем наборе строк
-                if min_row in sheet_rows and max_row in sheet_rows:
-                    # Получаем новые номера строк для текущего листа
-                    new_min_row = sheet_rows.index(min_row) + 1
-                    new_max_row = sheet_rows.index(max_row) + 1
-
-                    current_merged_cells.append(
-                        {
-                            "min_row": new_min_row,
-                            "max_row": new_max_row,
-                            "min_col": merge_range.min_col,
-                            "max_col": merge_range.max_col,
-                        }
-                    )
-
-            # Применяем объединение ячеек для текущего листа
-            for merge_info in current_merged_cells:
-                try:
-                    current_sheet.merge_cells(
-                        start_row=merge_info["min_row"],
-                        start_column=merge_info["min_col"],
-                        end_row=merge_info["max_row"],
-                        end_column=merge_info["max_col"],
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Не удалось объединить ячейки на листе {sheet_index + 1}: {str(e)}"
-                    )
-
-        # Сохраняем финальный результат
-        final_output = BytesIO()
-        target_workbook.save(final_output)
-        final_output.seek(0)
-
-        # Формируем имя файла из номера протокола или регистрационных номеров проб
-        if protocol.test_protocol_number:
-            safe_filename = f"Protocol_{protocol.test_protocol_number}"
-        else:
-            # Берем регистрационные номера из проб
-            registration_numbers = [
-                sample.registration_number
-                for sample in protocol.samples.filter(is_deleted=False)
-            ]
-            safe_filename = f"Protocol_{'-'.join(registration_numbers)}"
-
-        safe_filename = "".join(
-            c for c in safe_filename if c.isalnum() or c in ("_", "-", ".")
-        )
-        excel_filename = f"{safe_filename}.xlsx"
-        encoded_excel_filename = excel_filename.encode("utf-8").decode("latin-1")
-
-        response = HttpResponse(
-            final_output.read(),
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        response["Content-Disposition"] = (
-            f"attachment; filename=\"{encoded_excel_filename}\"; filename*=UTF-8''{encoded_excel_filename}"
-        )
-        return response
-
+    except Protocol.DoesNotExist:
+        logger.error(f"Протокол с id {protocol_id} не найден")
+        return HttpResponseBadRequest("Протокол не найден")
     except Exception as e:
-        logger.error(f"Ошибка при генерации Excel файла: {str(e)}", exc_info=True)
-        return Response(
-            {"error": f"Произошла ошибка при генерации файла: {str(e)}"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
+        logger.error(f"Ошибка при генерации протокола: {str(e)}")
+        return HttpResponseBadRequest(f"Ошибка при генерации протокола: {str(e)}")

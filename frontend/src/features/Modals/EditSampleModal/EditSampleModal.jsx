@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Input, Select, message, Table, Button, Spin, DatePicker } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -41,17 +41,20 @@ const EditSampleModal = ({ onClose, onSuccess, sample, laboratoryId, departmentI
   const locationSearchRef = useRef(null);
   const [availableMethodsLoading, setAvailableMethodsLoading] = useState(false);
 
-  // Запрос на получение протоколов
-  const { data: protocols = [], isLoading: protocolsLoading } = useQuery({
-    queryKey: ['protocols', protocolSearchValue, laboratoryId, departmentId],
-    queryFn: () =>
-      protocolsApi.getProtocols({
-        laboratoryId,
-        departmentId,
-        search: protocolSearchValue,
-      }),
-    enabled: !!protocolSearchValue && protocolSearchValue.length > 0,
+  // Запрос на получение всех протоколов с кэшированием
+  const { data: allProtocols = [] } = useQuery({
+    queryKey: ['protocols', laboratoryId, departmentId],
+    queryFn: () => protocolsApi.getProtocols({ laboratoryId, departmentId }),
+    staleTime: 5 * 60 * 1000, // кэш на 5 минут
   });
+
+  // Фильтрация протоколов на клиентской стороне
+  const filteredProtocols = useMemo(() => {
+    if (!protocolSearchValue) return [];
+    return allProtocols.filter(protocol =>
+      protocol.test_protocol_number.toLowerCase().includes(protocolSearchValue.toLowerCase())
+    );
+  }, [allProtocols, protocolSearchValue]);
 
   // Запрос на получение мест отбора проб
   const { data: samplingLocations = [], isLoading: locationsLoading } = useQuery({
@@ -134,9 +137,12 @@ const EditSampleModal = ({ onClose, onSuccess, sample, laboratoryId, departmentI
 
   useEffect(() => {
     if (sample.protocol) {
-      fetchProtocolDetails(sample.protocol);
+      const protocol = allProtocols.find(p => p.id === sample.protocol);
+      if (protocol) {
+        setProtocolSearchValue(protocol.test_protocol_number);
+      }
     }
-  }, [sample.protocol]);
+  }, [sample.protocol, allProtocols]);
 
   useEffect(() => {
     const handleClickOutside = event => {
@@ -226,21 +232,6 @@ const EditSampleModal = ({ onClose, onSuccess, sample, laboratoryId, departmentI
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchProtocolDetails = async protocolId => {
-    try {
-      const response = await protocolsApi.getProtocols({
-        laboratoryId,
-        departmentId,
-        protocolId,
-      });
-      if (response.length > 0) {
-        setProtocolSearchValue(response[0].test_protocol_number);
-      }
-    } catch (error) {
-      console.error('Ошибка при загрузке деталей протокола:', error);
     }
   };
 
@@ -527,27 +518,21 @@ const EditSampleModal = ({ onClose, onSuccess, sample, laboratoryId, departmentI
                     status={errors.protocol ? 'error' : ''}
                     style={{ width: '100%' }}
                   />
-                  {protocolsDropdownVisible && protocols.length > 0 && (
+                  {protocolsDropdownVisible && filteredProtocols.length > 0 && (
                     <div className="search-dropdown">
-                      {protocolsLoading ? (
-                        <div className="search-loading">
-                          <Spin size="small" />
+                      {filteredProtocols.map(protocol => (
+                        <div
+                          key={protocol.id}
+                          className="search-option"
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, protocol: protocol.id }));
+                            setProtocolSearchValue(protocol.test_protocol_number);
+                            setProtocolsDropdownVisible(false);
+                          }}
+                        >
+                          {protocol.test_protocol_number}
                         </div>
-                      ) : (
-                        protocols.map(protocol => (
-                          <div
-                            key={protocol.id}
-                            className="search-option"
-                            onClick={() => {
-                              setFormData(prev => ({ ...prev, protocol: protocol.id }));
-                              setProtocolSearchValue(protocol.test_protocol_number);
-                              setProtocolsDropdownVisible(false);
-                            }}
-                          >
-                            {protocol.test_protocol_number}
-                          </div>
-                        ))
-                      )}
+                      ))}
                     </div>
                   )}
                 </div>

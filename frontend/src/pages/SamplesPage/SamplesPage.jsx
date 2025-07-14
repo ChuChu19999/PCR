@@ -273,6 +273,19 @@ const SamplesPage = () => {
     );
   }
 
+  // Если идет загрузка подразделений, показываем загрузку
+  if (departmentsLoading) {
+    return (
+      <SamplesPageWrapper>
+        <Layout title={selectedLaboratory.name}>
+          <div style={{ position: 'relative' }}>
+            <LoadingCard />
+          </div>
+        </Layout>
+      </SamplesPageWrapper>
+    );
+  }
+
   // Если есть подразделения и подразделение еще не выбрано, показываем список подразделений
   if (departments.length > 0 && !selectedDepartment) {
     return (
