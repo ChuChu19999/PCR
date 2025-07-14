@@ -107,20 +107,20 @@ const SamplesPage = () => {
         />
         <Space>
           <Button
+            title="Поиск"
             type="primary"
             onClick={() => handleSearch(selectedKeys, confirm, dataIndex)}
             icon={<SearchOutlined />}
             size="small"
             style={{ width: 90 }}
           >
-            Поиск
           </Button>
           <Button
+            title="Сброс"
             onClick={() => handleReset(clearFilters)}
             size="small"
             style={{ width: 90, fontFamily: 'HeliosCondC' }}
           >
-            Сброс
           </Button>
         </Space>
       </div>
