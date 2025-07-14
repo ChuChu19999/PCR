@@ -264,6 +264,23 @@ const OilProductsPageWrapper = styled.div`
     margin: 0.5rem 0;
     font-size: 13px;
   }
+
+  .ant-input {
+    font-family: 'HeliosCondC';
+    border-radius: 4px;
+    height: 32px;
+    max-width: 100%;
+    font-size: 13px;
+
+    &:hover {
+      border-color: #1677ff !important;
+    }
+
+    &:focus {
+      border-color: #1677ff !important;
+      box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2) !important;
+    }
+  }
 `;
 
 export default OilProductsPageWrapper;

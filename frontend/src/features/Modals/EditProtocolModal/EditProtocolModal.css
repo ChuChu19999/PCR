@@ -98,15 +98,14 @@
   align-items: center;
 }
 
+/* Стили для DatePicker */
 .edit-protocol-form .ant-picker:hover {
-  border-color: #0066cc;
+  border-color: #1677ff !important;
 }
 
-.edit-protocol-form .ant-picker-focused,
-.edit-protocol-form .ant-picker:focus {
-  border-color: #0066cc;
-  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
-  outline: none;
+.edit-protocol-form .ant-picker-focused {
+  border-color: #1677ff !important;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2) !important;
 }
 
 .edit-protocol-form .ant-picker .ant-picker-input {

@@ -57,12 +57,12 @@ const ResearchMethodPageWrapper = styled.div`
       font-size: 13px;
 
       &:hover {
-        border-color: #0066cc;
+        border-color: #1677ff !important;
       }
 
       &:focus {
-        border-color: #0066cc;
-        box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+        border-color: #1677ff !important;
+        box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2) !important;
       }
     }
   }

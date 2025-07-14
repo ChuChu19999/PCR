@@ -36,6 +36,10 @@ const SampleCalculationsTable = ({ data, sampleNumber }) => {
       width: '33%',
       render: inputData => {
         if (!inputData || inputData === '-') return '-';
+
+        // Заменяем точки на запятые в числах
+        const formattedText = inputData.replace(/(\d+)\.(\d+)/g, '$1,$2');
+
         return (
           <div
             style={{
@@ -44,7 +48,7 @@ const SampleCalculationsTable = ({ data, sampleNumber }) => {
               lineHeight: '1.5',
             }}
           >
-            {inputData}
+            {formattedText}
           </div>
         );
       },
@@ -137,7 +141,27 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
     queryFn: async () => {
       const data = await protocolsApi.getCalculations(protocol.id);
       console.log('Полученные данные расчетов:', data);
-      return data;
+      return data.map(calc => {
+        // Форматируем входные данные
+        let formattedInputData = '-';
+        if (calc.input_data && typeof calc.input_data === 'object') {
+          formattedInputData = Object.entries(calc.input_data)
+            .map(([key, value]) => {
+              let formattedValue = value;
+              if (typeof value === 'number') {
+                formattedValue = value.toString().replace('.', ',');
+              }
+              return `${key}: ${formattedValue}`;
+            })
+            .join('\n');
+        }
+
+        return {
+          ...calc,
+          key: `${calc.sampleNumber}-${calc.methodName}`,
+          inputData: formattedInputData,
+        };
+      });
     },
     enabled: !!protocol.id && activeTab === 'calculations',
   });
@@ -374,7 +398,11 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
       key: 'inputData',
       width: '33%',
       render: inputData => {
-        if (!inputData || Object.keys(inputData).length === 0) return '-';
+        if (!inputData || inputData === '-') return '-';
+
+        // Заменяем точки на запятые в числах
+        const formattedText = inputData.replace(/(\d+)\.(\d+)/g, '$1,$2');
+
         return (
           <div
             style={{
@@ -383,7 +411,7 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
               lineHeight: '1.5',
             }}
           >
-            {inputData}
+            {formattedText}
           </div>
         );
       },

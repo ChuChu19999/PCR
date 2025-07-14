@@ -106,8 +106,10 @@ const EditSampleModal = ({ onClose, onSuccess, sample, laboratoryId, departmentI
         if (calc.input_data && typeof calc.input_data === 'object') {
           formattedInputData = Object.entries(calc.input_data)
             .map(([key, value]) => {
-              const formattedValue =
-                typeof value === 'number' ? value.toString().replace('.', ',') : value;
+              let formattedValue = value;
+              if (typeof value === 'number') {
+                formattedValue = value.toString().replace('.', ',');
+              }
               return `${key}: ${formattedValue}`;
             })
             .join('\n');
@@ -124,8 +126,8 @@ const EditSampleModal = ({ onClose, onSuccess, sample, laboratoryId, departmentI
           methodName,
           unit: calc.research_method?.unit || '-',
           inputData: formattedInputData,
-          result: formattedResult || '-',
-          measurementError: formattedError,
+          result: calc.result || '-',
+          measurementError: calc.measurement_error || '-',
           equipment: calc.equipment || [],
           executor: calc.executor || '-',
           sampleNumber: calc.sample_number,
@@ -298,11 +300,18 @@ const EditSampleModal = ({ onClose, onSuccess, sample, laboratoryId, departmentI
       dataIndex: 'inputData',
       key: 'inputData',
       width: '20%',
-      render: text => (
-        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: '1.5' }}>
-          {text}
-        </div>
-      ),
+      render: text => {
+        if (text === '-') return <div>-</div>;
+
+        // Заменяем точки на запятые в числах
+        const formattedText = text.replace(/(\d+)\.(\d+)/g, '$1,$2');
+
+        return (
+          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: '1.5' }}>
+            {formattedText}
+          </div>
+        );
+      },
     },
     {
       title: 'Результат',

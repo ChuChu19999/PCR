@@ -221,3 +221,13 @@
 .edit-form-content::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
+/* Стили для DatePicker */
+.edit-sample-form .ant-picker:hover {
+  border-color: #1677ff !important;
+}
+
+.edit-sample-form .ant-picker-focused {
+  border-color: #1677ff !important;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2) !important;
+}

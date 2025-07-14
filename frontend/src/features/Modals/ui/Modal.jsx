@@ -1,9 +1,9 @@
 import React from 'react';
-import './Modal.css';
 import { useState } from 'react';
 import { BiX } from 'react-icons/bi';
 import ModalWrapper from './ModalWrapper';
 import { Button } from '../../../shared/ui/Button/Button';
+import './Modal.css';
 
 const Modal = ({
   editable,

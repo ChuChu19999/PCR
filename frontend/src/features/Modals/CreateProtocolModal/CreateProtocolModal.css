@@ -67,7 +67,7 @@
 }
 
 .create-protocol-form .ant-picker:hover {
-  border-color: #0066cc;
+  border-color: #1677ff !important;
 }
 
 .create-protocol-form .ant-picker-focused,

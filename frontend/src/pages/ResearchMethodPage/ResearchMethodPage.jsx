@@ -312,7 +312,16 @@ const ResearchMethodPage = () => {
     const cardIndices = [...new Set(fields.map(field => field.card_index))].sort();
 
     const handleKeyDown = (e, currentFieldIndex, cardFields) => {
-      if (e.key === 'Enter') {
+      // Разрешаем сочетания клавиш с Ctrl
+      if (e.ctrlKey || e.metaKey) {
+        const allowedKeyCodes = ['KeyA', 'KeyC', 'KeyV', 'KeyX'];
+        if (allowedKeyCodes.includes(e.code)) {
+          return;
+        }
+      }
+
+      // Добавляем навигацию по Enter
+      if (e.code === 'Enter') {
         e.preventDefault();
         const nextFieldIndex = (currentFieldIndex + 1) % cardFields.length;
         const nextField = cardFields[nextFieldIndex];
@@ -320,9 +329,36 @@ const ResearchMethodPage = () => {
         if (inputRefs.current[nextFieldName]) {
           inputRefs.current[nextFieldName].focus();
         }
-      } else if (e.key === 'Tab') {
-        e.preventDefault(); // Просто блокируем стандартное поведение Tab
+        return;
       }
+
+      // Отключаем Tab
+      if (e.code === 'Tab') {
+        e.preventDefault();
+        return;
+      }
+
+      // Разрешаем: backspace, delete, escape, запятая, минус, цифры
+      if (
+        e.code === 'Backspace' ||
+        e.code === 'Delete' ||
+        e.code === 'Escape' ||
+        e.code === 'Comma' ||
+        e.code === 'Minus' ||
+        e.code === 'NumpadSubtract' ||
+        e.code === 'NumpadDecimal' ||
+        e.code.startsWith('Digit') ||
+        e.code.startsWith('Numpad')
+      ) {
+        return;
+      }
+
+      // Разрешаем стрелки для навигации
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) {
+        return;
+      }
+
+      e.preventDefault();
     };
 
     return (
@@ -388,16 +424,38 @@ const ResearchMethodPage = () => {
                         <Input
                           ref={el => (inputRefs.current[formFieldName] = el)}
                           placeholder={`Введите ${field.name}`}
-                          style={{ fontSize: '14px', flex: '1' }}
+                          style={{
+                            fontSize: '14px',
+                            flex: '1',
+                          }}
+                          className="hover-input"
                           value={fieldValue}
                           disabled={lockedMethods[methodId]}
                           onChange={e => {
-                            const value = e.target.value;
-                            form.setFieldValue(formFieldName, value);
-                            setFormValues(prev => ({
-                              ...prev,
-                              [formFieldName]: value,
-                            }));
+                            let value = e.target.value;
+                            value = value.replace(/\./g, ',');
+                            const pattern = /^-?\d*,?\d*$/;
+
+                            if (value === '' || value === '-' || pattern.test(value)) {
+                              const commaCount = (value.match(/,/g) || []).length;
+                              if (commaCount <= 1) {
+                                const minusCount = (value.match(/-/g) || []).length;
+                                if (minusCount <= 1 && value.indexOf('-') <= 0) {
+                                  form.setFieldValue(formFieldName, value);
+                                  setFormValues(prev => ({
+                                    ...prev,
+                                    [formFieldName]: value,
+                                  }));
+
+                                  // Устанавливаем курсор в правильную позицию после замены
+                                  const input = e.target;
+                                  const position = input.selectionStart;
+                                  setTimeout(() => {
+                                    input.setSelectionRange(position, position);
+                                  }, 0);
+                                }
+                              }
+                            }
                           }}
                           onKeyDown={e => handleKeyDown(e, fieldIndex, cardFields)}
                           onPaste={e => {
@@ -669,16 +727,17 @@ const ResearchMethodPage = () => {
             <div
               style={{
                 width: '250px',
-                borderRight: '1px solid #e2e8f0',
+                borderRight: '1px solid rgba(44, 82, 130, 0.1)',
                 overflowY: 'auto',
                 padding: '12px',
                 paddingBottom: '0px',
-                backgroundColor: '#f8fafc',
+                background: 'linear-gradient(180deg, #f8faff 0%, #f0f5ff 100%)',
                 height: 'calc(100% + 21px)',
                 position: 'sticky',
                 top: 0,
                 borderBottomLeftRadius: '20px',
                 fontFamily: 'HeliosCondC',
+                boxShadow: 'inset -1px 0 2px rgba(44, 82, 130, 0.05)',
               }}
             >
               <div
@@ -686,21 +745,23 @@ const ResearchMethodPage = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  marginBottom: '16px',
+                  marginBottom: '0px',
                   position: 'sticky',
                   top: 0,
-                  backgroundColor: '#f8fafc',
+                  background: 'linear-gradient(180deg, #f8faff 0%, #f0f5ff 100%)',
                   zIndex: 1,
                   paddingTop: '5px',
                   paddingBottom: '16px',
-                  borderBottom: '1px solid #e2e8f0',
+                  borderBottom: '1px solid rgba(44, 82, 130, 0.1)',
                 }}
               >
                 <Typography
                   variant="h5"
                   style={{
                     fontSize: '16px',
-                    color: '#2c5282',
+                    background: 'linear-gradient(135deg, #2c5282 0%, #1a365d 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
                     margin: 0,
                     display: 'flex',
                     alignItems: 'center',
@@ -734,6 +795,7 @@ const ResearchMethodPage = () => {
                     height: 'calc(100% - 60px)',
                     overflowY: 'auto',
                     paddingRight: '4px',
+                    paddingTop: '6px',
                   }}
                 >
                   {availableMethods?.methods.map((method, index) => (
@@ -741,7 +803,6 @@ const ResearchMethodPage = () => {
                       key={method.id}
                       onClick={() => {
                         if (method.is_group) {
-                          // Если это группа, выбираем первый метод из группы
                           if (method.methods?.length > 0) {
                             const firstMethod = method.methods[0];
                             if (!firstMethod.input_data) {
@@ -750,7 +811,6 @@ const ResearchMethodPage = () => {
                             setCurrentMethod(firstMethod);
                           }
                         } else {
-                          // Если это обычный метод
                           if (!method.input_data) {
                             method.input_data = { fields: [] };
                           }
@@ -760,71 +820,105 @@ const ResearchMethodPage = () => {
                       }}
                       style={{
                         padding: '8px 12px',
-                        borderRadius: '6px',
+                        borderRadius: '8px',
                         cursor: 'pointer',
-                        backgroundColor:
+                        background:
                           (method.is_group &&
                             currentMethod &&
                             method.methods?.some(m => m.id === currentMethod.id)) ||
                           (!method.is_group && currentMethod?.id === method.id)
-                            ? '#e2e8f0'
-                            : 'transparent',
+                            ? 'linear-gradient(135deg, rgba(44, 82, 130, 0.1) 0%, rgba(26, 54, 93, 0.15) 100%)'
+                            : 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.6) 100%)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        transition: 'all 0.2s ease-in-out',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                         boxShadow:
                           (method.is_group &&
                             currentMethod &&
                             method.methods?.some(m => m.id === currentMethod.id)) ||
                           (!method.is_group && currentMethod?.id === method.id)
-                            ? '0 2px 4px rgba(0,0,0,0.05)'
-                            : 'none',
-                        border:
-                          (method.is_group &&
-                            currentMethod &&
-                            method.methods?.some(m => m.id === currentMethod.id)) ||
-                          (!method.is_group && currentMethod?.id === method.id)
-                            ? '1px solid #cbd5e0'
-                            : '1px solid transparent',
+                            ? '0 4px 12px rgba(44, 82, 130, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.5)'
+                            : '0 1px 3px rgba(44, 82, 130, 0.05), inset 0 1px 1px rgba(255, 255, 255, 0.5)',
+                        border: '1px solid rgba(44, 82, 130, 0.08)',
+                        backdropFilter: 'blur(8px)',
                         fontFamily: 'HeliosCondC',
+                        position: 'relative',
+                        overflow: 'hidden',
                       }}
                       onMouseEnter={e => {
-                        e.currentTarget.style.backgroundColor = '#edf2f7';
+                        e.currentTarget.style.background =
+                          'linear-gradient(135deg, rgba(44, 82, 130, 0.08) 0%, rgba(26, 54, 93, 0.12) 100%)';
                         e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-                        e.currentTarget.style.border = '1px solid #e2e8f0';
+                        e.currentTarget.style.boxShadow =
+                          '0 4px 12px rgba(44, 82, 130, 0.08), inset 0 1px 1px rgba(255, 255, 255, 0.5)';
+                        e.currentTarget.style.border = '1px solid rgba(44, 82, 130, 0.12)';
                       }}
                       onMouseLeave={e => {
-                        e.currentTarget.style.backgroundColor =
+                        e.currentTarget.style.background =
                           (method.is_group &&
                             currentMethod &&
                             method.methods?.some(m => m.id === currentMethod.id)) ||
                           (!method.is_group && currentMethod?.id === method.id)
-                            ? '#e2e8f0'
-                            : 'transparent';
+                            ? 'linear-gradient(135deg, rgba(44, 82, 130, 0.1) 0%, rgba(26, 54, 93, 0.15) 100%)'
+                            : 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.6) 100%)';
                         e.currentTarget.style.transform = 'none';
                         e.currentTarget.style.boxShadow =
                           (method.is_group &&
                             currentMethod &&
                             method.methods?.some(m => m.id === currentMethod.id)) ||
                           (!method.is_group && currentMethod?.id === method.id)
-                            ? '0 2px 4px rgba(0,0,0,0.05)'
-                            : 'none';
-                        e.currentTarget.style.border =
-                          (method.is_group &&
-                            currentMethod &&
-                            method.methods?.some(m => m.id === currentMethod.id)) ||
-                          (!method.is_group && currentMethod?.id === method.id)
-                            ? '1px solid #cbd5e0'
-                            : '1px solid transparent';
+                            ? '0 4px 12px rgba(44, 82, 130, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.5)'
+                            : '0 1px 3px rgba(44, 82, 130, 0.05), inset 0 1px 1px rgba(255, 255, 255, 0.5)';
+                        e.currentTarget.style.border = '1px solid rgba(44, 82, 130, 0.08)';
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '14px', fontFamily: 'HeliosCondC' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          position: 'relative',
+                          zIndex: 1,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: '14px',
+                            fontFamily: 'HeliosCondC',
+                            color: '#2c5282',
+                            fontWeight:
+                              (method.is_group &&
+                                currentMethod &&
+                                method.methods?.some(m => m.id === currentMethod.id)) ||
+                              (!method.is_group && currentMethod?.id === method.id)
+                                ? '500'
+                                : '400',
+                          }}
+                        >
                           {method.name}
                         </span>
                       </div>
+                      {/* Декоративный элемент */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '50%',
+                          right: '12px',
+                          width: '4px',
+                          height: '4px',
+                          borderRadius: '50%',
+                          background:
+                            (method.is_group &&
+                              currentMethod &&
+                              method.methods?.some(m => m.id === currentMethod.id)) ||
+                            (!method.is_group && currentMethod?.id === method.id)
+                              ? '#2c5282'
+                              : 'rgba(44, 82, 130, 0.2)',
+                          transform: 'translateY(-50%)',
+                          transition: 'all 0.3s ease',
+                        }}
+                      />
                     </div>
                   ))}
                 </div>

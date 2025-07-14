@@ -66,7 +66,12 @@
 }
 
 .create-equipment-form .ant-picker:hover {
-  border-color: #0066cc;
+  border-color: #1677ff !important;
+}
+
+.create-equipment-form .ant-picker-focused {
+  border-color: #1677ff !important;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2) !important;
 }
 
 .create-equipment-form .ant-picker-focused,

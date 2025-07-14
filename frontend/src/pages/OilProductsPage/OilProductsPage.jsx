@@ -573,7 +573,11 @@ const OilProductsPage = () => {
                           <Input
                             ref={el => (inputRefs.current[formFieldName] = el)}
                             placeholder={`Введите ${field.name}`}
-                            style={{ fontSize: '14px', flex: '1' }}
+                            style={{
+                              fontSize: '14px',
+                              flex: '1',
+                            }}
+                            className="hover-input"
                             value={fieldValue}
                             disabled={lockedMethods[methodId]}
                             onChange={e => {
@@ -1075,16 +1079,17 @@ const OilProductsPage = () => {
             <div
               style={{
                 width: '250px',
-                borderRight: '1px solid #e2e8f0',
+                borderRight: '1px solid rgba(44, 82, 130, 0.1)',
                 overflowY: 'auto',
                 padding: '12px',
                 paddingBottom: '0px',
-                backgroundColor: '#f8fafc',
+                background: 'linear-gradient(180deg, #f8faff 0%, #f0f5ff 100%)',
                 height: 'calc(100% + 21px)',
                 position: 'sticky',
                 top: 0,
                 borderBottomLeftRadius: '20px',
                 fontFamily: 'HeliosCondC',
+                boxShadow: 'inset -1px 0 2px rgba(44, 82, 130, 0.05)',
               }}
             >
               <div
@@ -1092,20 +1097,23 @@ const OilProductsPage = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  marginBottom: '16px',
+                  marginBottom: '0px',
                   position: 'sticky',
                   top: 0,
-                  backgroundColor: '#f8fafc',
+                  background: 'linear-gradient(180deg, #f8faff 0%, #f0f5ff 100%)',
                   zIndex: 1,
+                  paddingTop: '1px',
                   paddingBottom: '12px',
-                  borderBottom: '1px solid #e2e8f0',
+                  borderBottom: '1px solid rgba(44, 82, 130, 0.1)',
                 }}
               >
                 <Typography
                   variant="h5"
                   style={{
                     fontSize: '16px',
-                    color: '#2c5282',
+                    background: 'linear-gradient(135deg, #2c5282 0%, #1a365d 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
                     margin: 0,
                     display: 'flex',
                     alignItems: 'center',
@@ -1122,9 +1130,9 @@ const OilProductsPage = () => {
                   size="small"
                   onClick={handleOpenAddModal}
                   sx={{
-                    backgroundColor: '#f5f5f5',
+                    backgroundColor: 'rgba(44, 82, 130, 0.1)',
                     '&:hover': {
-                      backgroundColor: '#e0e0e0',
+                      backgroundColor: 'rgba(44, 82, 130, 0.2)',
                     },
                     padding: '4px',
                   }}
@@ -1158,6 +1166,7 @@ const OilProductsPage = () => {
                           height: 'calc(100% - 60px)',
                           overflowY: 'auto',
                           paddingRight: '4px',
+                          paddingTop: '6px',
                         }}
                       >
                         {researchMethods.map((method, index) => {
