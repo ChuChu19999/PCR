@@ -23,6 +23,23 @@ from ..utils.protocol_generator_utils import (
 
 logger = logging.getLogger(__name__)
 
+_CM_TO_INCH = 2.54  # коэффициент для перевода сантиметров в дюймы
+
+
+def set_sheet_margins(sheet):
+    """Устанавливает фиксированные поля страницы на листе Excel."""
+    sheet.page_margins.left = 1.5 / _CM_TO_INCH
+    sheet.page_margins.right = 1.0 / _CM_TO_INCH
+    sheet.page_margins.top = 1.1 / _CM_TO_INCH
+    sheet.page_margins.bottom = 0.9 / _CM_TO_INCH
+
+    # Масштаб: вписать все столбцы на одну страницу (по ширине)
+    page_setup = sheet.page_setup
+    # Убираем явный масштаб, чтобы работал режим FitToPage
+    page_setup.scale = None
+    page_setup.fitToWidth = 1  # все столбцы на одной странице
+    page_setup.fitToHeight = 0  # высоту не ограничиваем
+
 
 def process_cell_markers(protocol: Protocol, cell_value: str) -> str:
     """
@@ -240,6 +257,7 @@ def add_standalone_method(
     if current_height + header_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
         sheet_number += 1
         current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
+        set_sheet_margins(current_sheet)
         current_row = 1
 
         # Копируем размеры столбцов
@@ -349,6 +367,7 @@ def add_group_methods(
     if current_height + header_height + group_rows_height > A4_HEIGHT_POINTS:
         sheet_number += 1
         current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
+        set_sheet_margins(current_sheet)
         current_row = 1
 
         # Копируем размеры столбцов
@@ -1240,6 +1259,7 @@ def process_equipment_table(
         if current_height + header_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
             sheet_number += 1
             current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
+            set_sheet_margins(current_sheet)
             current_row = 1
 
             # Копируем размеры столбцов
@@ -1453,6 +1473,7 @@ def process_nd_table(
         if current_height + header_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
             sheet_number += 1
             current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
+            set_sheet_margins(current_sheet)
             current_row = 1
 
             # Копируем размеры столбцов
@@ -1618,6 +1639,7 @@ def process_between_tables(
         if current_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
             sheet_number += 1
             current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
+            set_sheet_margins(current_sheet)
             current_row = 1
 
             # Копируем размеры столбцов
@@ -1659,6 +1681,7 @@ def process_between_tables(
                     current_sheet = current_sheet.parent.create_sheet(
                         f"Лист{sheet_number}"
                     )
+                    set_sheet_margins(current_sheet)
                     current_row = 1
 
                     # Копируем размеры столбцов
@@ -1744,6 +1767,7 @@ def process_footer(
         if current_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
             sheet_number += 1
             current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
+            set_sheet_margins(current_sheet)
             current_row = 1
 
             # Копируем размеры столбцов
@@ -1860,6 +1884,9 @@ def generate_protocol_excel(request):
         # Создаем новый файл
         new_workbook = openpyxl.Workbook()
         new_sheet = new_workbook.active
+        # Переименовываем первый лист и сразу задаём фиксированные поля страницы
+        new_sheet.title = "Лист 1"
+        set_sheet_margins(new_sheet)
 
         copy_column_dimensions(template_sheet, new_sheet)
 
