@@ -9,136 +9,19 @@ from ..models import Protocol, ExcelTemplate, ResearchObjectMethod
 from django.db import models
 from ..models import Equipment
 from django.utils import formats
+from ..utils.protocol_generator_utils import (
+    format_decimal_ru,
+    copy_cell_style,
+    copy_row_with_styles,
+    copy_row_formatting,
+    calculate_current_height,
+    calculate_header_height,
+    copy_column_dimensions,
+    A4_HEIGHT_POINTS,
+    DEFAULT_ROW_HEIGHT,
+)
 
 logger = logging.getLogger(__name__)
-
-# Константы для размеров листа А4
-A4_HEIGHT_POINTS = 841.89  # Высота А4 в точках
-DEFAULT_ROW_HEIGHT = 15  # Стандартная высота строки в Excel
-
-
-def format_decimal_ru(value) -> str:
-    """
-    Форматирует десятичное число для отображения в русском формате.
-    """
-    if value is None:
-        return ""
-
-    try:
-        if isinstance(value, (int, float)):
-            return str(value).replace(".", ",")
-        return str(value)
-    except:
-        return str(value)
-
-
-def copy_cell_style(source_cell, target_cell):
-    """
-    Безопасное копирование стилей из одной ячейки в другую
-    """
-    if not source_cell or not source_cell.has_style:
-        return
-
-    target_cell.font = copy(source_cell.font)
-    target_cell.fill = copy(source_cell.fill)
-    target_cell.border = copy(source_cell.border)
-    target_cell.alignment = copy(source_cell.alignment)
-    target_cell.number_format = source_cell.number_format
-    target_cell.protection = copy(source_cell.protection)
-
-
-def copy_row_with_styles(
-    source_sheet: openpyxl.worksheet.worksheet.Worksheet,
-    target_sheet: openpyxl.worksheet.worksheet.Worksheet,
-    source_row: int,
-    target_row: int,
-) -> None:
-    """
-    Копирует строку с сохранением стилей из исходного листа в целевой.
-    """
-    try:
-        logger.debug(f"Начинаем копирование строки {source_row} в строку {target_row}")
-
-        # Получаем максимальное количество столбцов
-        max_col = source_sheet.max_column
-        logger.debug(f"Максимальное количество столбцов: {max_col}")
-
-        # Копируем каждую ячейку в строке
-        for col in range(1, max_col + 1):
-            try:
-                source_cell = source_sheet.cell(row=source_row, column=col)
-
-                target_cell = target_sheet.cell(row=target_row, column=col)
-
-                target_cell.value = source_cell.value
-
-                copy_cell_style(source_cell, target_cell)
-
-                logger.debug(
-                    f"Скопирована ячейка [{source_row}, {col}] -> [{target_row}, {col}]"
-                )
-
-            except Exception as cell_error:
-                logger.error(
-                    f"Ошибка при копировании ячейки [{source_row}, {col}]: {str(cell_error)}"
-                )
-                continue
-
-        logger.debug(f"Успешно скопирована строка {source_row} -> {target_row}")
-
-    except Exception as e:
-        logger.error(f"Ошибка при копировании строки {source_row}: {str(e)}")
-        raise
-
-
-def copy_row_formatting(
-    source_sheet, target_sheet, source_row, target_row, merged_cells_map=None
-):
-    """
-    Копирует все форматирование строки: стили, размеры и объединенные ячейки
-    """
-    if source_row in source_sheet.row_dimensions:
-        target_sheet.row_dimensions[target_row] = copy(
-            source_sheet.row_dimensions[source_row]
-        )
-
-    copy_row_with_styles(source_sheet, target_sheet, source_row, target_row)
-
-    if merged_cells_map is not None:
-        for merged_range in source_sheet.merged_cells.ranges:
-            if merged_range.min_row == source_row:
-                new_range = openpyxl.worksheet.cell_range.CellRange(
-                    min_col=merged_range.min_col,
-                    min_row=target_row,
-                    max_col=merged_range.max_col,
-                    max_row=target_row + (merged_range.max_row - merged_range.min_row),
-                )
-                merged_cells_map.add(new_range)
-
-
-def calculate_current_height(sheet) -> float:
-    """
-    Рассчитывает текущую высоту листа в точках
-    """
-    total_height = 0
-    for row_num in range(1, sheet.max_row + 1):
-        if row_num in sheet.row_dimensions:
-            total_height += sheet.row_dimensions[row_num].height or DEFAULT_ROW_HEIGHT
-        else:
-            total_height += DEFAULT_ROW_HEIGHT
-    return total_height
-
-
-def copy_column_dimensions(source_sheet, target_sheet):
-    """
-    Копирует размеры столбцов из исходного листа в целевой.
-    """
-    try:
-        for key, value in source_sheet.column_dimensions.items():
-            target_sheet.column_dimensions[key].width = value.width
-            target_sheet.column_dimensions[key].hidden = value.hidden
-    except Exception as e:
-        logger.error(f"Ошибка при копировании размеров столбцов: {str(e)}")
 
 
 def process_cell_markers(protocol: Protocol, cell_value: str) -> str:
@@ -276,7 +159,12 @@ def get_marker_value_title(protocol: Protocol, marker: str) -> str:
                 return f"{min_date}-{max_date}" if min_date != max_date else min_date
             return ""
         elif marker == "lab_location":
-            return protocol.laboratory_location or ""
+            # Получаем место осуществления лабораторной деятельности из подразделения или лаборатории
+            if protocol.department and protocol.department.laboratory_location:
+                return protocol.department.laboratory_location
+            elif protocol.laboratory.laboratory_location:
+                return protocol.laboratory.laboratory_location
+            return ""
         elif marker == "sampling_act_number":
             return protocol.sampling_act_number or ""
         elif marker == "registration_number":
@@ -342,12 +230,20 @@ def add_standalone_method(
     """
     Добавляет одиночный метод в таблицу.
     """
-    # Проверяем высоту листа
+    # Рассчитываем высоту шапки таблицы
+    header_height = calculate_header_height(
+        template_sheet, table_header_start, table_header_end
+    )
+
+    # Проверяем высоту листа: текущая высота + шапка + одна строка данных
     current_height = calculate_current_height(current_sheet)
-    if current_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
+    if current_height + header_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
         sheet_number += 1
         current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
         current_row = 1
+
+        # Копируем размеры столбцов
+        copy_column_dimensions(template_sheet, current_sheet)
 
         # Создаем новую карту объединенных ячеек для нового листа
         sheet_merged_cells_map = current_sheet.merged_cells
@@ -363,6 +259,21 @@ def add_standalone_method(
             )
             current_row += 1
     else:
+        # Если это первый элемент и на листе есть место для шапки + данных, копируем шапку
+        if (
+            idx == 1
+            and current_height + header_height + DEFAULT_ROW_HEIGHT <= A4_HEIGHT_POINTS
+        ):
+            # Копируем шапку таблицы с сохранением форматирования и объединенных ячеек
+            for row_num in range(table_header_start + 1, table_header_end):
+                copy_row_formatting(
+                    template_sheet,
+                    current_sheet,
+                    row_num,
+                    current_row,
+                    merged_cells_map,
+                )
+                current_row += 1
         sheet_merged_cells_map = current_sheet.merged_cells
 
     # Копируем шаблонную строку с сохранением форматирования и объединенных ячеек
@@ -425,15 +336,23 @@ def add_group_methods(
     """
     Добавляет группу методов в таблицу.
     """
-    # Проверяем высоту листа
+    # Рассчитываем высоту шапки таблицы
+    header_height = calculate_header_height(
+        template_sheet, table_header_start, table_header_end
+    )
+
+    # Проверяем высоту листа: текущая высота + шапка + все строки группы (заголовок + методы)
     current_height = calculate_current_height(current_sheet)
-    if (
-        current_height + DEFAULT_ROW_HEIGHT * (len(group_data["calculations"]) + 1)
-        > A4_HEIGHT_POINTS
-    ):
+    group_rows_height = DEFAULT_ROW_HEIGHT * (
+        len(group_data["calculations"]) + 1
+    )  # +1 для заголовка группы
+    if current_height + header_height + group_rows_height > A4_HEIGHT_POINTS:
         sheet_number += 1
         current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
         current_row = 1
+
+        # Копируем размеры столбцов
+        copy_column_dimensions(template_sheet, current_sheet)
 
         # Создаем новую карту объединенных ячеек для нового листа
         sheet_merged_cells_map = current_sheet.merged_cells
@@ -449,6 +368,21 @@ def add_group_methods(
             )
             current_row += 1
     else:
+        # Если это первый элемент и на листе есть место для шапки + данных, копируем шапку
+        if (
+            idx == 1
+            and current_height + header_height + group_rows_height <= A4_HEIGHT_POINTS
+        ):
+            # Копируем шапку таблицы с сохранением форматирования и объединенных ячеек
+            for row_num in range(table_header_start + 1, table_header_end):
+                copy_row_formatting(
+                    template_sheet,
+                    current_sheet,
+                    row_num,
+                    current_row,
+                    merged_cells_map,
+                )
+                current_row += 1
         sheet_merged_cells_map = current_sheet.merged_cells
 
     # Получаем общие данные для группы
@@ -954,13 +888,6 @@ def process_methods_table(
             "Не найдена метка {start_table1}, используем следующую строку после {{start_table1}}"
         )
 
-    # Копируем шапку таблицы
-    for row_num in range(table_header_start + 1, table_header_end):
-        copy_row_formatting(
-            template_sheet, current_sheet, row_num, current_row, merged_cells_map
-        )
-        current_row += 1
-
     # Находим шаблонную строку между {start_table1} и {end_table1}
     template_row = None
     template_row_num = None
@@ -1270,13 +1197,6 @@ def process_equipment_table(
             "Не найдена метка {start_table2}, используем следующую строку после {{start_table2}}"
         )
 
-    # Копируем шапку таблицы
-    for row_num in range(table_header_start + 1, table_header_end):
-        copy_row_formatting(
-            template_sheet, current_sheet, row_num, current_row, merged_cells_map
-        )
-        current_row += 1
-
     # Находим шаблонную строку
     template_row = None
     template_row_num = None
@@ -1310,9 +1230,14 @@ def process_equipment_table(
     # Добавляем строки с оборудованием
     idx = 1
     for equipment in equipment_list:
-        # Проверяем высоту листа
+        # Рассчитываем высоту шапки таблицы
+        header_height = calculate_header_height(
+            template_sheet, table_header_start, table_header_end
+        )
+
+        # Проверяем высоту листа: текущая высота + шапка + одна строка данных
         current_height = calculate_current_height(current_sheet)
-        if current_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
+        if current_height + header_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
             sheet_number += 1
             current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
             current_row = 1
@@ -1333,6 +1258,23 @@ def process_equipment_table(
                     sheet_merged_cells_map,
                 )
                 current_row += 1
+        else:
+            # Если это первый элемент и на листе есть место для шапки + данных, копируем шапку
+            if (
+                idx == 1
+                and current_height + header_height + DEFAULT_ROW_HEIGHT
+                <= A4_HEIGHT_POINTS
+            ):
+                # Копируем шапку таблицы с сохранением форматирования и объединенных ячеек
+                for row_num in range(table_header_start + 1, table_header_end):
+                    copy_row_formatting(
+                        template_sheet,
+                        current_sheet,
+                        row_num,
+                        current_row,
+                        sheet_merged_cells_map,
+                    )
+                    current_row += 1
 
         # Копируем шаблонную строку с сохранением форматирования и объединенных ячеек
         copy_row_formatting(
@@ -1471,12 +1413,7 @@ def process_nd_table(
     # Создаем новую карту объединенных ячеек для каждого листа
     sheet_merged_cells_map = current_sheet.merged_cells
 
-    # Копируем шапку таблицы
-    for row_num in range(table_header_start + 1, table_header_end):
-        copy_row_formatting(
-            template_sheet, current_sheet, row_num, current_row, sheet_merged_cells_map
-        )
-        current_row += 1
+    # Шапка таблицы будет скопирована только при создании нового листа
 
     # Находим шаблонную строку
     template_row = None
@@ -1506,9 +1443,14 @@ def process_nd_table(
     # Добавляем строки с НД
     idx = 1
     for nd_code, nd_name in nd_list:
-        # Проверяем высоту листа
+        # Рассчитываем высоту шапки таблицы
+        header_height = calculate_header_height(
+            template_sheet, table_header_start, table_header_end
+        )
+
+        # Проверяем высоту листа: текущая высота + шапка + одна строка данных
         current_height = calculate_current_height(current_sheet)
-        if current_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
+        if current_height + header_height + DEFAULT_ROW_HEIGHT > A4_HEIGHT_POINTS:
             sheet_number += 1
             current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
             current_row = 1
@@ -1529,6 +1471,23 @@ def process_nd_table(
                     sheet_merged_cells_map,
                 )
                 current_row += 1
+        else:
+            # Если это первый элемент и на листе есть место для шапки + данных, копируем шапку
+            if (
+                idx == 1
+                and current_height + header_height + DEFAULT_ROW_HEIGHT
+                <= A4_HEIGHT_POINTS
+            ):
+                # Копируем шапку таблицы с сохранением форматирования и объединенных ячеек
+                for row_num in range(table_header_start + 1, table_header_end):
+                    copy_row_formatting(
+                        template_sheet,
+                        current_sheet,
+                        row_num,
+                        current_row,
+                        sheet_merged_cells_map,
+                    )
+                    current_row += 1
 
         # Копируем шаблонную строку с сохранением форматирования и объединенных ячеек
         copy_row_formatting(

@@ -112,7 +112,6 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
     test_protocol_number: protocol.test_protocol_number || '',
     test_protocol_date: protocol.test_protocol_date ? dayjs(protocol.test_protocol_date) : null,
     is_accredited: protocol.is_accredited || false,
-    laboratory_location: protocol.laboratory_location || '',
     sampling_act_number: protocol.sampling_act_number || '',
     excel_template: protocol.excel_template,
     branch: protocol.branch || '',
@@ -142,24 +141,9 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
       const data = await protocolsApi.getCalculations(protocol.id);
       console.log('Полученные данные расчетов:', data);
       return data.map(calc => {
-        // Форматируем входные данные
-        let formattedInputData = '-';
-        if (calc.input_data && typeof calc.input_data === 'object') {
-          formattedInputData = Object.entries(calc.input_data)
-            .map(([key, value]) => {
-              let formattedValue = value;
-              if (typeof value === 'number') {
-                formattedValue = value.toString().replace('.', ',');
-              }
-              return `${key}: ${formattedValue}`;
-            })
-            .join('\n');
-        }
-
         return {
           ...calc,
           key: `${calc.sampleNumber}-${calc.methodName}`,
-          inputData: formattedInputData,
         };
       });
     },
@@ -226,7 +210,6 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
         test_protocol_date: formData.test_protocol_date
           ? dayjs(formData.test_protocol_date).format('YYYY-MM-DD')
           : null,
-        laboratory_location: formData.laboratory_location,
         sampling_act_number: formData.sampling_act_number,
         excel_template: formData.excel_template,
         laboratory: laboratoryId,
@@ -578,16 +561,6 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
                   value={formData.phone}
                   onChange={handleInputChange('phone')}
                   placeholder="Введите контактный телефон"
-                  style={{ width: '100%' }}
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Место осуществления лабораторной деятельности</label>
-                <Input
-                  value={formData.laboratory_location}
-                  onChange={handleInputChange('laboratory_location')}
-                  placeholder="Введите место осуществления лабораторной деятельности"
                   style={{ width: '100%' }}
                 />
               </div>

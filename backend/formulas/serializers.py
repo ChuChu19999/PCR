@@ -58,6 +58,7 @@ class DepartmentSerializer(BaseModelSerializer):
             "name",
             "laboratory",
             "laboratory_name",
+            "laboratory_location",
             "created_at",
             "is_deleted",
             "deleted_at",
@@ -70,6 +71,13 @@ class DepartmentSerializer(BaseModelSerializer):
             if not value:
                 raise serializers.ValidationError("Название не может быть пустым")
         return value
+
+    def validate_laboratory_location(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError(
+                "Место осуществления лабораторной деятельности обязательно для подразделения"
+            )
+        return value.strip()
 
 
 class LaboratorySerializer(BaseModelSerializer):
@@ -85,6 +93,7 @@ class LaboratorySerializer(BaseModelSerializer):
             "id",
             "name",
             "full_name",
+            "laboratory_location",
             "departments",
             "departments_count",
             "created_at",
@@ -107,6 +116,11 @@ class LaboratorySerializer(BaseModelSerializer):
                 raise serializers.ValidationError(
                     "Полное название не может быть пустым"
                 )
+        return value
+
+    def validate_laboratory_location(self, value):
+        if value:
+            value = value.strip()
         return value
 
     def to_representation(self, instance):
@@ -721,7 +735,6 @@ class ProtocolSerializer(BaseModelSerializer):
             "id",
             "test_protocol_number",
             "test_protocol_date",
-            "laboratory_location",
             "branch",
             "phone",
             "sampling_act_number",

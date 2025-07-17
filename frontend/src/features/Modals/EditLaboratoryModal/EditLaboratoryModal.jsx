@@ -8,6 +8,7 @@ const EditLaboratoryModal = ({ isOpen, onClose, onSuccess, laboratory }) => {
   const [formData, setFormData] = useState({
     name: '',
     full_name: '',
+    laboratory_location: '',
   });
   const [errors, setErrors] = useState({});
 
@@ -16,6 +17,7 @@ const EditLaboratoryModal = ({ isOpen, onClose, onSuccess, laboratory }) => {
       setFormData({
         name: laboratory.name || '',
         full_name: laboratory.full_name || '',
+        laboratory_location: laboratory.laboratory_location || '',
       });
       setErrors({});
     }
@@ -57,6 +59,7 @@ const EditLaboratoryModal = ({ isOpen, onClose, onSuccess, laboratory }) => {
       await axios.patch(`${import.meta.env.VITE_API_URL}/api/laboratories/${laboratory.id}/`, {
         name: formData.name.trim(),
         full_name: formData.full_name.trim(),
+        laboratory_location: formData.laboratory_location.trim(),
       });
 
       message.success('Лаборатория успешно обновлена');
@@ -67,6 +70,7 @@ const EditLaboratoryModal = ({ isOpen, onClose, onSuccess, laboratory }) => {
       setFormData({
         name: '',
         full_name: '',
+        laboratory_location: '',
       });
       setErrors({});
     } catch (error) {
@@ -93,7 +97,9 @@ const EditLaboratoryModal = ({ isOpen, onClose, onSuccess, laboratory }) => {
     >
       <div className="edit-laboratory-form">
         <div className="form-group">
-          <label>Аббревиатура</label>
+          <label>
+            Аббревиатура <span style={{ color: 'red' }}>*</span>
+          </label>
           <Input
             value={formData.name}
             onChange={handleInputChange('name')}
@@ -104,16 +110,25 @@ const EditLaboratoryModal = ({ isOpen, onClose, onSuccess, laboratory }) => {
           {errors.name && <div className="error-message">{errors.name}</div>}
         </div>
         <div className="form-group">
-          <label>Полное название</label>
-          <Input.TextArea
+          <label>
+            Полное название <span style={{ color: 'red' }}>*</span>
+          </label>
+          <Input
             value={formData.full_name}
             onChange={handleInputChange('full_name')}
             placeholder="Введите полное название"
-            rows={3}
             status={errors.full_name ? 'error' : ''}
             required
           />
           {errors.full_name && <div className="error-message">{errors.full_name}</div>}
+        </div>
+        <div className="form-group">
+          <label>Место осуществления лабораторной деятельности</label>
+          <Input
+            value={formData.laboratory_location}
+            onChange={handleInputChange('laboratory_location')}
+            placeholder="Введите место осуществления лабораторной деятельности (необязательно)"
+          />
         </div>
       </div>
     </Modal>

@@ -527,7 +527,7 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
             <div className="form-section">
               <div className="form-group">
                 <label className="form-label">
-                  Название шаблона <span className="required">*</span>
+                  Название шаблона <span style={{ color: 'red' }}>*</span>
                 </label>
                 <Input
                   placeholder="Введите название шаблона"
@@ -541,7 +541,7 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
 
               <div className="form-group">
                 <label className="form-label">
-                  Лаборатория <span className="required">*</span>
+                  Лаборатория <span style={{ color: 'red' }}>*</span>
                 </label>
                 <Select
                   placeholder="Выберите лабораторию"
@@ -569,7 +569,7 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
               {departments.length > 0 && (
                 <div className="form-group">
                   <label>
-                    Подразделение <span className="required">*</span>
+                    Подразделение <span style={{ color: 'red' }}>*</span>
                   </label>
                   <Select
                     value={selectedDepartment}
@@ -590,7 +590,7 @@ const EditTemplateModal = ({ isOpen, onClose }) => {
 
               <div className="form-group">
                 <label className="form-label">
-                  Файл шаблона <span className="required">*</span>
+                  Файл шаблона <span style={{ color: 'red' }}>*</span>
                 </label>
                 <div className="upload-container">
                   {selectedFile ? (

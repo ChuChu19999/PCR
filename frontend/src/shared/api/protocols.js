@@ -117,7 +117,7 @@ export const protocolsApi = {
       }
 
       return {
-        key: calc.id,
+        key: calc.key,
         methodName,
         unit: calc.unit || '-',
         inputData: formattedInputData || '-',
@@ -125,7 +125,7 @@ export const protocolsApi = {
         measurementError: measurementError || '-',
         equipment: calc.equipment || [],
         executor: calc.executor || '-',
-        sampleNumber: calc.sample.registration_number,
+        sampleNumber: calc.sample?.registration_number || calc.sampleNumber || '-',
       };
     });
   },

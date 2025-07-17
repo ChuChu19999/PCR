@@ -142,15 +142,13 @@ const ProtocolsPage = () => {
             icon={<SearchOutlined />}
             size="small"
             style={{ width: 90 }}
-          >
-          </Button>
+          ></Button>
           <Button
             title="Сброс"
             onClick={() => handleReset(clearFilters)}
             size="small"
             style={{ width: 90, fontFamily: 'HeliosCondC' }}
-          >
-          </Button>
+          ></Button>
         </Space>
       </div>
     ),
@@ -172,6 +170,11 @@ const ProtocolsPage = () => {
       title: '№ протокола',
       dataIndex: 'test_protocol_number',
       key: 'test_protocol_number',
+      sorter: (a, b) => {
+        const aValue = a.test_protocol_number || '';
+        const bValue = b.test_protocol_number || '';
+        return aValue.localeCompare(bValue);
+      },
       ...getColumnSearchProps('test_protocol_number', 'Номеру протокола'),
       render: (text, record) =>
         formatProtocolNumber(text, record.test_protocol_date, record.is_accredited, record.samples),
@@ -180,13 +183,31 @@ const ProtocolsPage = () => {
       title: 'Номер акта отбора',
       dataIndex: 'sampling_act_number',
       key: 'sampling_act_number',
+      sorter: (a, b) => {
+        const aValue = a.sampling_act_number || '';
+        const bValue = b.sampling_act_number || '';
+        return aValue.localeCompare(bValue);
+      },
       ...getColumnSearchProps('sampling_act_number', 'Номеру акта отбора'),
+      render: text => text || '-',
+    },
+    {
+      title: 'Заказчик',
+      dataIndex: 'branch',
+      key: 'branch',
+      sorter: (a, b) => {
+        const aValue = a.branch || '';
+        const bValue = b.branch || '';
+        return aValue.localeCompare(bValue);
+      },
+      ...getColumnSearchProps('branch', 'Заказчику'),
       render: text => text || '-',
     },
     {
       title: 'Аккредитован',
       dataIndex: 'is_accredited',
       key: 'is_accredited',
+      sorter: (a, b) => a.is_accredited - b.is_accredited,
       render: value => (value ? '✓' : '-'),
     },
     {

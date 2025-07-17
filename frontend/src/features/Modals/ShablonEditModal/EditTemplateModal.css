@@ -137,13 +137,13 @@
 .ant-upload-drag {
   border: none !important;
   background: transparent !important;
-  padding: 16px !important;
+  padding: 0px !important;
 }
 
 .ant-upload-drag-icon {
   color: #1976d2;
   font-size: 24px;
-  margin-bottom: 8px;
+  margin-bottom: 5px;
 }
 
 .ant-upload-text {

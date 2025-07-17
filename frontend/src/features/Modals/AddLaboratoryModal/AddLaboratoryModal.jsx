@@ -8,6 +8,7 @@ const AddLaboratoryModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     name: '',
     full_name: '',
+    laboratory_location: '',
   });
 
   const handleInputChange = field => e => {
@@ -26,11 +27,13 @@ const AddLaboratoryModal = ({ isOpen, onClose, onSuccess }) => {
       await axios.post(`${import.meta.env.VITE_API_URL}/api/laboratories/`, {
         name: formData.name.trim(),
         full_name: formData.full_name.trim(),
+        laboratory_location: formData.laboratory_location.trim(),
       });
 
       setFormData({
         name: '',
         full_name: '',
+        laboratory_location: '',
       });
 
       onSuccess();
@@ -51,7 +54,9 @@ const AddLaboratoryModal = ({ isOpen, onClose, onSuccess }) => {
     >
       <div className="add-laboratory-form">
         <div className="form-group">
-          <label>Аббревиатура</label>
+          <label>
+            Аббревиатура <span style={{ color: 'red' }}>*</span>
+          </label>
           <Input
             value={formData.name}
             onChange={handleInputChange('name')}
@@ -60,12 +65,22 @@ const AddLaboratoryModal = ({ isOpen, onClose, onSuccess }) => {
           />
         </div>
         <div className="form-group">
-          <label>Полное название</label>
+          <label>
+            Полное название <span style={{ color: 'red' }}>*</span>
+          </label>
           <Input
             value={formData.full_name}
             onChange={handleInputChange('full_name')}
             placeholder="Введите полное название"
             required
+          />
+        </div>
+        <div className="form-group">
+          <label>Место осуществления лабораторной деятельности</label>
+          <Input
+            value={formData.laboratory_location}
+            onChange={handleInputChange('laboratory_location')}
+            placeholder="Введите место осуществления лабораторной деятельности (необязательно)"
           />
         </div>
       </div>

@@ -83,51 +83,13 @@ const EditSampleModal = ({ onClose, onSuccess, sample, laboratoryId, departmentI
           rawCalc: calc,
         });
 
-        // Форматируем метод
-        let methodName = calc.research_method?.name || '-';
-        if (calc.research_method?.groups && calc.research_method.groups.length > 0) {
-          const groupName = calc.research_method.groups[0].name;
-          const singleMethodName = methodName.charAt(0).toLowerCase() + methodName.slice(1);
-          methodName = `${groupName} ${singleMethodName}`;
-          console.log('Отформатированное имя метода:', methodName);
-        }
-
-        // Форматируем результат
-        let formattedResult = calc.result;
-        if (formattedResult && !isNaN(formattedResult)) {
-          formattedResult = formattedResult.toString().replace('.', ',');
-          if (formattedResult.startsWith('-')) {
-            formattedResult = `менее ${formattedResult.substring(1)}`;
-          }
-        }
-
-        // Форматируем входные данные
-        let formattedInputData = '-';
-        if (calc.input_data && typeof calc.input_data === 'object') {
-          formattedInputData = Object.entries(calc.input_data)
-            .map(([key, value]) => {
-              let formattedValue = value;
-              if (typeof value === 'number') {
-                formattedValue = value.toString().replace('.', ',');
-              }
-              return `${key}: ${formattedValue}`;
-            })
-            .join('\n');
-        }
-
-        // Форматируем погрешность
-        let formattedError = calc.measurement_error || '-';
-        if (formattedError && !isNaN(formattedError)) {
-          formattedError = formattedError.toString().replace('.', ',');
-        }
-
         return {
           key: calc.id,
-          methodName,
+          methodName: calc.methodName || calc.research_method?.name || '-',
           unit: calc.research_method?.unit || '-',
-          inputData: formattedInputData,
+          inputData: calc.inputData || '-',
           result: calc.result || '-',
-          measurementError: calc.measurement_error || '-',
+          measurementError: calc.measurementError || '-',
           equipment: calc.equipment || [],
           executor: calc.executor || '-',
           sampleNumber: calc.sample_number,

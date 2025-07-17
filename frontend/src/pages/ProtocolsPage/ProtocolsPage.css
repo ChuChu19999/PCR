@@ -106,5 +106,18 @@
 }
 
 .header-actions {
-  margin-bottom: 20px;
+  margin-bottom: 0px;
+}
+
+/* Стили для белой иконки поиска */
+.ant-table-filter-trigger .anticon {
+  color: white !important;
+  font-size: 14px !important;
+  font-weight: bold !important;
+}
+
+.ant-table-filter-trigger:hover .anticon {
+  color: white !important;
+  font-size: 14px !important;
+  font-weight: bold !important;
 }

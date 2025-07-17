@@ -19,7 +19,6 @@ const CreateProtocolModal = ({ onClose, onSuccess, laboratoryId, departmentId })
     test_protocol_number: '',
     test_protocol_date: null,
     is_accredited: false,
-    laboratory_location: '',
     sampling_act_number: '',
     excel_template: undefined,
     branch: '',
@@ -94,7 +93,6 @@ const CreateProtocolModal = ({ onClose, onSuccess, laboratoryId, departmentId })
         test_protocol_date: formData.test_protocol_date
           ? formData.test_protocol_date.format('YYYY-MM-DD')
           : null,
-        laboratory_location: formData.laboratory_location,
         sampling_act_number: formData.sampling_act_number,
         excel_template: formData.excel_template,
         laboratory: laboratoryId,
@@ -295,16 +293,6 @@ const CreateProtocolModal = ({ onClose, onSuccess, laboratoryId, departmentId })
             value={formData.phone}
             onChange={handleInputChange('phone')}
             placeholder="Введите контактный телефон"
-            style={{ width: '100%' }}
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Место осуществления лабораторной деятельности</label>
-          <Input
-            value={formData.laboratory_location}
-            onChange={handleInputChange('laboratory_location')}
-            placeholder="Введите место осуществления лабораторной деятельности"
             style={{ width: '100%' }}
           />
         </div>

@@ -8,6 +8,7 @@ const AddDepartmentModal = ({ isOpen, onClose, onSuccess, laboratoryId }) => {
   const [formData, setFormData] = useState({
     name: '',
     laboratory: laboratoryId,
+    laboratory_location: '',
   });
 
   const [errors, setErrors] = useState({});
@@ -32,6 +33,9 @@ const AddDepartmentModal = ({ isOpen, onClose, onSuccess, laboratoryId }) => {
     if (!formData.name.trim()) {
       newErrors.name = 'Название обязательно';
     }
+    if (!formData.laboratory_location.trim()) {
+      newErrors.laboratory_location = 'Местоположение обязательно';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -47,11 +51,13 @@ const AddDepartmentModal = ({ isOpen, onClose, onSuccess, laboratoryId }) => {
       await axios.post(`${import.meta.env.VITE_API_URL}/api/departments/`, {
         name: formData.name.trim(),
         laboratory: laboratoryId,
+        laboratory_location: formData.laboratory_location.trim(),
       });
 
       setFormData({
         name: '',
         laboratory: laboratoryId,
+        laboratory_location: '',
       });
 
       onSuccess();
@@ -94,7 +100,9 @@ const AddDepartmentModal = ({ isOpen, onClose, onSuccess, laboratoryId }) => {
     >
       <div className="add-department-form">
         <div className="form-group">
-          <label>Название подразделения</label>
+          <label>
+            Название подразделения <span style={{ color: 'red' }}>*</span>
+          </label>
           <Input
             value={formData.name}
             onChange={handleInputChange('name')}
@@ -103,6 +111,21 @@ const AddDepartmentModal = ({ isOpen, onClose, onSuccess, laboratoryId }) => {
             required
           />
           {errors.name && <div className="error-message">{errors.name}</div>}
+        </div>
+        <div className="form-group">
+          <label>
+            Место осуществления лабораторной деятельности <span style={{ color: 'red' }}>*</span>
+          </label>
+          <Input
+            value={formData.laboratory_location}
+            onChange={handleInputChange('laboratory_location')}
+            placeholder="Введите место осуществления лабораторной деятельности"
+            status={errors.laboratory_location ? 'error' : ''}
+            required
+          />
+          {errors.laboratory_location && (
+            <div className="error-message">{errors.laboratory_location}</div>
+          )}
         </div>
         {errors.general && <div className="error-message general-error">{errors.general}</div>}
       </div>

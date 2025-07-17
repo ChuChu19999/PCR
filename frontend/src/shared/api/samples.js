@@ -63,6 +63,66 @@ export const samplesApi = {
         is_deleted: false,
       },
     });
-    return response.data;
+
+    // Форматируем данные перед возвратом
+    const formattedData = response.data.map(calc => {
+      // Форматируем название метода
+      let methodName = calc.research_method?.name || '-';
+      if (calc.research_method?.is_group_member && calc.research_method?.groups?.length > 0) {
+        const groupName = calc.research_method.groups[0].name;
+        const methodNameLower = methodName.charAt(0).toLowerCase() + methodName.slice(1);
+        methodName = `${groupName} ${methodNameLower}`;
+      }
+
+      // Форматируем результат
+      let formattedResult = calc.result;
+      if (
+        formattedResult &&
+        !isNaN(formattedResult.toString().replace(',', '.')) &&
+        formattedResult.toString().match(/^-?\d*[.,]?\d*$/)
+      ) {
+        const numValue = parseFloat(formattedResult.toString().replace(',', '.'));
+        if (numValue < 0) {
+          formattedResult = `минус ${Math.abs(numValue).toString().replace('.', ',')}`;
+        } else {
+          formattedResult = formattedResult.toString().replace('.', ',');
+        }
+      }
+
+      // Форматируем входные данные
+      let formattedInputData = '-';
+      if (calc.input_data && typeof calc.input_data === 'object') {
+        formattedInputData = Object.entries(calc.input_data)
+          .map(([key, value]) => {
+            let formattedValue = value;
+            if (typeof value === 'number' || !isNaN(value)) {
+              const numValue = parseFloat(value.toString().replace(',', '.'));
+              if (numValue < 0) {
+                formattedValue = value.toString().replace('-', 'минус ').replace('.', ',');
+              } else {
+                formattedValue = value.toString().replace('.', ',');
+              }
+            }
+            return `${key}: ${formattedValue}`;
+          })
+          .join('\n');
+      }
+
+      // Форматируем погрешность
+      let measurementError = calc.measurement_error;
+      if (measurementError && measurementError !== '-') {
+        measurementError = measurementError.toString().replace('.', ',');
+      }
+
+      return {
+        ...calc,
+        methodName,
+        inputData: formattedInputData,
+        result: formattedResult || '-',
+        measurementError: measurementError || '-',
+      };
+    });
+
+    return formattedData.sort((a, b) => a.methodName.localeCompare(b.methodName));
   },
 };

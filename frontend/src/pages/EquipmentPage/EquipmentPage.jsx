@@ -128,15 +128,13 @@ const EquipmentPage = () => {
             icon={<SearchOutlined />}
             size="small"
             style={{ width: 90 }}
-          >
-          </Button>
+          ></Button>
           <Button
             title="Сброс"
             onClick={() => handleReset(clearFilters)}
             size="small"
             style={{ width: 90, fontFamily: 'HeliosCondC' }}
-          >
-          </Button>
+          ></Button>
         </Space>
       </div>
     ),
@@ -185,14 +183,18 @@ const EquipmentPage = () => {
       title: 'Заводской номер',
       dataIndex: 'serial_number',
       key: 'serial_number',
-      sorter: (a, b) => a.serial_number.localeCompare(b.serial_number),
+      sorter: (a, b) => {
+        const aValue = a.serial_number || '';
+        const bValue = b.serial_number || '';
+        return aValue.localeCompare(bValue);
+      },
       ...getColumnSearchProps('serial_number', 'заводскому номеру'),
     },
     {
       title: 'Дата поверки',
       dataIndex: 'verification_date',
       key: 'verification_date',
-      sorter: (a, b) => new Date(a.verification_date) - new Date(b.verification_date),
+      sorter: (a, b) => new Date(a.verification_date || 0) - new Date(b.verification_date || 0),
       ...getColumnSearchProps('verification_date', 'дате поверки'),
       render: text => formatDate(text),
     },
@@ -200,7 +202,8 @@ const EquipmentPage = () => {
       title: 'Дата окончания поверки',
       dataIndex: 'verification_end_date',
       key: 'verification_end_date',
-      sorter: (a, b) => new Date(a.verification_end_date) - new Date(b.verification_end_date),
+      sorter: (a, b) =>
+        new Date(a.verification_end_date || 0) - new Date(b.verification_end_date || 0),
       ...getColumnSearchProps('verification_end_date', 'дате окончания поверки'),
       render: text => formatDate(text),
     },

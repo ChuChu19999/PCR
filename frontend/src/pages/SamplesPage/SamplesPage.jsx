@@ -113,15 +113,13 @@ const SamplesPage = () => {
             icon={<SearchOutlined />}
             size="small"
             style={{ width: 90 }}
-          >
-          </Button>
+          ></Button>
           <Button
             title="Сброс"
             onClick={() => handleReset(clearFilters)}
             size="small"
             style={{ width: 90, fontFamily: 'HeliosCondC' }}
-          >
-          </Button>
+          ></Button>
         </Space>
       </div>
     ),
@@ -147,38 +145,57 @@ const SamplesPage = () => {
       title: '№ пробы',
       dataIndex: 'registration_number',
       key: 'registration_number',
+      sorter: (a, b) => {
+        const aValue = a.registration_number || '';
+        const bValue = b.registration_number || '';
+        return aValue.localeCompare(bValue);
+      },
       ...getColumnSearchProps('registration_number', 'Номеру пробы'),
     },
     {
       title: 'Объект испытания',
       dataIndex: 'test_object',
       key: 'test_object',
+      sorter: (a, b) => {
+        const aValue = a.test_object || '';
+        const bValue = b.test_object || '';
+        return aValue.localeCompare(bValue);
+      },
       ...getColumnSearchProps('test_object', 'Объекту испытания'),
     },
     {
       title: 'Место отбора',
       dataIndex: 'sampling_location_detail',
       key: 'sampling_location_detail',
+      sorter: (a, b) => {
+        const aValue = a.sampling_location_detail || '';
+        const bValue = b.sampling_location_detail || '';
+        return aValue.localeCompare(bValue);
+      },
       ...getColumnSearchProps('sampling_location_detail', 'Месту отбора'),
     },
     {
       title: 'Дата отбора',
       dataIndex: 'sampling_date',
       key: 'sampling_date',
+      sorter: (a, b) => new Date(a.sampling_date || 0) - new Date(b.sampling_date || 0),
       ...getColumnSearchProps('sampling_date', 'Дате отбора'),
       render: text => formatDate(text),
     },
     {
-      title: 'Дата поступления',
+      title: 'Дата получения пробы',
       dataIndex: 'receiving_date',
       key: 'receiving_date',
-      ...getColumnSearchProps('receiving_date', 'Дате поступления'),
+      sorter: (a, b) => new Date(a.receiving_date || 0) - new Date(b.receiving_date || 0),
+      ...getColumnSearchProps('receiving_date', 'Дате получения пробы'),
       render: text => formatDate(text),
     },
     {
       title: 'Дата создания',
       dataIndex: 'created_at',
       key: 'created_at',
+      sorter: (a, b) => new Date(a.created_at) - new Date(b.created_at),
+      ...getColumnSearchProps('created_at', 'Дате создания'),
       render: text => formatDate(text),
     },
   ];

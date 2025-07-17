@@ -93,6 +93,13 @@ class Laboratory(BaseModel):
         verbose_name="Полное название",
         help_text="Полное название лаборатории",
     )
+    laboratory_location = models.CharField(
+        max_length=255,
+        verbose_name="Место осуществления лабораторной деятельности",
+        help_text="Место осуществления лабораторной деятельности",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         verbose_name = "Лаборатория"
@@ -139,6 +146,11 @@ class Department(BaseModel):
         max_length=100,
         verbose_name="Название",
         help_text="Название подразделения",
+    )
+    laboratory_location = models.CharField(
+        max_length=255,
+        verbose_name="Место осуществления лабораторной деятельности",
+        help_text="Место осуществления лабораторной деятельности",
     )
 
     class Meta:
@@ -520,13 +532,6 @@ class Protocol(BaseModel):
         verbose_name="Аккредитован",
         help_text="Признак аккредитации протокола",
         default=False,
-    )
-    laboratory_location = models.CharField(
-        max_length=255,
-        verbose_name="Место осуществления лабораторной деятельности",
-        help_text="Место осуществления лабораторной деятельности",
-        null=True,
-        blank=True,
     )
     branch = models.CharField(
         max_length=20,
