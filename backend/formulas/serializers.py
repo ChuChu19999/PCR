@@ -672,6 +672,55 @@ class ExcelTemplateSerializer(BaseModelSerializer):
         return data
 
 
+class ReportTemplateSerializer(BaseModelSerializer):
+    file = serializers.FileField(write_only=True, required=True)
+    laboratory_name = serializers.CharField(source="laboratory.name", read_only=True)
+    department_name = serializers.CharField(source="department.name", read_only=True)
+
+    class Meta:
+        from .models import ReportTemplate
+
+        model = ReportTemplate
+        fields = (
+            "id",
+            "name",
+            "file_name",
+            "file",
+            "is_active",
+            "laboratory",
+            "laboratory_name",
+            "department",
+            "department_name",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("is_active", "created_at", "updated_at")
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep["file"] = instance.file_name
+        return rep
+
+    def create(self, validated_data):
+        from .models import ReportTemplate
+
+        validated_data["is_active"] = True
+
+        upload_file = validated_data.pop("file")
+        validated_data["file"] = upload_file.read()
+
+        instance = super().create(validated_data)
+
+        # деактивируем предыдущий активный шаблон той же лаборатории/подразделения
+        ReportTemplate.objects.filter(
+            is_active=True,
+            laboratory=instance.laboratory,
+            department=instance.department,
+        ).exclude(pk=instance.pk).update(is_active=False)
+
+        return instance
+
+
 class SampleSerializer(BaseModelSerializer):
     laboratory_name = serializers.CharField(source="laboratory.name", read_only=True)
     department_name = serializers.CharField(source="department.name", read_only=True)

@@ -923,3 +923,73 @@ class ExcelTemplate(BaseModel):
         self.is_active = False
         self.save()
         return self.get_next_version(self.name)
+
+
+class ReportTemplate(BaseModel):
+    name = models.CharField(
+        max_length=100,
+        verbose_name="Название шаблона",
+        help_text="Введите название шаблона",
+        db_index=True,
+    )
+    file = models.BinaryField(
+        verbose_name="xlsx файл",
+        help_text="Файл шаблона в формате xlsx",
+    )
+    file_name = models.CharField(
+        max_length=100,
+        verbose_name="Имя файла",
+        help_text="Оригинальное имя файла",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Активен",
+        help_text="Указывает, является ли версия шаблона активной",
+    )
+    laboratory = models.ForeignKey(
+        Laboratory,
+        on_delete=models.CASCADE,
+        related_name="report_templates",
+        verbose_name="Лаборатория",
+        help_text="Лаборатория, к которой привязан шаблон",
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        related_name="report_templates",
+        verbose_name="Подразделение",
+        help_text="Подразделение, к которому привязан шаблон",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = "Шаблон отчет"
+        verbose_name_plural = "Шаблоны отчетов"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["updated_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} - {self.version}"
+
+    def clean(self):
+        if self.department and self.department.laboratory != self.laboratory:
+            raise ValidationError(
+                {
+                    "department": "Подразделение должно принадлежать выбранной лаборатории"
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def deactivate(self):
+        """Деактивирует текущий шаблон и возвращает следующую версию."""
+        self.is_active = False
+        self.save()
+        return self.get_next_version(self.name)

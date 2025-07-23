@@ -16,6 +16,7 @@ from .views.excel_views import (
     get_excel_styles,
     save_excel,
 )
+from .views.report_views import ReportTemplateViewSet
 from .views.equipment_views import EquipmentViewSet
 from .views.user_views import UserViewSet
 from .api.calculation_api import (
@@ -27,7 +28,9 @@ from .api.calculation_api import (
 )
 from .api.fixtures_api import get_fixtures
 from .api.protocol_api import get_sampling_locations, get_branches, search_protocols
+from .api.reports_api import get_reports
 from .services.protocol_generator import generate_protocol_excel
+from .services.report_generator_service import generate_report
 
 
 router = DefaultRouter()
@@ -43,8 +46,9 @@ router.register(r"research-pages", ResearchObjectViewSet, basename="research-pag
 router.register(r"protocols", ProtocolViewSet, basename="protocol")
 router.register(r"samples", SampleViewSet, basename="sample")
 router.register(r"calculations", CalculationViewSet, basename="calculation")
-router.register(r"excel-templates", ExcelTemplateViewSet, basename="excel-template")
 router.register(r"equipment", EquipmentViewSet, basename="equipment")
+router.register(r"excel-templates", ExcelTemplateViewSet, basename="excel-template")
+router.register(r"report-templates", ReportTemplateViewSet, basename="report-template")
 router.register(r"users", UserViewSet, basename="user")
 
 urlpatterns = [
@@ -65,6 +69,7 @@ urlpatterns = [
         generate_protocol_excel,
         name="generate_protocol_excel",
     ),
+    path("generate-report/", generate_report, name="generate_report"),
     path(
         "research-pages/<int:page_id>/methods/<int:method_id>/",
         update_research_method_status,
@@ -74,6 +79,11 @@ urlpatterns = [
         "research-pages/<int:page_id>/methods/order/",
         update_methods_order,
         name="update_methods_order",
+    ),
+    path(
+        "get-reports/",
+        get_reports,
+        name="get_reports",
     ),
     path(
         "get-sampling-locations/",
