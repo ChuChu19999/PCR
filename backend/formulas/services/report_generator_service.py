@@ -14,6 +14,7 @@ from ..utils.protocol_generator_utils import (
     copy_row_formatting,
     copy_column_dimensions,
 )
+from ..utils.employee_utils import get_employee_name
 
 
 def find_month_markers(sheet):
@@ -135,10 +136,12 @@ def fill_template_row(row, sample, template_row, sheet):
             quantity = sample.calculations.filter(is_deleted=False).count()
             new_cell.value = value.replace("{quantity}", str(quantity))
         elif "{executor}" in value:
-            executors = set(
-                calc.executor for calc in sample.calculations.filter(is_deleted=False)
-            )
-            executors_str = ", ".join(executors) if executors else "-"
+            executors = {
+                get_employee_name(calc.executor)
+                for calc in sample.calculations.filter(is_deleted=False)
+                if calc.executor
+            }
+            executors_str = ", ".join(sorted(executors)) if executors else "-"
             new_cell.value = value.replace("{executor}", executors_str)
         elif "{protocol}" in value:
             protocol_num = (
@@ -382,9 +385,11 @@ def generate_report(request):
 
                     # Получаем данные для строки
                     calculations = sample.calculations.filter(is_deleted=False)
-                    executors = set(
-                        calc.executor for calc in calculations if calc.executor
-                    )
+                    executors = {
+                        get_employee_name(calc.executor)
+                        for calc in sample.calculations.filter(is_deleted=False)
+                        if calc.executor
+                    }
                     conditions = (
                         sample.protocol.selection_conditions if sample.protocol else {}
                     )

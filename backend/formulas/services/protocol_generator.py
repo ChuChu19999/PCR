@@ -20,6 +20,7 @@ from ..utils.protocol_generator_utils import (
     A4_HEIGHT_POINTS,
     DEFAULT_ROW_HEIGHT,
 )
+from ..utils.employee_utils import get_employee_name
 
 logger = logging.getLogger(__name__)
 
@@ -1567,14 +1568,16 @@ def process_between_tables(
     if not next_table_start:
         return current_sheet, current_row
 
-    # Получаем всех уникальных исполнителей из расчетов
-    executors = set()
+    # Получаем уникальные ФИО исполнителей из hashMd5
+    executors_cache = set()
     for sample in protocol.samples.filter(is_deleted=False):
         for calc in sample.calculations.filter(is_deleted=False):
             if calc.executor:
-                executors.add(calc.executor)
+                name = get_employee_name(calc.executor)
+                if name:
+                    executors_cache.add(name)
 
-    executors = sorted(executors) if executors else []
+    executors = sorted(executors_cache) if executors_cache else []
 
     # Копируем и обрабатываем строки между таблицами
     row_with_executor = None

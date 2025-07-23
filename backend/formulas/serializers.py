@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
+import re
 from .models import (
     Laboratory,
     Department,
@@ -856,13 +857,20 @@ class CalculationSerializer(BaseModelSerializer):
         ]
 
     def validate_executor(self, value):
+        """
+        Ожидаем hashMd5 сотрудника
+        """
         if not value or not value.strip():
-            raise serializers.ValidationError("Необходимо указать исполнителя")
-        if len(value.strip()) < 2:
+            raise serializers.ValidationError("Необходимо указать hashMd5 исполнителя")
+
+        value = value.strip().lower()
+
+        if not re.fullmatch(r"[0-9a-f]{32}", value):
             raise serializers.ValidationError(
-                "ФИО исполнителя должно содержать не менее 2 символов"
+                "Некорректный формат хеша исполнителя (ожидается 32-символьный hashMd5)"
             )
-        return value.strip()
+
+        return value
 
     class Meta:
         model = Calculation

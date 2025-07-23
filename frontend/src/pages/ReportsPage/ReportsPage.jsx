@@ -5,6 +5,7 @@ import { ArrowLeftOutlined } from '@ant-design/icons';
 import Layout from '../../shared/ui/Layout/Layout';
 import ReportsPageWrapper from './ReportsPageWrapper';
 import { reportsApi } from '../../shared/api/reports';
+import { employeesApi } from '../../shared/api/employees';
 import LoadingCard from '../../features/Cards/ui/LoadingCard/LoadingCard';
 import { Button } from '../../shared/ui/Button/Button';
 import ReportTemplateModal from '../../features/Modals/ReportTemplateModal/ReportTemplateModal';
@@ -31,11 +32,39 @@ const ReportsPage = () => {
   // Запрос отчетов при выборе лаборатории/подразделения
   const { data: reports = [], isLoading: isLoadingReports } = useQuery({
     queryKey: ['reports', selectedLaboratory?.id, selectedDepartment?.id],
-    queryFn: () =>
-      reportsApi.getReports({
+    queryFn: async () => {
+      const raw = await reportsApi.getReports({
         laboratoryId: selectedLaboratory?.id,
         departmentId: selectedDepartment?.id,
-      }),
+      });
+
+      // Преобразуем executors (hash массив) → строка с ФИО
+      return await Promise.all(
+        raw.map(async item => {
+          let fullNames = '-';
+          let hashes = [];
+          if (Array.isArray(item.executors)) {
+            hashes = item.executors;
+          } else if (typeof item.executors === 'string' && item.executors.trim()) {
+            hashes = item.executors
+              .split(/[,;\s]+/)
+              .map(h => h.trim())
+              .filter(Boolean);
+          }
+
+          if (hashes.length) {
+            const names = await Promise.all(
+              hashes.map(async h => {
+                const e = await employeesApi.getByHash(h);
+                return e?.fullName || h;
+              })
+            );
+            fullNames = names.join(', ');
+          }
+          return { ...item, executors: fullNames };
+        })
+      );
+    },
     enabled: !!selectedLaboratory?.id,
   });
   // Определение колонок таблицы

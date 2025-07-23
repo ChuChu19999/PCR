@@ -166,3 +166,27 @@
 .equipment-select-dropdown .ant-select-item-list::-webkit-scrollbar-thumb:hover {
   background: #bfbfbf;
 }
+
+.executor-search-container {
+  position: relative;
+}
+
+.executor-search-container .ant-input-affix-wrapper,
+.executor-search-container .ant-input {
+  height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.executor-search-container .protocol-dropdown {
+  left: 0;
+  right: 0;
+  background-color: #f5faff;
+  border: 1px solid #91caff;
+  box-shadow: 0 2px 8px rgba(0, 121, 194, 0.15);
+  max-height: 115px;
+}
+
+.executor-search-container .protocol-option:hover {
+  background-color: #e6f4ff;
+}

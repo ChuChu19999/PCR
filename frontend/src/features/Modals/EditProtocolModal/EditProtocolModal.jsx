@@ -7,6 +7,7 @@ import locale from 'antd/es/date-picker/locale/ru_RU';
 import Modal from '../ui/Modal';
 import SelectionConditionsForm from '../CreateProtocolModal/SelectionConditionsForm';
 import { protocolsApi } from '../../../shared/api/protocols';
+import { employeesApi } from '../../../shared/api/employees';
 import './EditProtocolModal.css';
 
 const { Option } = Select;
@@ -140,12 +141,19 @@ const EditProtocolModal = ({ onClose, onSuccess, protocol, laboratoryId, departm
     queryFn: async () => {
       const data = await protocolsApi.getCalculations(protocol.id);
       console.log('Полученные данные расчетов:', data);
-      return data.map(calc => {
-        return {
-          ...calc,
-          key: `${calc.sampleNumber}-${calc.methodName}`,
-        };
-      });
+
+      const mapped = await Promise.all(
+        data.map(async calc => {
+          return {
+            ...calc,
+            key: `${calc.sampleNumber}-${calc.methodName}`,
+            executor: calc.executor
+              ? (await employeesApi.getByHash(calc.executor))?.fullName || '-'
+              : '-',
+          };
+        })
+      );
+      return mapped;
     },
     enabled: !!protocol.id && activeTab === 'calculations',
   });

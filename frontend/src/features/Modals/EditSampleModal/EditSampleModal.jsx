@@ -10,6 +10,7 @@ import 'dayjs/locale/ru';
 import locale from 'antd/es/date-picker/locale/ru_RU';
 import { samplesApi } from '../../../shared/api/samples';
 import { protocolsApi } from '../../../shared/api/protocols';
+import { employeesApi } from '../../../shared/api/employees';
 
 // Устанавливаем русскую локаль для dayjs
 dayjs.locale('ru');
@@ -74,27 +75,40 @@ const EditSampleModal = ({ onClose, onSuccess, sample, laboratoryId, departmentI
     queryFn: async () => {
       const data = await samplesApi.getCalculations(sample.id);
       console.log('Полученные данные расчетов:', data);
-      return data.map(calc => {
-        console.log('Данные метода:', {
-          name: calc.research_method?.name,
-          groups: calc.research_method?.groups,
-          full_method: calc.research_method,
-          executor: calc.executor,
-          rawCalc: calc,
-        });
+      const mapped = await Promise.all(
+        data.map(async calc => {
+          console.log('Данные метода:', {
+            name: calc.research_method?.name,
+            groups: calc.research_method?.groups,
+            full_method: calc.research_method,
+            executor: calc.executor,
+            rawCalc: calc,
+          });
 
-        return {
-          key: calc.id,
-          methodName: calc.methodName || calc.research_method?.name || '-',
-          unit: calc.research_method?.unit || '-',
-          inputData: calc.inputData || '-',
-          result: calc.result || '-',
-          measurementError: calc.measurementError || '-',
-          equipment: calc.equipment || [],
-          executor: calc.executor || '-',
-          sampleNumber: calc.sample_number,
-        };
-      });
+          let fullName = '-';
+          if (calc.executor) {
+            try {
+              const emp = await employeesApi.getByHash(calc.executor);
+              fullName = emp?.fullName || '-';
+            } catch {
+              fullName = '-';
+            }
+          }
+
+          return {
+            key: calc.id,
+            methodName: calc.methodName || calc.research_method?.name || '-',
+            unit: calc.research_method?.unit || '-',
+            inputData: calc.inputData || '-',
+            result: calc.result || '-',
+            measurementError: calc.measurementError || '-',
+            equipment: calc.equipment || [],
+            executor: fullName,
+            sampleNumber: calc.sample_number,
+          };
+        })
+      );
+      return mapped;
     },
     enabled: !!sample.id && activeTab === 'calculations',
   });

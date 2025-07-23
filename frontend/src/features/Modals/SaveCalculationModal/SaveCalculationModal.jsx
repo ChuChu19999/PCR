@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Input, Spin, message, Form, Select, Typography } from 'antd';
+import { CloseCircleFilled } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import Modal from '../ui/Modal';
 import './SaveCalculationModal.css';
+import { employeesApi } from '../../../shared/api/employees';
 
 const { Option } = Select;
 const { Text } = Typography;
@@ -18,9 +20,10 @@ const SaveCalculationModal = ({
   departmentId,
   onSuccess,
 }) => {
-  const [calculationFormData, setCalculationFormData] = useState({
-    executor: '',
-  });
+  const [executorSearch, setExecutorSearch] = useState('');
+  const [executorLoading, setExecutorLoading] = useState(false);
+  const [executorOptions, setExecutorOptions] = useState([]);
+  const [selectedExecutor, setSelectedExecutor] = useState(null);
   const [selectedSample, setSelectedSample] = useState(null);
   const [samples, setSamples] = useState([]);
   const [samplesLoading, setSamplesLoading] = useState(false);
@@ -95,8 +98,8 @@ const SaveCalculationModal = ({
       newErrors.sample = 'Выберите пробу';
     }
 
-    if (!calculationFormData.executor) {
-      newErrors.executor = 'Введите ФИО исполнителя расчета';
+    if (!selectedExecutor) {
+      newErrors.executor = 'Выберите исполнителя из списка';
     }
 
     setErrors(newErrors);
@@ -126,7 +129,7 @@ const SaveCalculationModal = ({
         laboratory: laboratoryId,
         department: departmentId,
         research_method: currentMethod.id,
-        executor: calculationFormData.executor,
+        executor: selectedExecutor?.hashMd5,
         laboratory_activity_date: calculationResult.laboratory_activity_date
           ? dayjs.isDayjs(calculationResult.laboratory_activity_date)
             ? calculationResult.laboratory_activity_date.format('YYYY-MM-DD')
@@ -175,6 +178,8 @@ const SaveCalculationModal = ({
     setSelectedSample(null);
     setErrors({});
     setSelectedEquipment([]);
+    setSelectedExecutor(null);
+    setExecutorSearch('');
     onClose();
   };
 
@@ -194,14 +199,71 @@ const SaveCalculationModal = ({
             validateStatus={errors.executor ? 'error' : ''}
             help={errors.executor}
           >
-            <Input
-              value={calculationFormData.executor}
-              onChange={e =>
-                setCalculationFormData(prev => ({ ...prev, executor: e.target.value }))
-              }
-              placeholder="Введите ФИО исполнителя"
-              style={{ width: '100%' }}
-            />
+            <div className="executor-search-container">
+              <Input
+                value={executorSearch}
+                placeholder="Введите ФИО исполнителя"
+                readOnly={!!selectedExecutor}
+                onChange={async e => {
+                  const value = e.target.value;
+                  setExecutorSearch(value);
+                  setSelectedExecutor(null);
+
+                  if (value.length < 3) {
+                    setExecutorOptions([]);
+                    return;
+                  }
+
+                  setExecutorLoading(true);
+                  try {
+                    const data = await employeesApi.searchByFio(value);
+                    setExecutorOptions(data);
+                  } catch (err) {
+                    console.error('Ошибка при поиске сотрудников:', err);
+                    message.error('Не удалось загрузить список сотрудников');
+                  } finally {
+                    setExecutorLoading(false);
+                  }
+                }}
+                style={{ width: '100%' }}
+                suffix={
+                  selectedExecutor ? (
+                    <CloseCircleFilled
+                      style={{ color: '#ff4d4f', cursor: 'pointer' }}
+                      onClick={() => {
+                        setSelectedExecutor(null);
+                        setExecutorSearch('');
+                        setExecutorOptions([]);
+                      }}
+                    />
+                  ) : null
+                }
+              />
+              {executorOptions.length > 0 && !selectedExecutor && (
+                <div className="protocol-dropdown">
+                  {executorLoading ? (
+                    <div className="protocol-loading">
+                      <Spin size="small" />
+                    </div>
+                  ) : (
+                    executorOptions.map(emp => (
+                      <div
+                        key={emp.hashMd5}
+                        className="protocol-option"
+                        onClick={() => {
+                          setSelectedExecutor(emp);
+                          setExecutorSearch(emp.fullName);
+                          setExecutorOptions([]);
+                          setErrors(prev => ({ ...prev, executor: undefined }));
+                        }}
+                      >
+                        {emp.fullName}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </Form.Item>
 
           <Form.Item
