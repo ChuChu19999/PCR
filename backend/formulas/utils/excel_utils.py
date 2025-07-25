@@ -2,7 +2,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-A4_HEIGHT_POINTS = 841.89  # Высота А4 в точках
+A4_HEIGHT_POINTS = (
+    811.89  # Высота А4 в точках (на 2 строки меньше из-за нижнего колонтитула)
+)
 DEFAULT_ROW_HEIGHT = 15  # Стандартная высота строки в Excel
 
 

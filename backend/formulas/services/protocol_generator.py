@@ -21,6 +21,7 @@ from ..utils.protocol_generator_utils import (
     DEFAULT_ROW_HEIGHT,
 )
 from ..utils.employee_utils import get_employee_name
+from openpyxl.worksheet.header_footer import _HeaderFooterPart
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +34,6 @@ def set_sheet_margins(sheet):
     sheet.page_margins.right = 1.0 / _CM_TO_INCH
     sheet.page_margins.top = 1.1 / _CM_TO_INCH
     sheet.page_margins.bottom = 0.9 / _CM_TO_INCH
-
-    # Масштаб: вписать все столбцы на одну страницу (по ширине)
-    page_setup = sheet.page_setup
-    # Убираем явный масштаб, чтобы работал режим FitToPage
-    page_setup.scale = None
-    page_setup.fitToWidth = 1  # все столбцы на одной странице
-    page_setup.fitToHeight = 0  # высоту не ограничиваем
 
 
 def process_cell_markers(protocol: Protocol, cell_value: str) -> str:
@@ -259,6 +253,7 @@ def add_standalone_method(
         sheet_number += 1
         current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
         set_sheet_margins(current_sheet)
+        enforce_fit_to_page(current_sheet)
         current_row = 1
 
         # Копируем размеры столбцов
@@ -369,6 +364,7 @@ def add_group_methods(
         sheet_number += 1
         current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
         set_sheet_margins(current_sheet)
+        enforce_fit_to_page(current_sheet)
         current_row = 1
 
         # Копируем размеры столбцов
@@ -1261,6 +1257,7 @@ def process_equipment_table(
             sheet_number += 1
             current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
             set_sheet_margins(current_sheet)
+            enforce_fit_to_page(current_sheet)
             current_row = 1
 
             # Копируем размеры столбцов
@@ -1475,6 +1472,7 @@ def process_nd_table(
             sheet_number += 1
             current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
             set_sheet_margins(current_sheet)
+            enforce_fit_to_page(current_sheet)
             current_row = 1
 
             # Копируем размеры столбцов
@@ -1643,6 +1641,7 @@ def process_between_tables(
             sheet_number += 1
             current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
             set_sheet_margins(current_sheet)
+            enforce_fit_to_page(current_sheet)
             current_row = 1
 
             # Копируем размеры столбцов
@@ -1685,6 +1684,7 @@ def process_between_tables(
                         f"Лист{sheet_number}"
                     )
                     set_sheet_margins(current_sheet)
+                    enforce_fit_to_page(current_sheet)
                     current_row = 1
 
                     # Копируем размеры столбцов
@@ -1771,6 +1771,7 @@ def process_footer(
             sheet_number += 1
             current_sheet = current_sheet.parent.create_sheet(f"Лист{sheet_number}")
             set_sheet_margins(current_sheet)
+            enforce_fit_to_page(current_sheet)
             current_row = 1
 
             # Копируем размеры столбцов
@@ -1856,6 +1857,36 @@ def find_text_in_workbook(workbook, search_text):
         return []
 
 
+def process_footer_test_protocol_number(protocol, text) -> _HeaderFooterPart:
+    """
+    Заменяет только {test_protocol_number} на значение из get_marker_value_title в тексте колонтитула.
+    """
+    # Достаём строку из объекта openpyxl
+    orig_text = text
+    if hasattr(text, "text"):
+        text = text.text
+    if not text or not isinstance(text, str):
+        logger.info(f"Колонтитул: пустое или нестроковое значение: {text!r}")
+        return orig_text
+    value = get_marker_value_title(protocol, "test_protocol_number")
+    result = text.replace("{test_protocol_number}", value)
+    logger.info(f"Колонтитул: исходный: {text!r}, после замены: {result!r}")
+    return _HeaderFooterPart(text=result)
+
+
+def enforce_fit_to_page(sheet):
+    """
+    Явно выставляет fitToWidth=1, fitToHeight=0, scale=None для надёжности.
+    """
+    sheet.page_setup.fitToWidth = 1
+    sheet.page_setup.fitToHeight = 0
+    sheet.page_setup.scale = 86
+    logger.info(
+        f"Применены параметры печати: fitToWidth={sheet.page_setup.fitToWidth}, "
+        f"fitToHeight={sheet.page_setup.fitToHeight}, scale={sheet.page_setup.scale}"
+    )
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def generate_protocol_excel(request):
@@ -1887,9 +1918,41 @@ def generate_protocol_excel(request):
         # Создаем новый файл
         new_workbook = openpyxl.Workbook()
         new_sheet = new_workbook.active
-        # Переименовываем первый лист и сразу задаём фиксированные поля страницы
         new_sheet.title = "Лист 1"
         set_sheet_margins(new_sheet)
+        enforce_fit_to_page(new_sheet)
+
+        # Копирование нижнего колонтитула с обработкой только test_protocol_number
+        if hasattr(template_sheet, "oddFooter") and hasattr(new_sheet, "oddFooter"):
+            new_sheet.oddFooter.left = process_footer_test_protocol_number(
+                protocol, template_sheet.oddFooter.left
+            )
+            new_sheet.oddFooter.center = process_footer_test_protocol_number(
+                protocol, template_sheet.oddFooter.center
+            )
+            new_sheet.oddFooter.right = process_footer_test_protocol_number(
+                protocol, template_sheet.oddFooter.right
+            )
+        if hasattr(template_sheet, "evenFooter") and hasattr(new_sheet, "evenFooter"):
+            new_sheet.evenFooter.left = process_footer_test_protocol_number(
+                protocol, template_sheet.evenFooter.left
+            )
+            new_sheet.evenFooter.center = process_footer_test_protocol_number(
+                protocol, template_sheet.evenFooter.center
+            )
+            new_sheet.evenFooter.right = process_footer_test_protocol_number(
+                protocol, template_sheet.evenFooter.right
+            )
+        if hasattr(template_sheet, "firstFooter") and hasattr(new_sheet, "firstFooter"):
+            new_sheet.firstFooter.left = process_footer_test_protocol_number(
+                protocol, template_sheet.firstFooter.left
+            )
+            new_sheet.firstFooter.center = process_footer_test_protocol_number(
+                protocol, template_sheet.firstFooter.center
+            )
+            new_sheet.firstFooter.right = process_footer_test_protocol_number(
+                protocol, template_sheet.firstFooter.right
+            )
 
         copy_column_dimensions(template_sheet, new_sheet)
 
@@ -1956,7 +2019,7 @@ def generate_protocol_excel(request):
                 current_sheet,
                 table1_end + 1,
                 merged_cells_map,
-                current_row,
+                    current_row,
                 len(new_workbook.sheetnames),
             )
             if not current_sheet:
@@ -2019,10 +2082,10 @@ def generate_protocol_excel(request):
                     # Обрабатываем оставшиеся строки после таблицы 3
                     current_sheet = process_footer(
                         protocol,
-                        template_sheet,
+                    template_sheet,
                         current_sheet,
                         table3_end,
-                        merged_cells_map,
+                    merged_cells_map,
                         current_sheet.max_row + 1,
                         len(new_workbook.sheetnames),
                     )
@@ -2052,22 +2115,22 @@ def generate_protocol_excel(request):
                 )
 
             # Сохраняем результат
-            output = BytesIO()
-            new_workbook.save(output)
-            output.seek(0)
+        output = BytesIO()
+        new_workbook.save(output)
+        output.seek(0)
 
             logger.info("Файл успешно сохранен в BytesIO")
 
-            response = HttpResponse(
+        response = HttpResponse(
                 output.getvalue(),
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
             response["Content-Disposition"] = (
                 f'attachment; filename="protocol_{protocol_id}.xlsx"'
             )
 
             logger.info("Протокол успешно сгенерирован")
-            return response
+        return response
 
         except Exception as save_error:
             logger.error(f"Ошибка при сохранении файла: {str(save_error)}")
